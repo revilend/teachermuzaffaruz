@@ -2906,33 +2906,56 @@ await (async () => {
 
   /* render() dan keyin input yangi node — qayta olamiz */
   const subInput2 = q('.hw-sub-input');
-  /* 50 MB dan katta fayl — yuborishdan oldin to'xtaydi */
+  /* 100 MB dan katta fayl — yuborishdan oldin to'xtaydi */
   const bigFile = new win.File([new Uint8Array([1])], 'katta video.mkv', { type: '' });
-  Object.defineProperty(bigFile, 'size', { configurable: true, value: 51 * 1024 * 1024 });
+  Object.defineProperty(bigFile, 'size', { configurable: true, value: 101 * 1024 * 1024 });
   Object.defineProperty(subInput2, 'files', { configurable: true, value: [bigFile] });
   clickAct('hw-submit');
   await new Promise(r => setTimeout(r, 150));
-  check(/Fayl hajmi 50 MB dan oshmasligi kerak/.test((q('.hw-sub-error') || {}).textContent || ''),
-    'topshiriq: 50 MB dan katta fayl aniq xabar bilan yuborilmaydi');
+  check(/Fayl hajmi 100 MB dan oshmasligi kerak/.test((q('.hw-sub-error') || {}).textContent || ''),
+    'topshiriq: 100 MB dan katta fayl aniq xabar bilan yuborilmaydi');
 
-  /* Real yuklash funksiyasi: xavfsiz ASCII nom, content-type, x-upsert va xato tafsiloti */
+  /* R2 yuklash: FormData (file + path), JSON {ok, url} va aniq xato matni */
   const realUpload = win.__cloud.uploadSubmissionFile;
+  const prevFetch = win.fetch;
+  const r2Calls = [];
+  win.fetch = function (url, opts) {
+    r2Calls.push({ url: url, opts: opts });
+    return Promise.resolve({
+      ok: true, status: 200,
+      json: function () {
+        return Promise.resolve({
+          ok: true,
+          url: 'https://pub-836df3817ab64cee9075b55d51fe6061.r2.dev/submissions/1/1/abc_Insho_yakuniy__1_.docx'
+        });
+      }
+    });
+  };
   const trickyFile = new win.File([new Uint8Array([1])], 'Insho yakuniy (1).docx', { type: '' });
   const upRes = await realUpload(trickyFile, 1, 1);
-  check(/^submissions\/1\/1\/\d+_Insho_yakuniy__1_\.docx$/.test(upRes.path),
-    'topshiriq: storage yo‘li xavfsiz ASCII nom bilan (submissions/{student}/{homework}/ts_nom)');
-  const stCall = cloudStub.storageCalls[cloudStub.storageCalls.length - 1] || {};
-  check(stCall.opts && stCall.opts.contentType === 'application/octet-stream' &&
-        stCall.opts.upsert === true && String((stCall.opts.headers || {})['x-upsert']) === 'true',
-    'topshiriq: contentType bo‘sh → application/octet-stream + x-upsert header');
-  cloudStub.setStorageError({ message: 'new row violates row-level security policy', statusCode: 403 });
+  check(upRes.url.indexOf('pub-836df3817ab64cee9075b55d51fe6061.r2.dev') >= 0 && upRes.bucket === 'r2',
+    'R2: yuklash natijasi data.url (r2.dev) qaytaradi');
+  const r2Call = r2Calls[0] || {};
+  check(r2Call.url === 'https://teachermuzaffar-upload.amirovmuzaffar070.workers.dev' &&
+        r2Call.opts && r2Call.opts.method === 'POST' && !r2Call.opts.headers,
+    'R2: FormData POST, Content-Type header qo‘lda yozilmaydi');
+  const fd = r2Call.opts && r2Call.opts.body;
+  check(fd && fd.get && fd.get('file') &&
+        /^submissions\/1\/1\/\d+_Insho_yakuniy__1_\.docx$/.test(String(fd.get('path'))),
+    'R2: `file` + xavfsiz ASCII `path` (submissions/{student}/{homework}/ts_nom) FormData’da');
+  win.fetch = function () {
+    return Promise.resolve({
+      ok: false, status: 413,
+      json: function () { return Promise.resolve({ ok: false, error: 'file too large' }); }
+    });
+  };
   let upErr = '';
   try {
     await realUpload(new win.File([new Uint8Array([1])], 'a.pdf', { type: 'application/pdf' }), 1, 1);
   } catch (e) { upErr = (e && e.message) || ''; }
-  cloudStub.setStorageError(null);
-  check(/Storage/.test(upErr) && /403/.test(upErr),
-    'topshiriq: Storage xatosi bosqichi + HTTP status bilan ko‘rsatiladi');
+  check(/R2/.test(upErr) && /file too large/.test(upErr),
+    'R2: server xatosi aniq matn bilan ko‘rsatiladi (ok:false)');
+  win.fetch = prevFetch;
 
   win.__cloud.uploadSubmissionFile = function (file, sid, hid) {
     return Promise.resolve({

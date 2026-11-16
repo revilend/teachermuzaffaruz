@@ -353,6 +353,34 @@ function fmtAvg(v) { return v == null ? '—' : v.toFixed(1); }
 /* ==================== CLOUD SYNC (Supabase — real jadvallar) ==================== */
 /* TEACHER_LOGIN, TEACHER_PASSWORD, TEACHER_NAME yuqoriga ko'chirildi */
 
+/* ==================== Cloudflare R2: fayl yuklash ==================== */
+const R2_UPLOAD_URL = 'https://teachermuzaffar-upload.amirovmuzaffar070.workers.dev';
+/* Har qanday fayl (rasm, video, audio, Word/PDF/Excel, chek) R2'ga yuboriladi.
+   FormData Content-Type'ni o'zi qo'yadi — qo'lda header yozilmaydi. */
+async function uploadFileToR2(file, folderPath) {
+  if (!file) throw new Error('Fayl tanlanmagan');
+  const safeName = String(file.name || 'file').replace(/[^a-zA-Z0-9._-]/g, '_') || 'file';
+  const dir = String(folderPath || 'uploads').replace(/^\/+|\/+$/g, '');
+  const path = dir + '/' + Date.now() + '_' + safeName;
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('path', path);
+  let res;
+  try {
+    res = await fetch(R2_UPLOAD_URL, { method: 'POST', body: fd });
+  } catch (e) {
+    throw new Error('R2 yuklashda tarmoq xatosi: ' + ((e && e.message) || 'Failed to fetch'));
+  }
+  let data = null;
+  try { data = await res.json(); } catch (e) { data = null; }
+  const url = data && data.url ? String(data.url) : '';
+  if (!res || !res.ok || !data || !data.ok || !url) {
+    const detail = (data && (data.error || data.message)) || ('HTTP ' + ((res && res.status) || '?'));
+    throw new Error('R2 yuklash xatosi: ' + detail);
+  }
+  return { url: url, path: path, bucket: 'r2', name: safeName };
+}
+
 const CloudSync = (function () {
   const url = window.SUPABASE_URL || 'https://mvjoeqyqaylfccqcnwwe.supabase.co';
   const key = window.SUPABASE_ANON_KEY || 'sb_publishable_PHMC_kfQfu5BLFgDOzHsjw_B0VO2xDI';
@@ -1106,6 +1134,8 @@ const CloudSync = (function () {
     const urls = (Array.isArray(mediaUrls) ? mediaUrls : [mediaUrls])
       .map(function (u) { return String(u || ''); }).filter(Boolean);
     for (let u = 0; u < urls.length; u++) {
+      /* Yangi R2 fayllari Supabase Storage'da emas — o'chirishga urinmaymiz */
+      if (/r2\.dev/i.test(urls[u])) continue;
       const found = mediaPath(urls[u]);
       const rawPath = urls[u].split('?')[0];
       const filePath = found && found.path ? found.path : rawPath.split('/').pop();
@@ -1145,25 +1175,8 @@ const CloudSync = (function () {
     return null;
   }
   async function uploadHomeworkMedia(file) {
-    if (!ready()) throw new Error('Supabase sozlanmagan');
-    const ext = String((file && file.name) || '').split('.').pop().toLowerCase().replace(/[^a-z0-9]/g, '') || 'bin';
-    const path = 'hw/' + Date.now() + '_' + Math.random().toString(36).slice(2, 8) + '.' + ext;
-    let lastErr = null;
-    for (let i = 0; i < MEDIA_BUCKETS.length; i++) {
-      const bucket = MEDIA_BUCKETS[i];
-      try {
-        const res = await client.storage.from(bucket).upload(path, file, {
-          cacheControl: '3600', upsert: false, contentType: (file && file.type) || undefined
-        });
-        if (res.error) throw res.error;
-        const pub = client.storage.from(bucket).getPublicUrl(path);
-        return { url: pub.data.publicUrl, path: path, bucket: bucket };
-      } catch (e) {
-        lastErr = e;
-        console.warn('[cloud] media upload (' + bucket + '):', (e && e.message) || e);
-      }
-    }
-    throw lastErr || new Error('Storage bucket topilmadi');
+    /* Ustoz biriktirgan har qanday fayl R2'ga */
+    return uploadFileToR2(file, 'hw');
   }
   async function removeHomeworkMedia(url) {
     const found = mediaPath(url);
@@ -1401,6 +1414,8 @@ const CloudSync = (function () {
       const item = list[i] || {};
       const ref = String(item.path || item.url || '');
       if (!ref) continue;
+      /* R2 fayllari Supabase Storage'da yo'q — faqat eski supabase URL'lar o'chiriladi */
+      if (/r2\.dev/i.test(ref)) continue;
       const found = mediaPath(ref);
       const filePath = found && found.path ? found.path : ref.split('?')[0];
       if (!filePath) continue;
@@ -1437,37 +1452,10 @@ const CloudSync = (function () {
   }
   /* Faylni Storage'ga yuklash: homework-media/submissions/{student}/{homework}/... */
   async function uploadSubmissionFile(file, studentDbId, homeworkDbId) {
-    if (!ready()) throw new Error('Storage: Supabase sozlanmagan');
-    /* Nomda bo'shliq, apostrof, emoji yoki kirill bo'lsa — "Failed to fetch" bermasligi uchun ASCII */
-    const safeName = String((file && file.name) || 'file').replace(/[^a-zA-Z0-9._-]/g, '_') || 'file';
-    const rawPath = 'submissions/' + studentDbId + '/' + homeworkDbId + '/' + Date.now() + '_' + safeName;
-    const path = rawPath.split('/').map(encodeURIComponent).join('/');
-    const contentType = (file && file.type) || 'application/octet-stream';
-    const errors = [];
-    for (let i = 0; i < MEDIA_BUCKETS.length; i++) {
-      const bucket = MEDIA_BUCKETS[i];
-      try {
-        const res = await client.storage.from(bucket).upload(path, file, {
-          cacheControl: '3600',
-          upsert: true,
-          contentType: contentType,
-          headers: { 'x-upsert': 'true' }
-        });
-        if (res.error) throw res.error;
-        const pub = client.storage.from(bucket).getPublicUrl(path);
-        const url = (pub && pub.data && pub.data.publicUrl) || '';
-        if (!url) throw new Error('public URL olinmadi');
-        return { url: url, path: path, bucket: bucket, contentType: contentType, name: safeName };
-      } catch (e) {
-        let msg = apiErrText(e);
-        if (/failed to fetch|networkerror|load failed/i.test(msg)) {
-          msg += ' (tarmoq/CORS — bucket public va CORS sozlamalarini tekshiring)';
-        }
-        errors.push(bucket + ': ' + msg);
-        console.warn('[cloud] submission upload (' + bucket + '):', msg);
-      }
-    }
-    throw new Error('Storage xatosi — ' + errors.join(' | '));
+    /* Barcha fayl turlari R2'ga: submissions/{student}/{homework}/... */
+    const folder = 'submissions/' + (studentDbId == null ? '0' : studentDbId) +
+      '/' + (homeworkDbId == null ? '0' : homeworkDbId);
+    return uploadFileToR2(file, folder);
   }
 
   /* --- telegram_outbox: sayt yozadi, bot yuboradi (chek / eslatma) --- */
@@ -2142,25 +2130,9 @@ const CloudSync = (function () {
   }
 
   /* --- To'lov chekini Supabase Storage'ga yuklash va bazaga yozish --- */
+  /* --- To'lov chekini R2'ga yuklash va bazaga yozish --- */
   async function uploadReceiptImage(file) {
-    if (!ready()) throw new Error('Supabase sozlanmagan');
-    const ext = String((file && file.name) || '').split('.').pop().toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
-    const path = 'receipts/' + Date.now() + '_' + Math.random().toString(36).slice(2, 8) + '.' + ext;
-    let lastErr = null;
-    for (let i = 0; i < MEDIA_BUCKETS.length; i++) {
-      const bucket = MEDIA_BUCKETS[i];
-      try {
-        const res = await client.storage.from(bucket).upload(path, file, {
-          cacheControl: '3600', upsert: false, contentType: (file && file.type) || 'image/jpeg'
-        });
-        if (res.error) throw res.error;
-        const pub = client.storage.from(bucket).getPublicUrl(path);
-        return { url: pub.data.publicUrl, path: path, bucket: bucket };
-      } catch (e) {
-        lastErr = e;
-      }
-    }
-    throw lastErr || new Error('Storage bucket topilmadi');
+    return uploadFileToR2(file, 'receipts');
   }
 
   async function submitPaymentReceipt(studentDbId, monthKey, amount, receiptUrl) {
@@ -3230,6 +3202,7 @@ const I18N_EN = {
   "Fayl noto'g'ri: bu mos kelmaydigan zaxira fayli": "Invalid file: this is not a matching backup file",
   "Faylni o'qib bo'lmadi": "Could not read the file",
   "Fayl hajmi 50 MB dan oshmasligi kerak:": "File size must not exceed 50 MB:",
+  "Fayl hajmi 100 MB dan oshmasligi kerak:": "File size must not exceed 100 MB:",
   "Bulutda tozalab bo'lmadi": "Could not clean in the cloud",
   "Xatolik: bulut bilan aloqa yo'q (Supabase sozlanmagan)": "Error: no cloud connection (Supabase is not configured)",
   "Xatolik:": "Error:",
@@ -4206,8 +4179,8 @@ async function submitHomeworkFiles(btn) {
   const files = input && input.files ? Array.prototype.slice.call(input.files) : [];
   const note = String((noteEl && noteEl.value) || '').trim();
   if (!files.length && !note) return fail('Fayl tanlang yoki izoh yozing');
-  const big = files.filter(function (f) { return f.size > HW_MAX_BYTES; })[0];
-  if (big) return fail('Fayl hajmi 50 MB dan oshmasligi kerak: ' + (big.name || 'fayl'));
+  const big = files.filter(function (f) { return f.size > HW_SUBMIT_MAX_BYTES; })[0];
+  if (big) return fail('Fayl hajmi 100 MB dan oshmasligi kerak: ' + (big.name || 'fayl'));
   const label = btn ? btn.innerHTML : '';
   /* Har bir fayl yuklangach indikator yangilanadi (supabase-js progress bermaydi) */
   const setProgress = function (done, total, name) {
@@ -4385,7 +4358,8 @@ function openHwModal(hid, preGroup) {
   if (fi) fi.addEventListener('change', function () { onHwFilePick(fi); });
 }
 
-const HW_MAX_BYTES = 50 * 1024 * 1024; /* 50MB */
+const HW_MAX_BYTES = 50 * 1024 * 1024; /* 50MB — ustoz media biriktirmasi */
+const HW_SUBMIT_MAX_BYTES = 100 * 1024 * 1024; /* 100MB — o'quvchi topshirig'i (R2) */
 const HW_ALLOWED_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'mov', 'webm', 'avi', 'mkv', 'm4v', 'ogv', 'mp3', 'wav', 'm4a', 'aac', 'ogg', 'opus', 'oga', 'pdf', 'doc', 'docx'];
 function hwFileExt(name) {
   const n = String(name || '').toLowerCase();
