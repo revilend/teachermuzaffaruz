@@ -3526,6 +3526,8 @@ function hwStudentSubmissionHTML(h) {
       <div class="hw-more-body">
         <input type="file" class="input hw-sub-input" multiple accept="*/*" data-hid="${esc(String(h.id))}" />
         <textarea class="input hw-sub-note" rows="2" placeholder="Izoh (ixtiyoriy)"></textarea>
+        <div class="hw-sub-progress" hidden><span class="hw-sub-progress-bar" style="width:0%"></span></div>
+        <div class="hw-sub-status muted small" hidden></div>
         <div class="field-error hw-sub-error"></div>
         <button type="button" class="btn btn-primary btn-block" data-act="hw-submit" data-hid="${esc(String(h.id))}">${ico('upload', 15)} Yuborish</button>
         <p class="muted small">Rasm, Word, PDF, Excel, video va audio fayllarni yuklash mumkin (har biri 50MB gacha).</p>
@@ -3544,6 +3546,9 @@ async function submitHomeworkFiles(btn) {
   const input = item ? item.querySelector('.hw-sub-input') : null;
   const noteEl = item ? item.querySelector('.hw-sub-note') : null;
   const errEl = item ? item.querySelector('.hw-sub-error') : null;
+  const barEl = item ? item.querySelector('.hw-sub-progress') : null;
+  const barFill = item ? item.querySelector('.hw-sub-progress-bar') : null;
+  const statusEl = item ? item.querySelector('.hw-sub-status') : null;
   const fail = function (m) {
     if (errEl) { errEl.textContent = m; errEl.classList.add('show'); }
     toast(m, 'error');
@@ -3558,10 +3563,24 @@ async function submitHomeworkFiles(btn) {
   const big = files.filter(function (f) { return f.size > HW_MAX_BYTES; })[0];
   if (big) return fail('Fayl hajmi 50 MB dan oshmasligi kerak: ' + (big.name || 'fayl'));
   const label = btn ? btn.innerHTML : '';
-  if (btn) { btn.disabled = true; btn.textContent = 'Yuklanmoqda...'; }
+  /* Har bir fayl yuklangach indikator yangilanadi (supabase-js progress bermaydi) */
+  const setProgress = function (done, total, name) {
+    const pct = total ? Math.round(done / total * 100) : 0;
+    if (barEl) barEl.hidden = false;
+    if (barFill) barFill.style.width = pct + '%';
+    if (statusEl) {
+      statusEl.hidden = false;
+      statusEl.textContent = done + '/' + total + ' fayl yuklandi · ' + pct + '%' + (name ? ' · ' + name : '');
+    }
+    if (btn) btn.textContent = 'Yuklanmoqda ' + done + '/' + total + ' · ' + pct + '%';
+  };
+  if (btn) { btn.disabled = true; btn.textContent = 'Yuklanmoqda 0/' + files.length + ' · 0%'; }
   try {
     const uploaded = [];
+    if (barEl) barEl.hidden = false;
+    if (barFill) barFill.style.width = '0%';
     for (let i = 0; i < files.length; i++) {
+      setProgress(i, files.length, files[i].name || '');
       const up = await CloudSync.uploadSubmissionFile(files[i], st.dbId, h.dbId);
       uploaded.push({
         url: up.url,
@@ -3569,6 +3588,7 @@ async function submitHomeworkFiles(btn) {
         name: files[i].name || '',
         size: files[i].size || 0
       });
+      setProgress(i + 1, files.length);
     }
     const prev = myHomeworkSubmission(h);
     const all = ((prev && prev.files) || []).concat(uploaded);
@@ -3584,6 +3604,8 @@ async function submitHomeworkFiles(btn) {
     toast(uploaded.length ? uploaded.length + ' ta fayl yuborildi' : 'Izoh yuborildi');
   } catch (err) {
     if (btn) { btn.disabled = false; btn.innerHTML = label; }
+    if (barEl) barEl.hidden = true;
+    if (statusEl) statusEl.hidden = true;
     const raw = String((err && err.message) || err || 'xatolik');
     const code = (err && (err.statusCode || err.status)) || '';
     const stage = /^Storage/i.test(raw) ? 'Fayl yuklashda (Storage)'

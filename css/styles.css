@@ -1817,6 +1817,25 @@ html[data-theme="dark"] .hw-media .plyr--audio .plyr__controls .plyr__control[ar
 .hw-more[open] > summary { border-bottom: 1px solid var(--line); }
 .hw-more-body { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 12px; }
 .hw-sub-input { padding: 10px; font-size: 13px; }
+.hw-sub-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--line-2);
+  overflow: hidden;
+  margin: 8px 0 6px;
+}
+.hw-sub-progress[hidden] { display: none; }
+.hw-sub-progress-bar {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: var(--accent-grad);
+  transition: width .25s ease;
+}
+.hw-sub-status { margin: 0 0 8px; }
+.hw-sub-status[hidden] { display: none; }
+
 .hw-teacher-comment {
   display: flex; gap: 8px; margin-top: 10px; padding: 10px 12px;
   border: 1px solid rgba(79, 70, 229, 0.28); border-radius: 12px; background: rgba(79, 70, 229, 0.10);

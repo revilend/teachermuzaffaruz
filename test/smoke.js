@@ -2815,10 +2815,42 @@ await (async () => {
   const subInput = q('.hw-sub-input');
   check(subInput.getAttribute('accept') === '*/*' && subInput.hasAttribute('multiple'),
     'topshiriq: fayl maydoni accept="*/*" + multiple (rasm, Word, PDF, Excel, video, audio)');
+  /* Yuklash progress indikatori: bar + matn + fayl bo'yicha yangilanish */
+  check(!!q('.hw-sub-progress .hw-sub-progress-bar') && !!q('.hw-sub-status'),
+    'topshiriq: yuklash uchun progress indikatori (bar + matn) mavjud');
+  const fastUp = win.__cloud.uploadSubmissionFile;
+  win.__cloud.uploadSubmissionFile = function (file, sid, hid) {
+    return new Promise(function (resolve) {
+      setTimeout(function () {
+        resolve({
+          url: 'https://stub.supabase.local/storage/v1/object/public/homework-media/submissions/' +
+            sid + '/' + hid + '/' + file.name,
+          path: 'submissions/' + sid + '/' + hid + '/' + file.name, bucket: 'homework-media'
+        });
+      }, 150);
+    });
+  };
+  Object.defineProperty(subInput, 'files', {
+    configurable: true,
+    value: [new win.File([new Uint8Array([1])], 'p1.pdf', { type: 'application/pdf' }),
+            new win.File([new Uint8Array([1])], 'p2.pdf', { type: 'application/pdf' })]
+  });
+  clickAct('hw-submit');
+  check(await until(() => /1\/2/.test((q('.hw-sub-status') || {}).textContent || ''), 2500) &&
+        parseFloat(q('.hw-sub-progress-bar').style.width) > 0,
+    'topshiriq: progress matni va bar birinchi fayldan keyin yangilanadi (1/2)');
+  await until(() => { const b = q('[data-act="hw-submit"]'); return !!b && !b.disabled; }, 4000);
+  win.__cloud.uploadSubmissionFile = fastUp;
+  cloudStub.db.homework_submissions = [];
+  win.localStorage.removeItem('et_hw_submissions');
+  forceNav('home');
+
+  /* render() dan keyin input yangi node — qayta olamiz */
+  const subInput2 = q('.hw-sub-input');
   /* 50 MB dan katta fayl — yuborishdan oldin to'xtaydi */
   const bigFile = new win.File([new Uint8Array([1])], 'katta video.mkv', { type: '' });
   Object.defineProperty(bigFile, 'size', { configurable: true, value: 51 * 1024 * 1024 });
-  Object.defineProperty(subInput, 'files', { configurable: true, value: [bigFile] });
+  Object.defineProperty(subInput2, 'files', { configurable: true, value: [bigFile] });
   clickAct('hw-submit');
   await new Promise(r => setTimeout(r, 150));
   check(/Fayl hajmi 50 MB dan oshmasligi kerak/.test((q('.hw-sub-error') || {}).textContent || ''),
@@ -2855,7 +2887,7 @@ await (async () => {
   win.__cloud.uploadSubmissionFile = function () {
     return Promise.reject(new Error('Storage xatosi — homework-media: 403 · permission denied'));
   };
-  Object.defineProperty(subInput, 'files', {
+  Object.defineProperty(subInput2, 'files', {
     configurable: true,
     value: [new win.File([new Uint8Array([1])], 'fail.pdf', { type: 'application/pdf' })]
   });
@@ -2866,7 +2898,7 @@ await (async () => {
   win.__cloud.uploadSubmissionFile = okUpload;
 
   const subPdf = new win.File([new Uint8Array([1])], 'insho.pdf', { type: 'application/pdf' });
-  Object.defineProperty(subInput, 'files', { configurable: true, value: [subPdf] });
+  Object.defineProperty(subInput2, 'files', { configurable: true, value: [subPdf] });
   setVal('.hw-sub-note', 'Mana uyga vazifam');
   clickAct('hw-submit');
   check(await until(() => !!q('.hw-my-files'), 3000),
