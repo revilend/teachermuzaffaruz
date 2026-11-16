@@ -245,6 +245,21 @@ const forceNav = screen => {
 };
 const navLabels = () => qa('.nav-item span').map(s => s.textContent);
 const studentCards = () => qa('#students-list .student-card').length;
+/* O'quvchi kabinetidagi 4 ta asosiy kartadan ichki oynani ochish/yopish */
+const openStudentView = (v) => {
+  let b = q('[data-act="student-view"][data-view="' + v + '"]');
+  if (!b && q('[data-act="student-back"]')) {
+    q('[data-act="student-back"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true }));
+    b = q('[data-act="student-view"][data-view="' + v + '"]');
+  }
+  if (!b) { forceNav('home'); b = q('[data-act="student-view"][data-view="' + v + '"]'); }
+  if (!b) throw new Error('student-view topilmadi: ' + v);
+  b.dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true }));
+};
+const closeStudentView = () => {
+  const b = q('[data-act="student-back"]');
+  if (b) b.dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true }));
+};
 /* EN rejimda tarjima qilinmagan (o'zbekcha qolgan) matnlarni yig'adi.
    Ma'lumot maydonlari (ism, login, guruh nomi) chetlab o'tiladi. */
 function i18nLeftovers(scope) {
@@ -897,9 +912,14 @@ check(text().includes('8-sinf') && text().includes('General English'), 'student:
 check(q('#app-header').textContent.includes("O'quvchi"), 'student: headerda "O\'quvchi"');
 check(navLabels().length === 2 && navLabels().join(',') === 'Kabinet,Profil', 'student: nav faqat Kabinet + Profil');
 
-check(text().includes('Baholar va natijalar'), 'student: baholar bo\'limi ("Baholar va natijalar")');
-check(qa('.grade-row').length > 0, 'student: baholar ro\'yxati bor');
+check(qa('.student-action').length === 4, 'student: kabinetda 4 ta asosiy bo\'lim kartasi');
+check(!text().includes('Tez amallar'), 'student: "Tez amallar" sarlavhasi yo\'q');
+openStudentView('grades');
+check(text().includes('Baholar') && qa('.grade-row').length > 0, 'student: baholar ichki oynasi');
 check(!!q('.avg-badge') && /\d\.\d/.test(q('.avg-badge').textContent), 'student: "O\'rtacha baho" badge');
+check(!!q('[data-act="student-back"]'), 'student: ichki oynada orqaga tugmasi bor');
+closeStudentView();
+openStudentView('attendance');
 check(text().includes('Mening davomatim'), 'student: "Mening davomatim"');
   check(/\d+% qatnashgan/.test(text()), "davomat: akkordeonda foiz statistika");
   check(!!q('.att-toggle') && !!q('.att-last') && !q('.att-scroll'), "davomat: boshida yig'ilgan (oxirgi 3 ta)");
@@ -907,8 +927,10 @@ check(text().includes('Mening davomatim'), 'student: "Mening davomatim"');
   check(!!q('.att-scroll') && text().includes('Yopish'), "davomat: barchasini ko'rish — ichki skroll ochildi");
   click(q('.att-toggle'));
   check(!q('.att-scroll'), "davomat: qayta yig'ildi");
-check(text().includes('Speaking qarzdorligi va topshirish') && text().includes('14:00 – 14:20'),
-   'student: o\'z speaking vaqti (slot) ko\'rinadi');
+closeStudentView();
+openStudentView('speaking');
+check(text().includes('14:00 – 14:20'), 'student: o\'z speaking vaqti (slot) ko\'rinadi');
+closeStudentView();
 check(!!q('.pay-banner') && text().includes('Hozircha to\'lovlar mavjud emas'),
    "moliya: o'quvchi kabinetida to'lov holati + to'lovlar tarixi")
 check(text().includes("To'lov qarzi") || text().includes("To'langan"), "moliya: o'quvchi kabinetida qarz summasi ko'rinadi");
@@ -1111,19 +1133,24 @@ check(jasurCells.some(c => c.textContent.trim() === '9'), 'tg→jurnal: ball jur
 /* --- 4b. O'quvchi portali: badge + yozish paneli --- */
 logout();
 await loginAs('jasur', '4321');
-check(text().includes('Speaking qarzingiz') || text().includes("Speaking qarzingiz yo'q"), 'student: Speaking qarzi badge');
+const jasurDebtNow = Number((JSON.parse(win.localStorage.getItem('et_students') || '[]')
+  .filter(x => x.id === 's3')[0] || {}).speakingDebt) || 0;
+check(jasurDebtNow > 0 ? !!q('.speak-debt-banner') : !q('.speak-debt-banner'),
+  'student: Speaking qarzi qizil banneri (qarz bo\'lsa ko\'rinadi)');
+openStudentView('speaking');
 check(!!q('[data-act="speak-cta"]') && q('[data-act="speak-cta"]').textContent.includes('Speaking topshirish'),
-  "student: '🎙 Speaking topshirish' dolzarb tugmasi (badge tagida)");
+  "student: Speaking topshirish tugmasi");
 check(text().includes('Telegram orqali'), "student: 'Telegram orqali topshirish' yo'riqnomasi");
 check(!q('#recorder') && !q('[data-act="rec-start"]') && !q('[data-act="rec-send"]'),
   "student: brauzer recorder butunlay olib tashlangan");
-check(text().includes('Uyga vazifalar'), "student: 'Uyga vazifalar' bo'limi portalda");
 check(text().includes('Baho: 9/10') && !!q('.audio-item__meta svg'),
   'student: baholangan Telegram topshirigi SVG check bilan ko\'rinadi');
 clickAct('speak-cta');
 check(q('#modal-overlay').hidden === false && q('#modal-sheet').textContent.includes('Telegram'),
   "student: CTA → Telegram yo'riqnomasi modali");
 click('[data-act="close-modal"]');
+closeStudentView();
+check(text().includes('Uyga vazifalar'), "student: 'Uyga vazifalar' kartasi portalda");
 
 /* ================= 14. CHAT (Ustoz ↔ O'quvchi) ================= */
 check(text().includes('Muzaffar Amirov bilan Chat'), "chat: o'quvchi portali bo'limi bor");
@@ -1460,10 +1487,11 @@ await (async () => {
 
   logout();
   await loginAs('restore1', '9876');
+  openStudentView('homework');
   check(text().includes('Present Perfect shakli'), "uyga vazifa: o'quvchi portalida ko'rinadi");
   check(text().includes('10 ta gap tuzing'), "uyga vazifa: tavsif portalda ko'rinadi");
-  check(text().includes('Uyga vazifalar') && !!q('.section-title svg'),
-    "uyga vazifa: portal bo'limi SVG BookOpen ikonka bilan mavjud");
+  check(text().includes('Uyga vazifalar') && !!q('.back-row svg'),
+    "uyga vazifa: portal bo'limi SVG ikonka bilan mavjud");
 
   /* ================= 20b. O'QUVCHI: BAJARILGANLIK CHECKBOXI (○ / ✓) ================= */
   const hwToggle1 = q('[data-act="toggle-hw"]');
@@ -1486,6 +1514,7 @@ await (async () => {
   check(!!q('.hw-check.on'), "bajarildi: yana yoqildi");
   logout();
   await loginAs('restore1', '9876');
+  openStudentView('homework');
   check(!!q('.hw-check.on') && qa('.hw-struck').length >= 2 && !!q('.hw-done-badge'),
     "bajarildi: kirishdan keyin holat saqlanib qoldi (persist)");
 
@@ -2837,6 +2866,7 @@ await (async () => {
   prepRestoreStudent();
   await loginAs('restore1', '9876');
   forceNav('home');
+  openStudentView('homework');
   check(!!q('.hw-task'), 'topshiriq: o‘quvchi kabinetida vazifa kartasi bor');
   check(!!q('.hw-sub-input') && !!q('[data-act="hw-submit"]') &&
         text().includes('Topshiriqni yuklash'),
@@ -2988,6 +3018,7 @@ await (async () => {
   await loginAs('restore1', '9876');
   forceNav('home');
   check(!!q('.hw-comment-notice'), 'topshiriq: kabinetda yangi komentariya bildirishnomasi chiqadi');
+  openStudentView('homework');
   check(text().includes('Yaxshi bajaribsan'), 'topshiriq: vazifa ichida o‘qituvchi komentariyasi ko‘rinadi');
   click('[data-act="hw-comments-seen"]');
   check(!q('.hw-comment-notice'), 'topshiriq: “Ko‘rdim” bosilgach bildirishnoma yashiriladi');
@@ -3008,6 +3039,7 @@ await (async () => {
   prepRestoreStudent();
   await loginAs('restore1', '9876');
   forceNav('home');
+  openStudentView('homework');
   check(!q('.hw-sub-input') && !q('[data-act="hw-submit"]') &&
         !text().includes('Topshiriqni yuklash'),
     'topshiriq: ruxsat o‘chirilganda yuklash yozuvi/tugmasi/bo‘limi DOM’da yo‘q');
@@ -3198,9 +3230,15 @@ await (async () => {
 
   /* O'quvchi ekranlari va modallari */
   logout();
-  await loginAs('jasur', '123');
+  await loginAs('restore1', '9876');
   win.localStorage.setItem('app_lang', JSON.stringify('en'));
   ['home', 'profile'].forEach((s) => { forceNav(s); scanI18n('student:' + s); });
+  forceNav('home');
+  ['attendance', 'homework', 'grades', 'speaking'].forEach((v) => {
+    openStudentView(v);
+    scanI18n('student-view:' + v);
+    closeStudentView();
+  });
   forceNav('home');
   if (openAct('speak-cta')) scanModal('student:speak');
   forceNav('home');

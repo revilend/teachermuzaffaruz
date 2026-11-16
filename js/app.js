@@ -180,6 +180,7 @@ const state = {
   captcha: null,
   pending2fa: null,
   subGroup: 'all',
+  studentView: '',
   resetCtx: null,
   authStep: 'landing',
   resetMode: 'password',
@@ -3340,6 +3341,27 @@ const I18N_EN = {
   "Nima bajarishi kerak...": "What should they do...",
   "Tanlangan faylni bekor qilish": "Cancel selected file",
   "Slot qo'shish": "Add slot",
+  "Uyga vazifalar": "Homework",
+  "Baholar": "Grades",
+  "Speaking topshirish": "Submit Speaking",
+  "Orqaga": "Back",
+  "Speaking qarzingiz": "Your Speaking debt",
+  "Speaking topshirib qarzni kamaytiring.": "Submit Speaking to reduce the debt.",
+  "O'rtacha baho": "Average score",
+  "Yopish": "Close",
+  "Barchasini ko'rish": "View all",
+  "Telegram orqali topshirish": "Submit via Telegram",
+  "Muzaffar Amirovga Telegram botga ovozli xabar (voice) yoki dumaloq video (krujok) yuboring — brauzerda yozish shart emas.": "Send a voice message or a round video (video note) to Muzaffar Amirov via the Telegram bot — no need to record in the browser.",
+  "Telegramda botga kiring": "Open the bot in Telegram",
+  "ovozli xabar yuboring": "send a voice message",
+  "Muzaffar Amirov baholaydi": "Muzaffar Amirov grades it",
+  "Guruh tayinlanmagan": "No group assigned",
+  "Muzaffar Amirov bilan Chat": "Chat with Muzaffar Amirov",
+  "Sozlamalar": "Settings",
+  "Muzaffar Amirovga xabar yozing...": "Write a message to Muzaffar Amirov...",
+  "Yuborish": "Send",
+  "Mening davomatim": "My attendance",
+  "(Qarzdorlik mavjud emas)": "(no debt)",
   "Telegram topshiriqlari (Inbox)": "Telegram submissions (Inbox)",
   "Uyga vazifa qo'shish": "Assign homework",
   "Uyga vazifani tahrirlash": "Edit homework",
@@ -3430,6 +3452,9 @@ function i18nPattern(s, lang) {
   if ((m = /^(\d+) ta slot$/.exec(s))) return m[1] + (m[1] === '1' ? ' slot' : ' slots');
   if ((m = /^(\d+)-sinf$/.exec(s))) return 'Grade ' + m[1];
   if ((m = /^(\d+)\/(\d+) belgilandi$/.exec(s))) return m[1] + '/' + m[2] + ' marked';
+  if ((m = /^(\d+) keldi · (\d+) kelmadi · (\d+) sababli$/.exec(s)))
+    return m[1] + ' present · ' + m[2] + ' absent · ' + m[3] + ' excused';
+  if ((m = /^(\d+) ta baholangan dars$/.exec(s))) return m[1] + (m[1] === '1' ? ' graded lesson' : ' graded lessons');
   if ((m = /^(\d+)-sinf • (.+)$/.exec(s))) return 'Grade ' + m[1] + ' • ' + m[2];
   return null;
 }
@@ -4871,21 +4896,8 @@ function studentPortal() {
     </div>`;
   }).join('') : `<div class="empty"><span class="empty-ico">${ICON.grades}</span>Hozircha baho yo'q</div>`;
 
-  return `
-  <section class="card hero-card">
-    <div class="portal-head">
-      <div class="avatar avatar-lg">${esc(initials(st.fullName))}</div>
-      <div class="col">
-        <div class="greet-name">${esc(st.fullName)}</div>
-        <div class="portal-meta">
-          <span class="chip-class">${esc(st.schoolClass)}</span>
-          <span class="pill">${g ? esc(g.name) : 'Guruh taylanmagan'}</span>
-        </div>
-      </div>
-    </div>
-  </section>
-  ${payBanner}
-
+  /* ---- 4 ta asosiy bo'lim: ichki oynalar ---- */
+  const attendanceHTML = `
   <div class="section-title">${ico('cal', 13)} Mening davomatim</div>
   <div class="card att-card">
     <div class="row between att-head">
@@ -4893,38 +4905,22 @@ function studentPortal() {
         <div class="strong-label">${ico('cal', 14)} Davomat: ${attPct}% qatnashgan (${attMissed} ta qoldirilgan)</div>
         <div class="muted small">${cnt.present} keldi · ${cnt.absent} kelmadi · ${cnt.excused} sababli</div>
       </div>
-      <button type="button" class="btn btn-xs ghost att-toggle" data-act="att-toggle" aria-expanded="${!!state.attOpen}">${state.attOpen ? '▴ Yopish' : '▾ Ochish'}</button>
+      <button type="button" class="btn btn-xs ghost att-toggle" data-act="att-toggle" aria-expanded="${!!state.attOpen}">${state.attOpen ? 'Yopish' : 'Ochish'}</button>
     </div>
     ${state.attOpen ? `<div class="att-scroll">${attRows}</div>
-    <button type="button" class="btn btn-xs ghost btn-block" data-act="att-toggle">▴ Yopish</button>`
+    <button type="button" class="btn btn-xs ghost btn-block" data-act="att-toggle">${t('Yopish')}</button>`
     : `<div class="att-last">${attLastRows}</div>
-    <button type="button" class="btn btn-xs ghost btn-block" data-act="att-toggle">▾ Barchasini ko'rish</button>`}
-  </div>
+    <button type="button" class="btn btn-xs ghost btn-block" data-act="att-toggle">${t('Barchasini ko\'rish')}</button>`}
+  </div>`;
 
-  <div class="section-title">${hideMoney ? ico('mic', 15) + ' Speaking topshirish' : ico('mic', 15) + ' Speaking qarzdorligi va topshirish'}</div>
-  <div class="card">
-    ${hideMoney ? '' : (Number(st.speakingDebt) > 0
-      ? `<div class="debt-badge" style="margin-bottom:8px">${ico('alert', 15)} Speaking qarzingiz: ${Number(st.speakingDebt)} ta</div>`
-      : `<div class="att-pill" style="margin-bottom:8px">${ico('checkCircle', 15)} Speaking qarzingiz yo'q</div>`)}
-    <button type="button" class="btn btn-primary btn-block speak-cta" data-act="speak-cta">${ico('mic', 20)} Speaking topshirish</button>
-    ${slotRows}
-  </div>
-
-  <div class="card" style="margin-top:9px">
-    <div class="strong-label" style="margin-bottom:5px">Telegram orqali topshirish</div>
-    <div class="muted small">${ico('mic', 14)} Muzaffar Amirovga <b>Telegram botga</b> ovozli xabar (voice) yoki dumaloq video (krujok) yuboring — brauzerda yozish shart emas.</div>
-    <div class="hw-item small" style="margin-top:8px">1) Telegramda botga kiring → 2) ${ico('mic', 13)} ovozli xabar yuboring → 3) Muzaffar Amirov baholaydi</div>
-    <div id="my-submissions" class="audio-list">${mySubs}</div>
-  </div>
-
-  <div class="section-title">${ico('bookOpen', 13)} Uyga vazifalar</div>
+  const homeworkHTML = `
   ${hwCommentBanner}
-  <div class="card" id="hw-list">${homeworkListHTML(myHw)}</div>
+  <div class="card" id="hw-list">${homeworkListHTML(myHw)}</div>`;
 
-  <div class="section-title">${ico('grades', 15)} Baholar va natijalar</div>
+  const gradesHTML = `
   <div class="card avg-card">
     <div class="col">
-      <div class="strong-label">O'rtacha baho</div>
+      <div class="strong-label">${t("O'rtacha baho")}</div>
       <div class="muted small">${nums.length} ta baholangan dars</div>
     </div>
     <div class="avg-badge ${avg == null ? 'g-empty' : gradeClassOf(avg)}">
@@ -4932,19 +4928,98 @@ function studentPortal() {
       <span class="avg-lab">/ 10</span>
     </div>
   </div>
-  <div class="card">${gradeRows}</div>
+  <div class="card">${gradeRows}</div>`;
 
-  <div class="section-title">Muzaffar Amirov bilan Chat</div>
+  const speakingHTML = `
+  <button type="button" class="btn btn-primary btn-block speak-cta" data-act="speak-cta">${ico('mic', 20)} ${t('Speaking topshirish')}</button>
+  <div class="card" style="margin-top:10px">${slotRows}</div>
+  <div class="card" style="margin-top:9px">
+    <div class="strong-label" style="margin-bottom:5px">${t('Telegram orqali topshirish')}</div>
+    <div class="muted small">${ico('mic', 14)} ${t('Muzaffar Amirovga Telegram botga ovozli xabar (voice) yoki dumaloq video (krujok) yuboring — brauzerda yozish shart emas.')}</div>
+    <div class="hw-item small" style="margin-top:8px">1) ${t('Telegramda botga kiring')} → 2) ${ico('mic', 13)} ${t('ovozli xabar yuboring')} → 3) ${t('Muzaffar Amirov baholaydi')}</div>
+    <div id="my-submissions" class="audio-list">${mySubs}</div>
+  </div>`;
+
+  const studentViews = {
+    attendance: { title: t('Davomat'), html: attendanceHTML },
+    homework: { title: t('Uyga vazifalar'), html: homeworkHTML },
+    grades: { title: t('Baholar'), html: gradesHTML },
+    speaking: { title: t('Speaking topshirish'), html: speakingHTML }
+  };
+  const activeView = state.studentView && studentViews[state.studentView] ? state.studentView : '';
+  if (activeView) {
+    return `
+  <div class="back-row">
+    <button type="button" class="btn btn-xs ghost" data-act="student-back">${ico('arrowLeft', 14)} ${t('Orqaga')}</button>
+    <span class="back-title">${studentViews[activeView].title}</span>
+  </div>
+  ${studentViews[activeView].html}
+  `;
+  }
+
+  const spDebt = Math.max(0, Number(st.speakingDebt) || 0);
+  const speakBanner = spDebt > 0 ? `
+  <section class="card speak-debt-banner">
+    <span class="speak-debt-ico">${ico('alert', 16)}</span>
+    <div class="col">
+      <b>${t("Speaking qarzingiz")}: ${spDebt} ta</b>
+      <div class="muted small">${t("Speaking topshirib qarzni kamaytiring.")}</div>
+    </div>
+    <button type="button" class="btn btn-xs ghost" data-act="student-view" data-view="speaking">${t('Speaking topshirish')}</button>
+  </section>` : '';
+
+  const cardsHTML = `
+  <div class="student-actions">
+    <button type="button" class="card student-action" data-act="student-view" data-view="attendance">
+      <span class="quick-ico tint-emerald">${ICON.cal}</span>
+      <span class="student-action-label">${t('Davomat')}</span>
+    </button>
+    <button type="button" class="card student-action" data-act="student-view" data-view="homework">
+      <span class="quick-ico tint-indigo">${ICON.bookOpen}</span>
+      <span class="student-action-label">${t('Uyga vazifalar')}</span>
+    </button>
+    <button type="button" class="card student-action" data-act="student-view" data-view="grades">
+      <span class="quick-ico tint-amber">${ICON.grades}</span>
+      <span class="student-action-label">${t('Baholar')}</span>
+    </button>
+    <button type="button" class="card student-action" data-act="student-view" data-view="speaking">
+      <span class="quick-ico tint-sky">${ICON.mic}</span>
+      <span class="student-action-label">${t('Speaking topshirish')}</span>
+    </button>
+  </div>`;
+
+  return `
+  ${payBanner}
+  ${speakBanner}
+
+  <section class="card hero-card">
+    <div class="portal-head">
+      <div class="avatar avatar-lg">${esc(initials(st.fullName))}</div>
+      <div class="col">
+        <div class="greet-name">${esc(st.fullName)}</div>
+        <div class="portal-meta">
+          <span class="chip-class">${esc(st.schoolClass)}</span>
+          <span class="pill">${g ? esc(g.name) : t('Guruh tayinlanmagan')}</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  ${cardsHTML}
+
+  ${hwCommentBanner}
+
+  <div class="section-title">${t('Muzaffar Amirov bilan Chat')}</div>
   <div class="card chat-card">
     ${chatHint()}
     <div class="chat-list" id="chat-list">${chatListHTML(st.id, 'student')}</div>
     <div class="chat-input-row">
-      <input class="input" id="chat-input" placeholder="Muzaffar Amirovga xabar yozing..." autocomplete="off" />
-      <button type="button" class="btn btn-primary" data-act="send-chat">Yuborish</button>
+      <input class="input" id="chat-input" placeholder="${t('Muzaffar Amirovga xabar yozing...')}" autocomplete="off" />
+      <button type="button" class="btn btn-primary" data-act="send-chat">${t('Yuborish')}</button>
     </div>
   </div>
 
-  <div class="section-title">Sozlamalar</div>
+  <div class="section-title">${t('Sozlamalar')}</div>
   <div class="card">
     <div class="list-row"><span>Login</span><span class="login-val">${esc(u.login || '')}</span></div>
     <div class="list-row"><span>${t('Parol')}</span><span class="muted">••••</span></div>
@@ -7595,6 +7670,8 @@ function logout() {
   state.filterClass = 'Barchasi';
   state.search = '';
   state.pending2fa = null;
+  state.studentView = '';
+  state.attOpen = false;
   state.resetCtx = null;
   state.resetMode = 'password';
   state.resetContact = '';
@@ -8971,6 +9048,12 @@ document.addEventListener('click', function (e) {
     },
     'do-submit-receipt': doSubmitPaymentReceipt,
     'att-toggle': function () { state.attOpen = !state.attOpen; render(); },
+    'student-view': function () {
+      state.studentView = btn.getAttribute('data-view') || '';
+      state.attOpen = false;
+      render();
+    },
+    'student-back': function () { state.studentView = ''; render(); },
     'remind-debtors': openRemindDebtors,
     'do-remind-debtors': sendDebtorsReminder,
     'del-hw': function () { openDeleteHw(btn.getAttribute('data-hid')); },
