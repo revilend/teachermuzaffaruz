@@ -1294,6 +1294,39 @@ const CloudSync = (function () {
     }
     throw new Error('Baza (homework_submissions INSERT): ' + apiErrText(lastErr));
   }
+  /* Topshiriq yozuvini o'chirish: avval Storage obyektlari, keyin jadval qatori */
+  async function deleteSubmission(id, files) {
+    if (!ready() || id == null) throw new Error('Baza: topshiriq id topilmadi');
+    const list = Array.isArray(files) ? files : [];
+    const storageErrors = [];
+    for (let i = 0; i < list.length; i++) {
+      const item = list[i] || {};
+      const ref = String(item.path || item.url || '');
+      if (!ref) continue;
+      const found = mediaPath(ref);
+      const filePath = found && found.path ? found.path : ref.split('?')[0];
+      if (!filePath) continue;
+      const buckets = found
+        ? [found.bucket].concat(MEDIA_BUCKETS.filter(function (b) { return b !== found.bucket; }))
+        : MEDIA_BUCKETS;
+      let removed = false;
+      for (let b = 0; b < buckets.length; b++) {
+        try {
+          const rm = await client.storage.from(buckets[b]).remove([filePath]);
+          if (!rm.error) { removed = true; break; }
+          storageErrors.push('Storage (' + buckets[b] + '): ' + apiErrText(rm.error));
+        } catch (e) {
+          storageErrors.push('Storage (' + buckets[b] + '): ' + apiErrText(e));
+        }
+      }
+      if (!removed) console.warn('[cloud] submission fayl o\'chmadi:', filePath);
+    }
+    const res = await client.from('homework_submissions').delete().eq('id', id);
+    if (res.error) throw new Error('Baza (homework_submissions DELETE): ' + apiErrText(res.error));
+    store.set(K.homeworkSubmissions, (store.get(K.homeworkSubmissions, []) || [])
+      .filter(function (x) { return String(x.id) !== String(id); }));
+    return { storageErrors: storageErrors };
+  }
   async function commentSubmission(id, comment) {
     if (!ready()) throw new Error('Supabase sozlanmagan');
     const text = String(comment || '').trim();
@@ -1897,6 +1930,7 @@ const CloudSync = (function () {
     pullSubmissions: pullSubmissions,
     saveHomeworkSubmission: saveHomeworkSubmission,
     commentSubmission: commentSubmission,
+    deleteSubmission: deleteSubmission,
     uploadSubmissionFile: uploadSubmissionFile,
     removeHomeworkMedia: removeHomeworkMedia,
     queueMessages: queueMessages,
@@ -3517,6 +3551,9 @@ function hwStudentSubmissionHTML(h) {
         <div class="hw-my-files-h">${ico('paperclip', 14)} Siz yuklagan fayllar</div>
         ${submissionFilesHTML(sub.files)}
         ${sub.note ? `<p class="hw-sub-note">${esc(sub.note)}</p>` : ''}
+        <div class="hw-my-files-actions">
+          <button type="button" class="btn btn-xs danger" data-act="hw-del-sub" data-sub="${esc(String(sub.id))}">${ico('trash', 13)} ${t("O'chirish")}</button>
+        </div>
       </div>`
     : '';
   const canUpload = st.homeworkUploadAllowed === true;
@@ -4359,7 +4396,10 @@ function submissionCardHTML(s) {
         <strong>${esc(st ? st.fullName : "O'quvchi")}</strong>
         <span class="muted small">${esc(hw ? hw.title : 'Uyga vazifa')}</span>
       </div>
-      <span class="chip-class">${esc(when)}</span>
+      <div class="sub-head-right">
+        <span class="chip-class">${esc(when)}</span>
+        <button type="button" class="btn btn-xs danger" data-act="sub-del" data-sub="${esc(String(s.id))}">${ico('trash', 13)} ${t("O'chirish")}</button>
+      </div>
     </div>
     ${submissionFilesHTML(s.files)}
     ${s.note ? `<p class="sub-note">${ico('message', 14)} ${esc(s.note)}</p>` : ''}
@@ -5635,6 +5675,71 @@ function saveChangePwd() {
 }
 
 /* ==================== O'CHIRISH (tasdiq bilan, faqat ustoz) ==================== */
+function submissionById(id) {
+  return (store.get(K.homeworkSubmissions, []) || []).filter(function (x) {
+    return String(x.id) === String(id);
+  })[0] || null;
+}
+
+/* O'quvchi o'z yozuvini, ustoz esa istalgan topshiriq yozuvini o'chiradi */
+function openDeleteSubmission(subId) {
+  const sub = submissionById(subId);
+  if (!sub) { toast('Topshiriq yozuvi topilmadi', 'error'); return; }
+  const teacher = isTeacher();
+  if (!teacher) {
+    const st = linkedStudent();
+    if (!st || String(st.dbId) !== String(sub.studentDbId)) { toast("Ruxsat yo'q", 'error'); return; }
+  }
+  const st = submissionStudent(sub);
+  const hw = submissionHomework(sub);
+  const who = (st ? st.fullName : "O'quvchi") + (hw ? ' — ' + hw.title : '');
+  openModal(`
+    <div class="modal-head">
+      <h3>O'chirish</h3>
+      <button type="button" class="icon-btn" data-act="close-modal" aria-label="Yopish">✕</button>
+    </div>
+    <div class="confirm-body">
+      <div class="confirm-emoji tint-rose">${ICON.trash}</div>
+      <p class="confirm-text">${teacher
+        ? `Haqiqatan ham <strong>${esc(who)}</strong> topshiriq yozuvini o'chirmoqchimisiz? Yuklangan fayllar Storage'dan ham o'chiriladi.`
+        : `Haqiqatan ham yuklagan fayllaringiz va izohingizni o'chirmoqchimisiz? Fayllar Storage'dan ham o'chiriladi.`}</p>
+    </div>
+    <div class="confirm-actions">
+      <button type="button" class="btn btn-ghost" data-act="close-modal">Bekor qilish</button>
+      <button type="button" class="btn btn-danger" data-act="do-del-sub" data-sub="${esc(String(sub.id))}">Ha, o'chirish</button>
+    </div>
+  `);
+}
+
+function doDeleteSubmission(subId) {
+  const sub = submissionById(subId);
+  if (!sub) { closeModal(); toast('Topshiriq yozuvi topilmadi', 'error'); return; }
+  if (!isTeacher()) {
+    const st = linkedStudent();
+    if (!st || String(st.dbId) !== String(sub.studentDbId)) { toast("Ruxsat yo'q", 'error'); return; }
+  }
+  closeModal();
+  /* UI da darhol olib tashlaymiz, keyin bulutni tozalaymiz */
+  store.set(K.homeworkSubmissions, (store.get(K.homeworkSubmissions, []) || []).filter(function (x) {
+    return String(x.id) !== String(sub.id);
+  }));
+  render();
+  CloudSync.deleteSubmission(sub.id, sub.files)
+    .then(function (r) {
+      if (r && r.storageErrors && r.storageErrors.length) {
+        console.warn('[hw-del] storage:', r.storageErrors.join(' | '));
+      }
+      toast("Topshiriq o'chirildi");
+      render();
+    })
+    .catch(function (e) {
+      console.error('[hw-del]', e);
+      toast("O'chirishda xatolik: " + ((e && e.message) || 'xatolik'), 'error');
+      /* Xato bo'lsa bazadan holatni tiklaymiz */
+      CloudSync.pullSubmissions().then(function () { render(); });
+    });
+}
+
 function openDeleteStudent(sid) {
   if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
   const st = studentById(sid);
@@ -8035,6 +8140,9 @@ document.addEventListener('click', function (e) {
     'hw-upload-toggle': function () { toggleHwUploadAllowed(btn.getAttribute('data-sid')); },
     'hw-submit': function () { submitHomeworkFiles(btn); },
     'hw-comments-seen': function () { store.set(K.hwCommentsSeen, new Date().toISOString()); render(); },
+    'hw-del-sub': function () { openDeleteSubmission(btn.getAttribute('data-sub')); },
+    'sub-del': function () { openDeleteSubmission(btn.getAttribute('data-sub')); },
+    'do-del-sub': function () { doDeleteSubmission(btn.getAttribute('data-sub')); },
     'sub-group': function () { state.subGroup = btn.getAttribute('data-gid') || 'all'; render(); },
     'sub-comment': function () { sendSubmissionComment(btn); },
     'save-reset': function () { saveResetPwd(btn.getAttribute('data-sid')); },

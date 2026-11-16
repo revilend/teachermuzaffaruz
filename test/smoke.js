@@ -2984,7 +2984,55 @@ await (async () => {
     'topshiriq: ruxsat o‘chirilganda yuklash yozuvi/tugmasi/bo‘limi DOM’da yo‘q');
   check(!!q('.hw-my-files'), 'topshiriq: o‘z yuklagan fayllari baribir ko‘rinadi');
 
-  /* (f) Supabase SQL: homework-media bucket + anon storage policy'lari */
+  /* (f) o'quvchi o'z yuklagan fayllarini o'chiradi (tasdiq bilan, Storage + jadval) */
+  check(!!q('[data-act="hw-del-sub"]'),
+    "topshiriq: o‘quvchi o‘z yozuvida “O‘chirish” tugmasini ko‘radi");
+  clickAct('hw-del-sub');
+  check(!!q('.confirm-body') && /o.chirmoqchimisiz/i.test((q('.confirm-text') || {}).textContent || ''),
+    "topshiriq: o‘chirishdan oldin tasdiq so‘raladi");
+  click('[data-act="close-modal"]');
+  check(!!q('.hw-my-files') && (cloudStub.db.homework_submissions || []).length >= 1,
+    "topshiriq: tasdiq bekor qilinsa hech narsa o‘chmaydi");
+  const beforeRemove = (cloudStub.removeCalls || []).length;
+  clickAct('hw-del-sub');
+  clickAct('do-del-sub');
+  check(await until(() => !q('.hw-my-files'), 3000),
+    "topshiriq: o‘quvchi o‘z yozuvini o‘chirdi (fayllar bloki yo‘qoldi)");
+  check(await until(() => !(cloudStub.db.homework_submissions || []).length, 3000),
+    "topshiriq: homework_submissions qatori o‘chirildi");
+  check((cloudStub.removeCalls || []).slice(beforeRemove)
+        .some(p => String((p || [])[0] || '').indexOf('submissions/') === 0),
+    "topshiriq: Storage’dagi obyekt ham o‘chirildi (submissions/...)");
+
+  /* (g) ustoz keraksiz topshiriq yozuvini o'chiradi */
+  const tStRow = (cloudStub.db.students || []).filter(r => String(r.login) === 'restore1')[0] || {};
+  const tHwRow = (cloudStub.db.homework || [])[0] || {};
+  cloudStub.db.homework_submissions = [{
+    id: 9001, student_id: tStRow.id, homework_id: tHwRow.id,
+    student_name: String(tStRow.name || ''), group_name: 'g55', status: 'yangi',
+    files: [{ url: 'https://stub.supabase.local/storage/v1/object/public/homework-media/submissions/' +
+      tStRow.id + '/' + tHwRow.id + '/eski.pdf', type: 'file', name: 'eski.pdf', size: 1 }],
+    note: 'eski yozuv', created_at: new Date().toISOString(), updated_at: new Date().toISOString()
+  }];
+  logout();
+  await loginAs('m_amirov', teacherPass32);
+  forceNav('submissions');
+  check(!!q('[data-act="sub-del"]'),
+    "topshiriq: ustoz “Bajarilgan topshiriqlar”da o‘chirish tugmasini ko‘radi");
+  const beforeRemove2 = (cloudStub.removeCalls || []).length;
+  clickAct('sub-del');
+  check(!!q('.confirm-body') && !!q('[data-act="do-del-sub"]'),
+    "topshiriq: ustozga ham o‘chirishdan oldin tasdiq oynasi chiqadi");
+  clickAct('do-del-sub');
+  check(await until(() => !(cloudStub.db.homework_submissions || []).length, 3000),
+    "topshiriq: ustoz keraksiz topshiriq yozuvini o‘chirdi (jadval qatori yo‘q)");
+  check(await until(() => !q('.sub-card'), 3000),
+    "topshiriq: ustoz ro‘yxatidan karta ham yo‘qoldi");
+  check((cloudStub.removeCalls || []).slice(beforeRemove2)
+        .some(p => String((p || [])[0] || '').indexOf('submissions/') === 0),
+    "topshiriq: ustoz o‘chirganda Storage obyekti ham tozalandi");
+
+  /* (h) Supabase SQL: homework-media bucket + anon storage policy'lari */
   const sqlText = fs.readFileSync(path.join(root, 'supabase.sql'), 'utf8');
   check(/insert into storage\.buckets[\s\S]*?'homework-media'[\s\S]*?true/i.test(sqlText),
     'sql: homework-media bucket public sifatida yaratiladi (mavjud bo‘lsa public=true qilinadi)');

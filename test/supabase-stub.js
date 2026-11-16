@@ -132,6 +132,7 @@ function createStub(seed) {
   };
 
   const storageCalls = [];
+  const removeCalls = [];
   let storageError = null;
   const bucket = {
     upload: function (path, file, opts) {
@@ -139,7 +140,10 @@ function createStub(seed) {
       if (storageError) return Promise.resolve({ data: null, error: storageError });
       return Promise.resolve({ data: { path: path }, error: null });
     },
-    remove: function () { return Promise.resolve({ data: [], error: null }); },
+    remove: function (paths) {
+      removeCalls.push(paths);
+      return Promise.resolve({ data: [], error: null });
+    },
     getPublicUrl: function (path) { return { data: { publicUrl: 'https://stub.supabase.local/storage/v1/object/public/homework_media/' + path } }; }
   };
 
@@ -159,6 +163,7 @@ function createStub(seed) {
     db: db,
     rows: table,
     storageCalls: storageCalls,
+    removeCalls: removeCalls,
     setStorageError: function (err) { storageError = err || null; },
     reset: function (name) { db[name] = []; seq[name] = 0; }
   };
