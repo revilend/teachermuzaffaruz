@@ -3329,6 +3329,17 @@ const I18N_EN = {
   "Belgilash": "Set",
   "belgilanmagan": "not set",
   "Summa (so'mda)": "Amount (in sum)",
+  "Maktab sinfi": "School class",
+  "Sinfni tanlang": "Select class",
+  "Dastlabki parol": "Initial password",
+  "Parolni ko'rsatish": "Show password",
+  "Joriy parol": "Current password",
+  "Yangi parolni tasdiqlang": "Confirm new password",
+  "Repetitorlik guruhi": "Tutoring group",
+  "Vazifa (tavsif)": "Task (description)",
+  "Nima bajarishi kerak...": "What should they do...",
+  "Tanlangan faylni bekor qilish": "Cancel selected file",
+  "Slot qo'shish": "Add slot",
   "Telegram topshiriqlari (Inbox)": "Telegram submissions (Inbox)",
   "Uyga vazifa qo'shish": "Assign homework",
   "Uyga vazifani tahrirlash": "Edit homework",
@@ -3417,6 +3428,9 @@ function i18nPattern(s, lang) {
   if ((m = /^(.+) so'm qarz$/.exec(s))) return m[1] + " so'm debt";
   if ((m = /^1-on-1 slotlar • (\d+) ta slot$/.exec(s))) return '1-on-1 slots • ' + m[1] + (m[1] === '1' ? ' slot' : ' slots');
   if ((m = /^(\d+) ta slot$/.exec(s))) return m[1] + (m[1] === '1' ? ' slot' : ' slots');
+  if ((m = /^(\d+)-sinf$/.exec(s))) return 'Grade ' + m[1];
+  if ((m = /^(\d+)\/(\d+) belgilandi$/.exec(s))) return m[1] + '/' + m[2] + ' marked';
+  if ((m = /^(\d+)-sinf • (.+)$/.exec(s))) return 'Grade ' + m[1] + ' • ' + m[2];
   return null;
 }
 let i18nSegCache = { map: null, keys: [] };

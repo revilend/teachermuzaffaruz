@@ -245,6 +245,35 @@ const forceNav = screen => {
 };
 const navLabels = () => qa('.nav-item span').map(s => s.textContent);
 const studentCards = () => qa('#students-list .student-card').length;
+/* EN rejimda tarjima qilinmagan (o'zbekcha qolgan) matnlarni yig'adi.
+   Ma'lumot maydonlari (ism, login, guruh nomi) chetlab o'tiladi. */
+function i18nLeftovers(scope) {
+  const out = {};
+  if (!scope) return [];
+  const SKIP = '.s-name, .login-val, .profile-name, .brand, .avatar, .chip-btn, ' +
+    '.chip-class, .gc-name, .group-name, .msg-text, .hw-file-name';
+  const UZ = /(yo'q|uchun|kerak|mavjud|qo'sh|bo'l|o'quvchi|o'qituvchi|guruh|davomat|baho|vazifa|topshiriq|to'lov|qarz|hafta|oylik|belgilan|eslatma|saqlash|bekor|yopish|kirish|parol|jami|keldi|kelmadi|sababli|noyabr|yanvar|fevral|aprel|iyun|iyul|avgust|sentabr|oktabr|dekabr|sinf)/i;
+  const add = (v) => {
+    const s = String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
+    if (!s || !UZ.test(s)) return;
+    if (/so'm|IELTS/.test(s)) return;
+    out[s] = 1;
+  };
+  const doc = win.document;
+  const walker = doc.createTreeWalker(scope, 4, null);
+  let n;
+  while ((n = walker.nextNode())) {
+    const parent = n.parentNode;
+    if (!parent || parent.nodeType !== 1) continue;
+    if (parent.closest && parent.closest(SKIP)) continue;
+    add(n.nodeValue);
+  }
+  const els = scope.querySelectorAll ? scope.querySelectorAll('[placeholder],[title],[aria-label]') : [];
+  els.forEach((el) => {
+    ['placeholder', 'title', 'aria-label'].forEach((at) => add(el.getAttribute(at)));
+  });
+  return Object.keys(out);
+}
 const groupCards = () => qa('#screen .group-card').length;
 function logout() { click('[data-act="nav"][data-screen="profile"]'); clickAct('logout'); }
 /* CAPTCHA misolini yechadi: 7 + 3 / 9 − 4 / 4 × 3 */
@@ -3131,6 +3160,57 @@ await (async () => {
   check(/No submitted homework yet/.test(text()), 'i18n EN: yuklangan topshiriqlar bo\'sh holati');
   check(/November 2026/.test(payEn), 'i18n EN: oy nomi inglizcha (November 2026)');
   forceNav('home');
+  win.localStorage.setItem('app_lang', JSON.stringify('uz'));
+
+  /* ================= 35. DOIMIY TEKSHIRUV: EN REJIMDA TARJIMASIZ MATN QOLMASIN ================= */
+  win.localStorage.setItem('app_lang', JSON.stringify('en'));
+  const i18nMissed = [];
+  const scanI18n = (where) => {
+    i18nLeftovers(q('#screen')).forEach((v) => i18nMissed.push(where + ': ' + v));
+  };
+  const scanModal = (where) => {
+    i18nLeftovers(q('#modal-sheet')).forEach((v) => i18nMissed.push(where + ': ' + v));
+    if (q('[data-act="close-modal"]')) click('[data-act="close-modal"]');
+  };
+  ['home', 'students', 'submissions', 'payments', 'grades', 'attendance', 'speaking', 'profile']
+    .forEach((s) => { forceNav(s); scanI18n(s); });
+
+  const openAct = (act) => {
+    const btn = q('[data-act="' + act + '"]');
+    if (!btn) return false;
+    btn.dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true }));
+    return true;
+  };
+  forceNav('students');
+  if (openAct('open-add-student')) scanModal('modal:add-student');
+  forceNav('groups');
+  if (openAct('open-add-group')) scanModal('modal:add-group');
+  forceNav('home');
+  if (openAct('open-hw')) scanModal('modal:homework');
+  forceNav('speaking');
+  if (openAct('open-slot')) scanModal('modal:slot');
+  forceNav('payments');
+  if (openAct('fee-schedule')) scanModal('modal:fee');
+  forceNav('students');
+  if (openAct('open-chat')) scanModal('modal:chat');
+  forceNav('profile');
+  if (openAct('open-change-pwd')) scanModal('modal:password');
+
+  /* O'quvchi ekranlari va modallari */
+  logout();
+  await loginAs('jasur', '123');
+  win.localStorage.setItem('app_lang', JSON.stringify('en'));
+  ['home', 'profile'].forEach((s) => { forceNav(s); scanI18n('student:' + s); });
+  forceNav('home');
+  if (openAct('speak-cta')) scanModal('student:speak');
+  forceNav('home');
+  if (openAct('open-pay-receipt')) scanModal('student:receipt');
+  forceNav('home');
+  if (openAct('open-chat')) scanModal('student:chat');
+
+  check(i18nMissed.length === 0,
+    'i18n EN: barcha ekran va modallarda tarjima qilingan' +
+    (i18nMissed.length ? ' — qoldi: ' + i18nMissed.slice(0, 25).join(' | ') : ''));
   win.localStorage.setItem('app_lang', JSON.stringify('uz'));
 
   console.log(failed ? '\n' + failed + ' ta test YIQILDI' : '\nBarcha testlar o\'tdi ✓');
