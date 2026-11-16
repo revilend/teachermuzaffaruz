@@ -355,6 +355,10 @@ function fmtAvg(v) { return v == null ? '—' : v.toFixed(1); }
 
 /* ==================== Cloudflare R2: fayl yuklash ==================== */
 const R2_UPLOAD_URL = 'https://teachermuzaffar-upload.amirovmuzaffar070.workers.dev';
+const R2_PUBLIC_BASE = 'https://pub-836df3817ab64cee9075b55d51fe6061.r2.dev/';
+function isR2Url(url) {
+  return String(url || '').indexOf(R2_PUBLIC_BASE) === 0;
+}
 /* Har qanday fayl (rasm, video, audio, Word/PDF/Excel, chek) R2'ga yuboriladi.
    FormData Content-Type'ni o'zi qo'yadi — qo'lda header yozilmaydi. */
 async function uploadFileToR2(file, folderPath) {
@@ -379,6 +383,26 @@ async function uploadFileToR2(file, folderPath) {
     throw new Error('R2 yuklash xatosi: ' + detail);
   }
   return { url: url, path: path, bucket: 'r2', name: safeName };
+}
+
+/* R2'dagi faylni o'chiradi. Har qanday xato yutiladi — fayl o'chmasa ham
+   asosiy amal (vazifa/topshiriq/chek o'chirish) davom etadi. */
+async function deleteFileFromR2(fileUrl) {
+  const url = String(fileUrl || '');
+  if (!isR2Url(url)) return false;
+  const key = decodeURIComponent(url.slice(R2_PUBLIC_BASE.length).split('?')[0]);
+  if (!key) return false;
+  try {
+    const res = await fetch(R2_UPLOAD_URL + '?path=' + encodeURIComponent(key), { method: 'DELETE' });
+    if (!res || !res.ok) {
+      console.warn('[r2] delete:', key, (res && res.status) || '');
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn('[r2] delete:', key, (e && e.message) || e);
+    return false;
+  }
 }
 
 const CloudSync = (function () {
@@ -1109,6 +1133,15 @@ const CloudSync = (function () {
       const r = await client.from('audio_submissions').delete().eq('student_id', dbId);
       if (r.error) { if (missing(r.error)) hasAudio = false; else throw r.error; }
     }
+    /* to'lov cheklari: R2/Storage fayllari ham tozalanadi */
+    try {
+      const rr = await client.from('payment_receipts').select('id, receipt_url').eq('student_id', dbId);
+      if (!rr.error && Array.isArray(rr.data)) {
+        for (let i = 0; i < rr.data.length; i++) {
+          await deletePaymentReceipt(rr.data[i].id, rr.data[i].receipt_url);
+        }
+      }
+    } catch (e) { console.warn('[cloud] student receipts del:', (e && e.message) || e); }
     const g = await client.from('grades').delete().eq('student_id', dbId);
     if (g.error) throw g.error;
     const a = await client.from('attendance').delete().eq('student_id', dbId);
@@ -1134,7 +1167,8 @@ const CloudSync = (function () {
     const urls = (Array.isArray(mediaUrls) ? mediaUrls : [mediaUrls])
       .map(function (u) { return String(u || ''); }).filter(Boolean);
     for (let u = 0; u < urls.length; u++) {
-      /* Yangi R2 fayllari Supabase Storage'da emas — o'chirishga urinmaymiz */
+      /* R2 fayllari Cloudflare'dan, eski Supabase URL'lari Storage'dan o'chiriladi */
+      if (isR2Url(urls[u])) { await deleteFileFromR2(urls[u]); continue; }
       if (/r2\.dev/i.test(urls[u])) continue;
       const found = mediaPath(urls[u]);
       const rawPath = urls[u].split('?')[0];
@@ -1179,6 +1213,7 @@ const CloudSync = (function () {
     return uploadFileToR2(file, 'hw');
   }
   async function removeHomeworkMedia(url) {
+    if (isR2Url(url)) { await deleteFileFromR2(url); return; }
     const found = mediaPath(url);
     if (!found || !found.path) return;
     /* Avval URL'dagi bucket, keyin ikkinchi nom sinaladi */
@@ -1414,7 +1449,8 @@ const CloudSync = (function () {
       const item = list[i] || {};
       const ref = String(item.path || item.url || '');
       if (!ref) continue;
-      /* R2 fayllari Supabase Storage'da yo'q — faqat eski supabase URL'lar o'chiriladi */
+      /* R2 fayllari Cloudflare'dan, eski supabase URL'lar Storage'dan o'chiriladi */
+      if (isR2Url(ref)) { await deleteFileFromR2(ref); continue; }
       if (/r2\.dev/i.test(ref)) continue;
       const found = mediaPath(ref);
       const filePath = found && found.path ? found.path : ref.split('?')[0];
@@ -2071,6 +2107,8 @@ const CloudSync = (function () {
     uploadReceiptImage: uploadReceiptImage,
     submitPaymentReceipt: submitPaymentReceipt,
     pullStudentReceipts: pullStudentReceipts,
+    deletePaymentReceipt: deletePaymentReceipt,
+    deleteFileFromR2: deleteFileFromR2,
     addStudentPaymentRecord: addStudentPaymentRecord,
     url: url
   };
@@ -2157,6 +2195,33 @@ const CloudSync = (function () {
       console.warn('[cloud] submitPaymentReceipt:', (e && e.message) || e);
       throw e;
     }
+  }
+
+  /* To'lov chekini o'chirish: avval R2/Storage fayli, keyin payment_receipts qatori */
+  async function deletePaymentReceipt(id, receiptUrl) {
+    const raw = String(receiptUrl || '');
+    if (isR2Url(raw)) {
+      await deleteFileFromR2(raw);
+    } else if (raw) {
+      const found = mediaPath(raw);
+      const filePath = found && found.path ? found.path : raw.split('?')[0];
+      if (filePath) {
+        const buckets = found
+          ? [found.bucket].concat(MEDIA_BUCKETS.filter(function (b) { return b !== found.bucket; }))
+          : MEDIA_BUCKETS;
+        for (let i = 0; i < buckets.length; i++) {
+          try {
+            const rm = await client.storage.from(buckets[i]).remove([filePath]);
+            if (!rm.error) break;
+          } catch (e) { console.warn('[cloud] receipt del (' + buckets[i] + '):', (e && e.message) || e); }
+        }
+      }
+    }
+    if (!ready() || id == null) return;
+    const res = await client.from('payment_receipts').delete().eq('id', id);
+    if (res.error) throw res.error;
+    store.set(K.paymentReceipts, (store.get(K.paymentReceipts, []) || [])
+      .filter(function (x) { return String(x.id) !== String(id); }));
   }
 
   async function pullStudentReceipts(studentDbId) {

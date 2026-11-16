@@ -2957,6 +2957,46 @@ await (async () => {
     'R2: server xatosi aniq matn bilan ko‘rsatiladi (ok:false)');
   win.fetch = prevFetch;
 
+  /* R2 o'chirish: public URL'dan key ajratilib DELETE ?path=... yuboriladi */
+  const r2Del = [];
+  win.fetch = function (url, opts) {
+    r2Del.push({ url: String(url), opts: opts });
+    return Promise.resolve({ ok: true, status: 200 });
+  };
+  const r2FileUrl = 'https://pub-836df3817ab64cee9075b55d51fe6061.r2.dev/submissions/1/1/abc_Insho yakuniy.docx';
+  const r2Key = 'submissions/1/1/abc_Insho yakuniy.docx';
+  const delOk = await win.__cloud.deleteFileFromR2(r2FileUrl);
+  check(delOk === true && r2Del.length === 1 &&
+        r2Del[0].url === 'https://teachermuzaffar-upload.amirovmuzaffar070.workers.dev?path=' + encodeURIComponent(r2Key) &&
+        r2Del[0].opts && r2Del[0].opts.method === 'DELETE',
+    'R2: fayl URL’idan key ajratilib DELETE ?path=... yuboriladi');
+  const foreignDel = await win.__cloud.deleteFileFromR2('https://example.com/a.png');
+  check(foreignDel === false && r2Del.length === 1,
+    'R2: begona URL uchun o‘chirish so‘rovi yuborilmaydi');
+  win.fetch = function () { return Promise.reject(new Error('offline')); };
+  const netDel = await win.__cloud.deleteFileFromR2(r2FileUrl);
+  check(netDel === false, 'R2: o‘chirishdagi tarmoq xatosi yutiladi (UI bloklanmaydi)');
+
+  /* Vazifa / topshiriq / chek o'chirilganda R2 fayllari ham tozalanadi */
+  const delCalls = [];
+  win.fetch = function (url, opts) {
+    delCalls.push({ url: String(url), opts: opts });
+    return Promise.resolve({ ok: true, status: 200 });
+  };
+  const r2FileUrl2 = 'https://pub-836df3817ab64cee9075b55d51fe6061.r2.dev/hw/2_b.pdf';
+  await win.__cloud.deleteHomework(null, [r2FileUrl, r2FileUrl2]);
+  check(delCalls.length === 2 && delCalls.every(c => c.opts && c.opts.method === 'DELETE' && /[?&]path=/.test(c.url)),
+    'vazifa: o‘chirilganda biriktirilgan barcha R2 fayllar DELETE bilan tozalanadi');
+  delCalls.length = 0;
+  await win.__cloud.deleteSubmission(999999, [{ url: r2FileUrl, type: 'file', name: 'a.docx', size: 10 }]);
+  check(delCalls.length === 1 && delCalls[0].opts.method === 'DELETE',
+    'topshiriq: o‘chirilganda yuklangan R2 fayl ham o‘chiriladi');
+  delCalls.length = 0;
+  await win.__cloud.deletePaymentReceipt(999999, r2FileUrl);
+  check(delCalls.length === 1 && delCalls[0].opts.method === 'DELETE',
+    'chek: o‘chirilganda R2 chek rasmi ham o‘chiriladi');
+  win.fetch = prevFetch;
+
   win.__cloud.uploadSubmissionFile = function (file, sid, hid) {
     return Promise.resolve({
       url: 'https://stub.supabase.local/storage/v1/object/public/homework-media/submissions/' +
