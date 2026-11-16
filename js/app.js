@@ -7731,12 +7731,16 @@ async function doLogin() {
   const loginEl = $('#login-input');
   const passEl = $('#password-input');
   const err = $('#login-error');
-  const login = (loginEl.value || '').trim().toLowerCase();
-  const pass = passEl.value || '';
+  const loginBtn = $('[data-act="do-login"]');
+  const login = (loginEl && loginEl.value || '').trim().toLowerCase();
+  const pass = (passEl && passEl.value) || '';
 
   const fail = msg => {
     if (err) { err.textContent = msg; err.classList.add('show'); }
   };
+
+  /* Qayta bosishni bloklash (allaqachon tekshiruv ketayotgan bo'lsa) */
+  if (loginBtn && loginBtn.disabled) return;
 
   /* Anti-brute-force: 5 ta ketma-ket xato → 10 daqiqa qulf */
   const locked = loginLockRec();
@@ -7747,17 +7751,13 @@ async function doLogin() {
 
   if (!login || !pass) { fail("Login va parolni kiriting"); return; }
 
-  /* CAPTCHA: Turnstile mavjud bo'lsa token serverda tekshiriladi,
-     skript yuklanmagan bo'lsa eski matematik savol ishlaydi. */
+  /* CAPTCHA tekshiruvi: Turnstile bo'lsa token borligini darhol tekshiramiz,
+     fallback bo'lsa matematik javobni sinxron tekshiramiz. Turnstile server
+     tekshiruvi esa Supabase foydalanuvchi tekshiruvi bilan parallel yuboriladi. */
+  let tsPromise = null;
   if (turnstileInUse('login')) {
     if (!state.turnstileToken) { fail('Tekshiruvni yakunlang'); return; }
-    const tsVerify = await verifyTurnstileToken(state.turnstileToken);
-    if (!tsVerify || !tsVerify.ok) {
-      resetTurnstile('login');
-      const detail = tsVerify && tsVerify.detail ? ' (' + tsVerify.detail + ')' : '';
-      fail("Tekshiruv tasdiqlanmadi — qayta urinib ko'ring" + detail);
-      return;
-    }
+    tsPromise = verifyTurnstileToken(state.turnstileToken);
   } else {
     const capEl = $('#login-captcha');
     const capExpected = String((state.captcha && state.captcha.answer) || '');
@@ -7771,6 +7771,14 @@ async function doLogin() {
   }
   if (err) { err.textContent = ''; err.classList.remove('show'); }
 
+  const btnText = loginBtn ? loginBtn.textContent : '';
+  const setBusy = (busy) => {
+    if (!loginBtn) return;
+    loginBtn.disabled = !!busy;
+    loginBtn.textContent = busy ? 'Tekshirilmoqda...' : btnText;
+  };
+  const restoreBtn = () => { if (loginBtn) { loginBtn.disabled = false; loginBtn.textContent = btnText; } };
+
   const onFail = () => {
     const r = registerLoginFail();
     if (r && r.until) {
@@ -7779,8 +7787,7 @@ async function doLogin() {
     } else {
       fail("Login yoki parol noto'g'ri");
     }
-    passEl.value = '';
-    passEl.focus();
+    if (passEl) { passEl.value = ''; passEl.focus(); }
   };
 
   const onSuccess = (userObj) => {
@@ -7791,72 +7798,115 @@ async function doLogin() {
 
   /* 1. Ustoz kirishi (m_amirov) */
   if (login === TEACHER_LOGIN) {
-    if (CloudSync.ready()) {
-      loginEl.disabled = true;
-      CloudSync.pullAll(login).then(async () => {
-        loginEl.disabled = false;
-        /* bot_settings'da teacher_password bo'lmasa (yoki o'qib bo'lmasa) -
-           standart TEACHER_PASSWORD bilan kirish kafolatlanadi */
-        let teachPw = null;
-        try {
-          if (typeof CloudSync.pullTeacherPassword === 'function') {
-            teachPw = await CloudSync.pullTeacherPassword();
-          }
-        } catch (e) {
-          teachPw = null;
+    setBusy(true);
+    try {
+      /* Turnstile tekshiruvi va ustoz ma'lumotlarini yuklashni parallel bajarish */
+      const teacherPrep = (async () => {
+        if (CloudSync.ready()) {
+          await CloudSync.pullAll(login);
+          let teachPw = null;
+          try {
+            if (typeof CloudSync.pullTeacherPassword === 'function') {
+              teachPw = await CloudSync.pullTeacherPassword();
+            }
+          } catch (e) { teachPw = null; }
+          return { ready: true, teachPw: teachPw || TEACHER_PASSWORD };
         }
-        if (!teachPw) teachPw = TEACHER_PASSWORD;
-        if (!passwordMatches(pass, teachPw)) { onFail(); return; }
-        beginTeacherLogin({ login: TEACHER_LOGIN, role: 'teacher', name: TEACHER_NAME, studentId: null });
-      }).catch(() => { loginEl.disabled = false; onFail(); });
-    } else {
-      if (!passwordMatches(pass, TEACHER_PASSWORD)) { onFail(); return; }
-      beginTeacherLogin({ login: TEACHER_LOGIN, role: 'teacher', name: TEACHER_NAME, studentId: null });
+        return { ready: false, teachPw: TEACHER_PASSWORD };
+      })();
+      const [tsVerify, prep] = await Promise.all([
+        tsPromise || Promise.resolve({ ok: true, skip: true }),
+        teacherPrep
+      ]);
+      if (tsPromise && (!tsVerify || !tsVerify.ok)) {
+        resetTurnstile('login');
+        const detail = tsVerify && tsVerify.detail ? ' (' + tsVerify.detail + ')' : '';
+        restoreBtn();
+        fail("Tekshiruv tasdiqlanmadi — qayta urinib ko'ring" + detail);
+        return;
+      }
+      if (!passwordMatches(pass, (prep && prep.teachPw) || TEACHER_PASSWORD)) { restoreBtn(); onFail(); return; }
+      await beginTeacherLogin({ login: TEACHER_LOGIN, role: 'teacher', name: TEACHER_NAME, studentId: null });
+      /* Muvaffaqiyatda sahifa almashadi; xatolik/2FA holatida tugmani tiklash */
+      restoreBtn();
+    } catch (e) {
+      restoreBtn();
+      if (tsPromise) { try { resetTurnstile('login'); } catch (ex) {} }
+      onFail();
     }
     return;
   }
 
-  /* 2. O'quvchi kirishi: to'g'ridan-to'g'ri Supabase'dan tekshiriladi */
+  /* 2. O'quvchi kirishi */
   if (CloudSync.ready()) {
-    loginEl.disabled = true;
-    (async () => {
-      try {
+    setBusy(true);
+    try {
+      /* Turnstile tekshiruvi va o'quvchi qatorini olishni parallel bajarish */
+      const studentPrep = (async () => {
         const client = window.__cloudClient || (window.supabase && window.supabase.createClient && window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY));
         let studentRow = null;
         if (client) {
           const res = await client.from('students').select('*').ilike('login', login).limit(1);
-          if (res.data && res.data.length) studentRow = res.data[0];
+          if (res && res.data && res.data.length) studentRow = res.data[0];
         }
-        if (!studentRow) { loginEl.disabled = false; onFail(); return; }
-
-        const storedHash = studentRow.password_hash || studentRow.password || '';
-        if (!passwordMatches(pass, storedHash)) { loginEl.disabled = false; onFail(); return; }
-
-        /* Avtomatik migratsiya: agar parol hali ochiq matn bo'lsa xeshga o'tkazish */
-        if (!isSha256Hex(storedHash) && client) {
-          const hashed = hashPasswordSync(pass);
-          await client.from('students').update({ password_hash: hashed, password: hashed }).eq('id', studentRow.id);
-        }
-
-        /* O'quvchi ma'lumotlarini yuklash */
-        await CloudSync.pullAll(login);
-        /* Tekshirilgan xesh faqat xotirada saqlanadi (localStorage'ga yozilmaydi):
-           parolni o'zgartirishda "joriy parol" shu bilan solishtiriladi. */
-        const accKey = String(studentRow.login || login).trim().toLowerCase();
-        if (accounts[accKey]) accounts[accKey].password = storedHash;
-        loginEl.disabled = false;
-        onSuccess({
-          login: studentRow.login,
-          role: 'student',
-          name: studentRow.name,
-          studentId: 's' + studentRow.id
-        });
-      } catch (err) {
-        loginEl.disabled = false;
-        onFail();
+        return { client, studentRow };
+      })();
+      const [tsVerify, prep] = await Promise.all([
+        tsPromise || Promise.resolve({ ok: true, skip: true }),
+        studentPrep
+      ]);
+      if (tsPromise && (!tsVerify || !tsVerify.ok)) {
+        resetTurnstile('login');
+        const detail = tsVerify && tsVerify.detail ? ' (' + tsVerify.detail + ')' : '';
+        restoreBtn();
+        fail("Tekshiruv tasdiqlanmadi — qayta urinib ko'ring" + detail);
+        return;
       }
-    })();
+      const client = prep && prep.client;
+      const studentRow = prep && prep.studentRow;
+      if (!studentRow) { restoreBtn(); onFail(); return; }
+
+      const storedHash = studentRow.password_hash || studentRow.password || '';
+      if (!passwordMatches(pass, storedHash)) { restoreBtn(); onFail(); return; }
+
+      /* Avtomatik migratsiya: agar parol hali ochiq matn bo'lsa xeshga o'tkazish */
+      if (!isSha256Hex(storedHash) && client) {
+        const hashed = hashPasswordSync(pass);
+        await client.from('students').update({ password_hash: hashed, password: hashed }).eq('id', studentRow.id);
+      }
+
+      /* O'quvchi ma'lumotlarini yuklash */
+      await CloudSync.pullAll(login);
+      /* Tekshirilgan xesh faqat xotirada saqlanadi (localStorage'ga yozilmaydi):
+         parolni o'zgartirishda "joriy parol" shu bilan solishtiriladi. */
+      const accKey = String(studentRow.login || login).trim().toLowerCase();
+      if (accounts[accKey]) accounts[accKey].password = storedHash;
+      onSuccess({
+        login: studentRow.login,
+        role: 'student',
+        name: studentRow.name,
+        studentId: 's' + studentRow.id
+      });
+    } catch (e) {
+      restoreBtn();
+      onFail();
+    }
   } else {
+    /* Bulut tayyor bo'lmasa o'quvchi kirishi imkonsiz */
+    if (tsPromise) {
+      setBusy(true);
+      try {
+        const tsVerify = await tsPromise;
+        if (!tsVerify || !tsVerify.ok) {
+          resetTurnstile('login');
+          const detail = tsVerify && tsVerify.detail ? ' (' + tsVerify.detail + ')' : '';
+          restoreBtn();
+          fail("Tekshiruv tasdiqlanmadi — qayta urinib ko'ring" + detail);
+          return;
+        }
+      } catch (e) { restoreBtn(); fail("Tekshiruv tasdiqlanmadi — qayta urinib ko'ring"); return; }
+      restoreBtn();
+    }
     onFail();
   }
 }
