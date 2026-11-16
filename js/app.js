@@ -3862,10 +3862,20 @@ async function verifyTurnstileToken(token) {
     });
     let data = null;
     try { data = await res.json(); } catch (e) { data = null; }
-    return !!(res && res.ok && data && data.ok === true);
+    if (res && res.ok && data && data.ok === true) return { ok: true, data };
+    let detail = '';
+    if (data) {
+      const codes = data['error-codes'];
+      if (Array.isArray(codes) && codes.length) detail = codes.join(', ');
+      else if (codes) detail = String(codes);
+      else if (data.error) detail = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
+      else if (data.message) detail = String(data.message);
+    }
+    if (!detail && res && !res.ok) detail = 'HTTP ' + res.status;
+    return { ok: false, data, detail: String(detail || '').trim() };
   } catch (e) {
     console.warn('[turnstile] verify:', (e && e.message) || e);
-    return false;
+    return { ok: false, data: null, detail: (e && e.message) ? String(e.message) : 'network error' };
   }
 }
 
@@ -7741,10 +7751,11 @@ async function doLogin() {
      skript yuklanmagan bo'lsa eski matematik savol ishlaydi. */
   if (turnstileInUse('login')) {
     if (!state.turnstileToken) { fail('Tekshiruvni yakunlang'); return; }
-    const okToken = await verifyTurnstileToken(state.turnstileToken);
-    if (!okToken) {
+    const tsVerify = await verifyTurnstileToken(state.turnstileToken);
+    if (!tsVerify || !tsVerify.ok) {
       resetTurnstile('login');
-      fail("Tekshiruv tasdiqlanmadi — qayta urinib ko'ring");
+      const detail = tsVerify && tsVerify.detail ? ' (' + tsVerify.detail + ')' : '';
+      fail("Tekshiruv tasdiqlanmadi — qayta urinib ko'ring" + detail);
       return;
     }
   } else {
@@ -8211,10 +8222,11 @@ async function sendResetCode() {
   /* 2-tanlov: Turnstile (bo'lsa) yoki 5 xonali CAPTCHA majburiy */
   if (turnstileInUse('recover')) {
     if (!state.turnstileToken) { resetError('Tekshiruvni yakunlang'); return; }
-    const okToken = await verifyTurnstileToken(state.turnstileToken);
-    if (!okToken) {
+    const tsVerify = await verifyTurnstileToken(state.turnstileToken);
+    if (!tsVerify || !tsVerify.ok) {
       resetTurnstile('recover');
-      resetError("Tekshiruv tasdiqlanmadi — qayta urinib ko'ring");
+      const detail = tsVerify && tsVerify.detail ? ' (' + tsVerify.detail + ')' : '';
+      resetError("Tekshiruv tasdiqlanmadi — qayta urinib ko'ring" + detail);
       return;
     }
   } else {
