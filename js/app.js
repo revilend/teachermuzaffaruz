@@ -3317,6 +3317,43 @@ const I18N_EN = {
   "English Teacher — Muzaffar Amirov": "English Teacher — Muzaffar Amirov",
   "8–10 A'lo": "8–10 Excellent",
 });
+(function (extra) {
+  Object.keys(extra).forEach(function (k) {
+    if (!Object.prototype.hasOwnProperty.call(I18N_EN, k)) I18N_EN[k] = extra[k];
+  });
+})({
+  "Keldi": "Present",
+  "Kelmadi": "Absent",
+  "Sababli": "Excused",
+  "Oylik jadval": "Monthly schedule",
+  "Belgilash": "Set",
+  "belgilanmagan": "not set",
+  "Summa (so'mda)": "Amount (in sum)",
+  "Telegram topshiriqlari (Inbox)": "Telegram submissions (Inbox)",
+  "Uyga vazifa qo'shish": "Assign homework",
+  "Uyga vazifani tahrirlash": "Edit homework",
+  "Hozircha yuklangan topshiriqlar yo'q": "No submitted homework yet",
+  "Hozircha Telegram orqali topshirik yo'q": "No Telegram submissions yet",
+  "Bu sanada slot yo'q — 'Slot' tugmasini bosing": "No slots for this date — tap 'Slot'",
+  "Guruhlar oylik to'lov jadvali": "Groups monthly payment schedule",
+  "oylik to'lovlar": "monthly payments",
+  "oylik to'lov": "monthly fee",
+  "Hozircha uyga vazifa yo'q": "No homework yet",
+  "Hozircha fayl biriktirilmagan": "No file attached yet",
+  "Hozircha to'lov yo'q": "No payments yet",
+  "Hozircha to'lovlar mavjud emas": "No payments yet",
+  "Hozircha slot biriktirilmagan": "No slot assigned yet",
+  "Hozircha topshirilmagan": "Not submitted yet",
+  "Hozircha baho yo'q": "No grades yet",
+  "Repetitorlik o'quvchisi yo'q": "No tutoring students",
+  "Repetitorlik guruhi yo'q": "No tutoring groups",
+  "Qarzdor o'quvchi yo'q — hamma to'langan ✓": "No debtors — everyone has paid ✓",
+  "Bu guruhda o'quvchi yo'q": "No students in this group",
+  "Maktab guruhi yo'q": "No school groups",
+  "Hozircha guruh yo'q": "No groups yet",
+  "Slotga o'quvchi tayinlanadi. Ovozli/video topshiriklar botga tushadi (foydalanuvchi ruxsati bilan) — \"Baholash\" orqali 1–10 ball qo'yiladi, ball baholar jurnaliga tushadi va Speaking qarzi 1 ga kamayadi.": "A student is assigned to the slot. Voice/video submissions arrive in the bot (with the user's consent) — use \"Grade\" to give a score from 1 to 10; the score goes to the gradebook and the Speaking debt is reduced by 1.",
+  "O'quvchilar repetitorlik to'lovini o'tkazishi uchun karta raqamingiz va ism-familiyangizni kiriting:": "Enter your card number and full name so students can transfer the tutoring fee:"
+});
 function getLang() { return store.get('app_lang', 'uz'); }
 function t(s) {
   if (getLang() !== 'en') return s;
@@ -3338,6 +3375,9 @@ function tGrpCnt(n) {
   return getLang() === 'en' ? n + ' student' + (n === 1 ? '' : 's') : n + " o'quvchi";
 }
 /* --- DOM bo'ylab tarjima: qattiq yozilgan matnlar ham tanlangan tilga o'tadi --- */
+/* UZ matn ichida tasodifan uchraydigan umumiy ingliz so'zlari teskari
+   tarjimadan chiqariladi (masalan "Present Perfect shakli" buzilmasligi uchun). */
+const I18N_REVERSE_SKIP = { 'Present': 1, 'Absent': 1, 'Excused': 1, 'Set': 1, 'Paid': 1 };
 const I18N_UZ = (function () {
   /* Faqat bir xil ingliz matnga ega bo'lgan yagona o'zbek kaliti olinadi —
      aks holda "Speaking" kabi so'zlar noto'g'ri almashib ketadi. */
@@ -3350,7 +3390,7 @@ const I18N_UZ = (function () {
   const m = {};
   Object.keys(I18N_EN).forEach(function (k) {
     const en = I18N_EN[k];
-    if (en && count[en] === 1) m[en] = k;
+    if (en && count[en] === 1 && !I18N_REVERSE_SKIP[en]) m[en] = k;
   });
   return m;
 })();
@@ -3369,6 +3409,14 @@ function i18nPattern(s, lang) {
   if ((m = /^(\d+) ta fayl yuborildi$/.exec(s))) return m[1] + ' files sent';
   if ((m = /^(\d+)\/(\d+) fayl yuklandi · (\d+)%$/.exec(s))) return m[1] + '/' + m[2] + ' files uploaded · ' + m[3] + '%';
   if ((m = /^(\d+) ta$/.exec(s))) return m[1];
+  if ((m = /^✓ Keldi: (\d+)$/.exec(s))) return '✓ Present: ' + m[1];
+  if ((m = /^✕ Kelmadi: (\d+)$/.exec(s))) return '✕ Absent: ' + m[1];
+  if ((m = /^\? Sababli: (\d+)$/.exec(s))) return '? Excused: ' + m[1];
+  if ((m = /^Jami: (.+)$/.exec(s))) return 'Total: ' + m[1];
+  if ((m = /^(?:To'lov|Payments) qarzi: (.+) so'm$/.exec(s))) return 'Payment debt: ' + m[1] + " so'm";
+  if ((m = /^(.+) so'm qarz$/.exec(s))) return m[1] + " so'm debt";
+  if ((m = /^1-on-1 slotlar • (\d+) ta slot$/.exec(s))) return '1-on-1 slots • ' + m[1] + (m[1] === '1' ? ' slot' : ' slots');
+  if ((m = /^(\d+) ta slot$/.exec(s))) return m[1] + (m[1] === '1' ? ' slot' : ' slots');
   return null;
 }
 let i18nSegCache = { map: null, keys: [] };
@@ -4554,12 +4602,15 @@ function applyMonthlyFees() {
 
 const MONTHS_UZ = ['yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun',
   'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr'];
+const MONTHS_EN = ['January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'];
 
 function monthLabel(period) {
   const m = /^(\d{4})-(\d{2})$/.exec(String(period || ''));
   if (!m) return String(period || '');
   const idx = Number(m[2]) - 1;
-  return (MONTHS_UZ[idx] || m[2]) + ' ' + m[1];
+  const names = getLang() === 'en' ? MONTHS_EN : MONTHS_UZ;
+  return (names[idx] || m[2]) + ' ' + m[1];
 }
 
 function paymentPeriod(p) {

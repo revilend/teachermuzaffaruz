@@ -3105,6 +3105,34 @@ await (async () => {
   check(text().includes('Xush kelibsiz') && text().includes('Tez amallar'),
     'i18n: sahifa yuklanmasdan o‘zbekcha matnlar qaytadi');
 
+  /* EN rejimda qolib ketgan matnlar tarjima qilinganini tekshirish */
+  win.localStorage.setItem('app_lang', JSON.stringify('en'));
+  forceNav('attendance');
+  const attEn = text();
+  check(/Present/.test(attEn) && /Absent/.test(attEn) && /Excused/.test(attEn),
+    'i18n EN: davomat tugmalari (Present/Absent/Excused)');
+  check(/✓ Present: /.test(attEn) && /✕ Absent: /.test(attEn),
+    'i18n EN: davomat yakuniy hisobi (Present/Absent)');
+  forceNav('grades');
+  check(/Total: /.test(text()), 'i18n EN: jurnal "Jami:" → "Total:"');
+  forceNav('payments');
+  const payEn = text();
+  check(!/qarz/i.test(payEn) && /Current debt|Payment debt|so'm debt/.test(payEn),
+    'i18n EN: "To\'lov qarzi" / "so\'m qarz" → "Payment debt" / "so\'m debt"');
+
+  check(/Groups monthly payment schedule/i.test(payEn), 'i18n EN: guruhlar oylik to\'lov jadvali');
+  check(/Monthly schedule/.test(payEn), 'i18n EN: "Oylik jadval" → "Monthly schedule"');
+  check(/Set/.test(payEn), 'i18n EN: "Belgilash" → "Set"');
+  forceNav('speaking');
+  const spEn = text();
+  check(/Telegram submissions \(Inbox\)/.test(spEn), 'i18n EN: Telegram topshiriqlari (Inbox)');
+  check(/No Telegram submissions yet/.test(spEn), 'i18n EN: Telegram bo\'sh holati');
+  forceNav('submissions');
+  check(/No submitted homework yet/.test(text()), 'i18n EN: yuklangan topshiriqlar bo\'sh holati');
+  check(/November 2026/.test(payEn), 'i18n EN: oy nomi inglizcha (November 2026)');
+  forceNav('home');
+  win.localStorage.setItem('app_lang', JSON.stringify('uz'));
+
   console.log(failed ? '\n' + failed + ' ta test YIQILDI' : '\nBarcha testlar o\'tdi ✓');
   process.exit(failed ? 1 : 0);
 })();
