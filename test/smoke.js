@@ -2815,6 +2815,15 @@ await (async () => {
   const subInput = q('.hw-sub-input');
   check(subInput.getAttribute('accept') === '*/*' && subInput.hasAttribute('multiple'),
     'topshiriq: fayl maydoni accept="*/*" + multiple (rasm, Word, PDF, Excel, video, audio)');
+  /* 50 MB dan katta fayl — yuborishdan oldin to'xtaydi */
+  const bigFile = new win.File([new Uint8Array([1])], 'katta video.mkv', { type: '' });
+  Object.defineProperty(bigFile, 'size', { configurable: true, value: 51 * 1024 * 1024 });
+  Object.defineProperty(subInput, 'files', { configurable: true, value: [bigFile] });
+  clickAct('hw-submit');
+  await new Promise(r => setTimeout(r, 150));
+  check(/Fayl hajmi 50 MB dan oshmasligi kerak/.test((q('.hw-sub-error') || {}).textContent || ''),
+    'topshiriq: 50 MB dan katta fayl aniq xabar bilan yuborilmaydi');
+
   /* Real yuklash funksiyasi: xavfsiz ASCII nom, content-type, x-upsert va xato tafsiloti */
   const realUpload = win.__cloud.uploadSubmissionFile;
   const trickyFile = new win.File([new Uint8Array([1])], 'Insho yakuniy (1).docx', { type: '' });
@@ -2841,6 +2850,21 @@ await (async () => {
       path: 'submissions/' + sid + '/' + hid + '/' + file.name, bucket: 'homework-media'
     });
   };
+  /* Storage xatosi: qaysi bosqich va qanday status ekani ekranga chiqadi */
+  const okUpload = win.__cloud.uploadSubmissionFile;
+  win.__cloud.uploadSubmissionFile = function () {
+    return Promise.reject(new Error('Storage xatosi — homework-media: 403 · permission denied'));
+  };
+  Object.defineProperty(subInput, 'files', {
+    configurable: true,
+    value: [new win.File([new Uint8Array([1])], 'fail.pdf', { type: 'application/pdf' })]
+  });
+  clickAct('hw-submit');
+  check(await until(() => { const el = q('.hw-sub-error'); return !!el && /403/.test(el.textContent); }, 3000) &&
+        /Storage/.test(q('.hw-sub-error').textContent),
+    'topshiriq: xato bosqichi (Storage) va HTTP status ekranda ko‘rsatiladi');
+  win.__cloud.uploadSubmissionFile = okUpload;
+
   const subPdf = new win.File([new Uint8Array([1])], 'insho.pdf', { type: 'application/pdf' });
   Object.defineProperty(subInput, 'files', { configurable: true, value: [subPdf] });
   setVal('.hw-sub-note', 'Mana uyga vazifam');
@@ -2856,6 +2880,10 @@ await (async () => {
   const restoreName0 = String((restoreRow0 && restoreRow0.name) || '');
   check(subRow.student_name === restoreName0 && !!subRow.group_name && subRow.status === 'yangi',
     'topshiriq: INSERT obyekti jadval ustunlariga mos (student_name, group_name, status, files, note)');
+  const hwSubCols = ['id', 'student_id', 'homework_id', 'student_name', 'group_name', 'files',
+    'note', 'status', 'teacher_comment', 'commented_at', 'created_at', 'updated_at'];
+  check(Object.keys(subRow).every(k => hwSubCols.indexOf(k) >= 0),
+    'topshiriq: INSERT faqat jadval ustunlarini yuboradi (begona kalit yo‘q)');
   check(!!q('.hw-my-files .hw-doc-link'), 'topshiriq: PDF uchun “Yuklab olish” havolasi');
 
   /* (c) ustoz paneli: “Bajarilgan topshiriqlar” + komentariya */

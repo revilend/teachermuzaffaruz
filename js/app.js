@@ -1262,6 +1262,14 @@ const CloudSync = (function () {
       group_name: String(sub.groupName || ''),
       status: String(sub.status || 'yangi')
     };
+    /* Jadval ustunlari — boshqa kalit yuborilmaydi (PGRST204 oldini oladi) */
+    const HW_SUB_COLUMNS = ['student_id', 'homework_id', 'student_name',
+      'group_name', 'files', 'note', 'status', 'updated_at'];
+    const onlyColumns = function (src) {
+      const row = {};
+      HW_SUB_COLUMNS.forEach(function (k) { if (src[k] !== undefined) row[k] = src[k]; });
+      return row;
+    };
     const found = await client.from('homework_submissions').select('*')
       .eq('student_id', sub.studentDbId).eq('homework_id', sub.homeworkDbId).limit(1);
     if (found.error) {
@@ -1269,7 +1277,7 @@ const CloudSync = (function () {
     }
     const existing = found.data && found.data[0];
     /* 16-bo'lim SQL hali qo'llanmagan bo'lsa, qo'shimcha ustunlarsiz qayta urinamiz */
-    const attempts = [Object.assign({}, base, extras), base];
+    const attempts = [onlyColumns(Object.assign({}, base, extras)), onlyColumns(base)];
     let lastErr = null;
     for (let i = 0; i < attempts.length; i++) {
       const row = attempts[i];
@@ -1303,7 +1311,7 @@ const CloudSync = (function () {
     const safeName = String((file && file.name) || 'file').replace(/[^a-zA-Z0-9._-]/g, '_') || 'file';
     const rawPath = 'submissions/' + studentDbId + '/' + homeworkDbId + '/' + Date.now() + '_' + safeName;
     const path = rawPath.split('/').map(encodeURIComponent).join('/');
-    const contentType = (file && file.type) ? String(file.type) : 'application/octet-stream';
+    const contentType = (file && file.type) || 'application/octet-stream';
     const errors = [];
     for (let i = 0; i < MEDIA_BUCKETS.length; i++) {
       const bucket = MEDIA_BUCKETS[i];
@@ -3548,7 +3556,7 @@ async function submitHomeworkFiles(btn) {
   const note = String((noteEl && noteEl.value) || '').trim();
   if (!files.length && !note) return fail('Fayl tanlang yoki izoh yozing');
   const big = files.filter(function (f) { return f.size > HW_MAX_BYTES; })[0];
-  if (big) return fail('Fayl hajmi 50MB dan oshmasligi kerak: ' + big.name);
+  if (big) return fail('Fayl hajmi 50 MB dan oshmasligi kerak: ' + (big.name || 'fayl'));
   const label = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.textContent = 'Yuklanmoqda...'; }
   try {
@@ -3574,9 +3582,15 @@ async function submitHomeworkFiles(btn) {
     });
     render();
     toast(uploaded.length ? uploaded.length + ' ta fayl yuborildi' : 'Izoh yuborildi');
-  } catch (e) {
+  } catch (err) {
     if (btn) { btn.disabled = false; btn.innerHTML = label; }
-    fail('Yuklashda xatolik: ' + ((e && e.message) || 'xatolik'));
+    const raw = String((err && err.message) || err || 'xatolik');
+    const code = (err && (err.statusCode || err.status)) || '';
+    const stage = /^Storage/i.test(raw) ? 'Fayl yuklashda (Storage)'
+      : /^Baza/i.test(raw) ? 'Bazaga yozishda (homework_submissions)'
+      : 'Yuklashda';
+    if (typeof console !== 'undefined' && console.error) console.error('[hw-submit]', stage, err);
+    fail(stage + ' xatolik' + (code ? ' · HTTP ' + code : '') + ': ' + raw);
   }
 }
 
