@@ -3358,7 +3358,45 @@ const I18N_EN = {
   "Maktab guruhi yo'q": "No school groups",
   "Hozircha guruh yo'q": "No groups yet",
   "Slotga o'quvchi tayinlanadi. Ovozli/video topshiriklar botga tushadi (foydalanuvchi ruxsati bilan) — \"Baholash\" orqali 1–10 ball qo'yiladi, ball baholar jurnaliga tushadi va Speaking qarzi 1 ga kamayadi.": "A student is assigned to the slot. Voice/video submissions arrive in the bot (with the user's consent) — use \"Grade\" to give a score from 1 to 10; the score goes to the gradebook and the Speaking debt is reduced by 1.",
-  "O'quvchilar repetitorlik to'lovini o'tkazishi uchun karta raqamingiz va ism-familiyangizni kiriting:": "Enter your card number and full name so students can transfer the tutoring fee:"
+  "O'quvchilar repetitorlik to'lovini o'tkazishi uchun karta raqamingiz va ism-familiyangizni kiriting:": "Enter your card number and full name so students can transfer the tutoring fee:",
+  "Diqqat:": "Note:",
+  "Fayllar biriktirish — bir nechta fayl tanlash mumkin (rasm, video, audio, pdf, doc):": "Attach files — you can choose several (image, video, audio, pdf, doc):",
+  "— Tanlanmagan —": "— Not selected —",
+  "Hozircha oylar belgilanmagan": "No months set yet",
+  "Sizda {sum} so'm to'lov qarzdorligi mavjud!": "You have {sum} so'm in payment debt!",
+  "Qarzdorlik mavjud emas": "No debt",
+  "qabul qilindi": "received",
+  "So'nggi to'lov: {date} da {sum} so'm ({month} uchun qabul qilindi)": "Last payment: {sum} so'm on {date} (accepted for {month})",
+  "Chekingiz rad etildi:": "Your receipt was rejected:",
+  "Noto'g'ri chek": "Invalid receipt",
+  "Iltimos, qaytadan to'g'ri chekni yuklang:": "Please upload a valid receipt again:",
+  "Karta orqali to'lash": "Pay by card",
+  "Ochish": "Open",
+  "Baho:": "Score:",
+  "Kutilmoqda": "Pending",
+  "Topshiriq bekor qilindi": "Submission cancelled",
+  "Muzaffar Amirov ko'rib chiqmoqda": "Muzaffar Amirov is reviewing",
+  "Ovozli xabar": "Voice message",
+  "Video": "Video",
+  "Hozircha xabar yo'q": "No messages yet",
+  "O'qituvchi {n} ta vazifangizga komentariya yozdi": "The teacher commented on {n} of your assignments",
+  "Vazifa ichida o'qib, fayllaringizni ko'rishingiz mumkin.": "Open the assignment to read it and view your files.",
+  "Ko'rdim": "Got it",
+  "Darsdagi javob": "Answer in class",
+  "Karta orqali to'lov": "Payment by card",
+  "Karta egasi": "Cardholder",
+  "Nusxalash": "Copy",
+  "Oy:": "Month:",
+  "To'lov chekini yuklash (Rasm):": "Upload payment receipt (image):",
+  "Chekni yuborish": "Send receipt",
+  "Chek rasmi": "Receipt image",
+  "Fayl tanlash": "Choose file",
+  "Fayl tanlanmagan": "No file chosen",
+  "Tushunarli": "Got it",
+  "Ovozli topshirish uchun Telegram botga kiring va u yerga ovozli xabar (voice) yoki krujok (video note) yuboring.": "To submit your speaking task, open the Telegram bot and send a voice message or a round video (video note) there.",
+  "Davomat: {p}% qatnashgan ({n} ta qoldirilgan)": "Attendance: {p}% attended ({n} missed)",
+  "{p} keldi · {a} kelmadi · {e} sababli": "{p} present · {a} absent · {e} excused",
+  "{n} ta baholangan dars": "{n} graded lessons",
 });
 function getLang() { return store.get('app_lang', 'uz'); }
 function t(s) {
@@ -4752,17 +4790,17 @@ function studentPortal() {
   })[0] : null;
 
   /* Faqatgina so'nggi to'lov qatori */
-  let lastPayHTML = '<div class="pay-last-line muted small" style="margin-top:8px">Hozircha to\'lovlar mavjud emas</div>';
+  let lastPayHTML = `<div class="pay-last-line muted small" style="margin-top:8px">${t("Hozircha to'lovlar mavjud emas")}</div>`;
   if (st.lastPaymentInfo) {
     lastPayHTML = `<div class="pay-last-line" style="margin-top:8px;font-size:13px;color:var(--text,#1e293b)">
-      ${ico('cal', 14)} <b>So'nggi to'lov:</b> ${esc(st.lastPaymentInfo)} qabul qilindi
+      ${ico('cal', 14)} <b>${t("So'nggi to'lov:")}</b> ${esc(st.lastPaymentInfo)} ${t('qabul qilindi')}
     </div>`;
   } else if (payRows.length > 0) {
     const lp = payRows[0];
     const lpDate = lp.createdAt ? fmtDMY(lp.createdAt.slice(0, 10)) : fmtDMY(todayKey());
     const lpMonth = lp.note ? lp.note.replace(" uchun to'lov", "") : monthLabel(paymentPeriod(lp));
     lastPayHTML = `<div class="pay-last-line" style="margin-top:8px;font-size:13px;color:var(--text,#1e293b)">
-      ${ico('cal', 14)} <b>So'nggi to'lov:</b> ${lpDate} da ${fmtSom(lp.amount)} so'm (${esc(lpMonth)} uchun qabul qilindi)
+      ${ico('cal', 14)} ${t("So'nggi to'lov: {date} da {sum} so'm ({month} uchun qabul qilindi)").replace('{date}', lpDate).replace('{sum}', fmtSom(lp.amount)).replace('{month}', esc(lpMonth))}
     </div>`;
   }
 
@@ -4770,21 +4808,21 @@ function studentPortal() {
   <section class="card pay-banner ${hasDebt ? 'due' : 'ok'}">
     <div class="pay-banner-main">
       ${hasDebt
-        ? `${ico('alert', 14)} <b>Diqqat:</b> Sizda <b>${fmtSom(currentDebt)} so'm</b> to'lov qarzdorligi mavjud!`
-        : `<b>To'langan</b> <span class="muted">(Qarzdorlik mavjud emas)</span>`}
+        ? `${ico('alert', 14)} <b>${t('Diqqat:')}</b> ${t("Sizda {sum} so'm to'lov qarzdorligi mavjud!").replace('{sum}', fmtSom(currentDebt))}`
+        : `<b>${t("To'langan")}</b> <span class="muted">(${t('Qarzdorlik mavjud emas')})</span>`}
     </div>
     ${pendingReceipt ? `
     <div class="pay-pending-alert" style="margin:8px 0;padding:8px 12px;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;color:#92400e;font-size:13px">
-      <b>To'lov cheki ko'rib chiqilmoqda!</b> Ustoz tasdiqlashi bilan qarzingiz o'chiriladi.
+      <b>${t("To'lov cheki ko'rib chiqilmoqda!")}</b> ${t("Ustoz tasdiqlashi bilan qarzingiz o'chiriladi.")}
     </div>` : ''}
     ${rejectedReceipt ? `
     <div class="pay-rejected-alert" style="margin:8px 0;padding:8px 12px;background:#fee2e2;border:1px solid #ef4444;border-radius:8px;color:#991b1b;font-size:13px">
-      <b>Chekingiz rad etildi:</b> ${esc(rejectedReceipt.note || "Noto'g'ri chek")}. Iltimos, qaytadan to'g'ri chekni yuklang:
+      <b>${t('Chekingiz rad etildi:')}</b> ${esc(rejectedReceipt.note || t("Noto'g'ri chek"))}. ${t("Iltimos, qaytadan to'g'ri chekni yuklang:")}
     </div>` : ''}
     ${hasDebt && !pendingReceipt ? `
     <div style="margin:10px 0 6px 0">
       <button type="button" class="btn btn-primary btn-block" data-act="open-pay-receipt" data-amount="${currentDebt}" data-period="${esc(per)}">
-        ${ico('creditCard', 16)} Karta orqali to'lash
+        ${ico('creditCard', 16)} ${t("Karta orqali to'lash")}
       </button>
     </div>` : ''}
     ${lastPayHTML}
@@ -4798,13 +4836,13 @@ function studentPortal() {
   });
   const cnt = { present: 0, absent: 0, excused: 0 };
   ownAtt.forEach(a => { cnt[a.status] = (cnt[a.status] || 0) + 1; });
-  const statusLabel = { present: 'Keldi', absent: 'Kelmadi', excused: 'Sababli' };
+  const statusLabel = { present: t('Keldi'), absent: t('Kelmadi'), excused: t('Sababli') };
   const attLine = a => `
     <div class="att-line">
       <span class="gr-date">${fmtDM(a.date)}</span>
       <span class="att-tag on-${a.status}">${statusLabel[a.status]}</span>
     </div>`;
-  const attRows = ownAtt.length ? ownAtt.map(attLine).join('') : `<div class="empty"><span class="empty-ico">${ICON.cal}</span>Davomat yozuvi yo'q</div>`;
+  const attRows = ownAtt.length ? ownAtt.map(attLine).join('') : `<div class="empty"><span class="empty-ico">${ICON.cal}</span>${t("Davomat yozuvi yo'q")}</div>`;
   const attLastRows = ownAtt.length ? ownAtt.slice(0, 3).map(attLine).join('') : attRows;
   const attPct = ownAtt.length ? Math.round((cnt.present * 100) / ownAtt.length) : 0;
   const attMissed = (cnt.absent || 0) + (cnt.excused || 0);
@@ -4821,21 +4859,21 @@ function studentPortal() {
         <strong>${esc(x.start)} – ${esc(x.end)}</strong>
         <span class="gr-note">1-on-1 speaking</span>
       </span>
-      <span class="slot-badge ${x.score == null ? 'wait' : 'done'}">${x.score == null ? 'Kutilmoqda' : 'Baho: ' + x.score}</span>
-    </div>`).join('') : `<div class="empty"><span class="empty-ico">${ICON.mic}</span>Hozircha slot biriktirilmagan</div>`;
+      <span class="slot-badge ${x.score == null ? 'wait' : 'done'}">${x.score == null ? t('Kutilmoqda') : t('Baho:') + ' ' + x.score}</span>
+    </div>`).join('') : `<div class="empty"><span class="empty-ico">${ICON.mic}</span>${t('Hozircha slot biriktirilmagan')}</div>`;
 
   const myTg = getTgSubs().filter(x => x.sid === st.id).slice().reverse();
-  const mySubs = myTg.map(t => `
+  const mySubs = myTg.map(sub => `
     <div class="audio-item">
       <div class="audio-item__meta">
-        ${t.mediaType === 'voice' ? ico('mic', 14) + ' Ovozli xabar' : ico('video', 14) + ' Video'} ·
-        ${t.status === 'baholandi' || t.status === 'graded'
-          ? `${ico('checkCircle', 14)} Baho: ${t.score}/10`
-          : t.status === 'rad_etildi'
-            ? `${ico('alert', 14)} Topshiriq bekor qilindi`
-            : `${ico('clock', 14)} Muzaffar Amirov ko'rib chiqmoqda`}
+        ${sub.mediaType === 'voice' ? ico('mic', 14) + ' ' + t('Ovozli xabar') : ico('video', 14) + ' ' + t('Video')} ·
+        ${sub.status === 'baholandi' || sub.status === 'graded'
+          ? `${ico('checkCircle', 14)} ${t('Baho:')} ${sub.score}/10`
+          : sub.status === 'rad_etildi'
+            ? `${ico('alert', 14)} ${t('Topshiriq bekor qilindi')}`
+            : `${ico('clock', 14)} ${t("Muzaffar Amirov ko'rib chiqmoqda")}`}
       </div>
-    </div>`).join('') || `<div class="empty"><span class="empty-ico">${ICON.mic}</span>Hozircha topshirilmagan</div>`;
+    </div>`).join('') || `<div class="empty"><span class="empty-ico">${ICON.mic}</span>${t('Hozircha topshirilmagan')}</div>`;
 
   /* --- Uyga vazifalar --- */
   const myHw = getHomework().filter(h => h.groupId && h.groupId === st.groupId);
@@ -4848,10 +4886,10 @@ function studentPortal() {
   const hwCommentBanner = freshComments ? `<div class="card hw-comment-notice">
       <span class="hw-comment-notice-ico">${ico('message', 18)}</span>
       <div class="hw-comment-notice-body">
-        <b>O'qituvchi ${freshComments} ta vazifangizga komentariya yozdi</b>
-        <p class="muted small">Vazifa ichida o'qib, fayllaringizni ko'rishingiz mumkin.</p>
+        <b>${t("O'qituvchi {n} ta vazifangizga komentariya yozdi").replace('{n}', freshComments)}</b>
+        <p class="muted small">${t("Vazifa ichida o'qib, fayllaringizni ko'rishingiz mumkin.")}</p>
       </div>
-      <button type="button" class="btn btn-xs ghost" data-act="hw-comments-seen">Ko'rdim</button>
+      <button type="button" class="btn btn-xs ghost" data-act="hw-comments-seen">${t("Ko'rdim")}</button>
     </div>` : '';
 
   /* --- Baholar --- */
@@ -4864,22 +4902,22 @@ function studentPortal() {
       <span class="gr-date">${fmtDM(k)}</span>
       <span class="gr-score ${gradeClassOf(r.score)}">${r.score}</span>
       <span class="gr-main">
-        <div>${esc(r.category || 'Darsdagi javob')}</div>
+        <div>${esc(r.category || t('Darsdagi javob'))}</div>
         ${r.note ? `<div class="gr-note">${esc(r.note)}</div>` : ''}
       </span>
     </div>`;
-  }).join('') : `<div class="empty"><span class="empty-ico">${ICON.grades}</span>Hozircha baho yo'q</div>`;
+  }).join('') : `<div class="empty"><span class="empty-ico">${ICON.grades}</span>${t("Hozircha baho yo'q")}</div>`;
 
   /* ---- 4 ta asosiy bo'lim: ichki oynalar ---- */
   const attendanceHTML = `
-  <div class="section-title">${ico('cal', 13)} Mening davomatim</div>
+  <div class="section-title">${ico('cal', 13)} ${t('Mening davomatim')}</div>
   <div class="card att-card">
     <div class="row between att-head">
       <div class="col">
-        <div class="strong-label">${ico('cal', 14)} Davomat: ${attPct}% qatnashgan (${attMissed} ta qoldirilgan)</div>
-        <div class="muted small">${cnt.present} keldi · ${cnt.absent} kelmadi · ${cnt.excused} sababli</div>
+        <div class="strong-label">${ico('cal', 14)} ${t('Davomat: {p}% qatnashgan ({n} ta qoldirilgan)').replace('{p}', attPct).replace('{n}', attMissed)}</div>
+        <div class="muted small">${t('{p} keldi · {a} kelmadi · {e} sababli').replace('{p}', cnt.present).replace('{a}', cnt.absent).replace('{e}', cnt.excused)}</div>
       </div>
-      <button type="button" class="btn btn-xs ghost att-toggle" data-act="att-toggle" aria-expanded="${!!state.attOpen}">${state.attOpen ? 'Yopish' : 'Ochish'}</button>
+      <button type="button" class="btn btn-xs ghost att-toggle" data-act="att-toggle" aria-expanded="${!!state.attOpen}">${state.attOpen ? t('Yopish') : t('Ochish')}</button>
     </div>
     ${state.attOpen ? `<div class="att-scroll">${attRows}</div>
     <button type="button" class="btn btn-xs ghost btn-block" data-act="att-toggle">${t('Yopish')}</button>`
@@ -4895,7 +4933,7 @@ function studentPortal() {
   <div class="card avg-card">
     <div class="col">
       <div class="strong-label">${t("O'rtacha baho")}</div>
-      <div class="muted small">${nums.length} ta baholangan dars</div>
+      <div class="muted small">${t('{n} ta baholangan dars').replace('{n}', nums.length)}</div>
     </div>
     <div class="avg-badge ${avg == null ? 'g-empty' : gradeClassOf(avg)}">
       <span class="avg-num">${fmtAvg(avg)}</span>
@@ -8468,7 +8506,7 @@ function messagesFor(sid) {
 }
 function chatListHTML(sid, viewer) {
   const msgs = messagesFor(sid);
-  if (!msgs.length) return `<div class="empty"><span class="empty-ico">${ICON.message}</span>Hozircha xabar yo'q</div>`;
+  if (!msgs.length) return `<div class="empty"><span class="empty-ico">${ICON.message}</span>${t("Hozircha xabar yo'q")}</div>`;
   return msgs.map(m => `<div class="chat-msg ${m.sender === viewer ? 'mine' : 'theirs'}" data-message-id="${esc(String(m.id))}">
       <div class="chat-text">${esc(m.text)}</div>
       <div class="chat-time">${fmtHM(m.createdAt)}</div>
@@ -8650,7 +8688,7 @@ function openPayReceiptModal(amount, period) {
 
   openModal(`
     <div class="modal-head">
-      <h3>${ico('creditCard', 18)} Karta orqali to'lov</h3>
+      <h3>${ico('creditCard', 18)} ${t("Karta orqali to'lov")}</h3>
       <button type="button" class="icon-btn" data-act="close-modal" aria-label="Yopish">✕</button>
     </div>
 
@@ -8662,30 +8700,37 @@ function openPayReceiptModal(amount, period) {
       <div style="font-family:monospace;font-size:18px;letter-spacing:2px;font-weight:700;margin-bottom:12px">${esc(fmtCard)}</div>
       <div style="display:flex;justify-content:space-between;align-items:flex-end">
         <div>
-          <div style="font-size:10px;opacity:0.75;text-transform:uppercase">Karta egasi</div>
+          <div style="font-size:10px;opacity:0.75;text-transform:uppercase">${t('Karta egasi')}</div>
           <div style="font-size:13px;font-weight:600;letter-spacing:0.5px">${esc(cardHolder)}</div>
         </div>
-        <button type="button" class="btn btn-xs" data-act="copy-card" data-card="${esc(rawNum)}" style="background:#fff;color:#1e3a8a;font-weight:600;border:none;border-radius:6px;padding:4px 10px">${ico('copy', 14)} Nusxalash</button>
+        <button type="button" class="btn btn-xs" data-act="copy-card" data-card="${esc(rawNum)}" style="background:#fff;color:#1e3a8a;font-weight:600;border:none;border-radius:6px;padding:4px 10px">${ico('copy', 14)} ${t('Nusxalash')}</button>
       </div>
     </div>
 
     <div class="card" style="margin-bottom:10px;padding:10px">
-      <div class="row between"><span class="muted small">Oy:</span><b>${esc(monthLabel(per))}</b></div>
-      <div class="row between" style="margin-top:4px"><span class="muted small">To'lanadigan summa:</span><b style="color:var(--primary,#2563eb);font-size:16px">${fmtSom(sum)} so'm</b></div>
+      <div class="row between"><span class="muted small">${t('Oy:')}</span><b>${esc(monthLabel(per))}</b></div>
+      <div class="row between" style="margin-top:4px"><span class="muted small">${t("To'lanadigan summa:")}</span><b style="color:var(--primary,#2563eb);font-size:16px">${fmtSom(sum)} so'm</b></div>
     </div>
 
     <div class="receipt-upload" style="margin-bottom:12px">
-      <label class="field-label" for="receipt-file">${ico('paperclip', 14)} To'lov chekini yuklash (Rasm):</label>
-      <input type="file" id="receipt-file" accept="image/*" class="input" style="padding:6px" />
+      <label class="field-label" for="receipt-file">${ico('paperclip', 14)} ${t("To'lov chekini yuklash (Rasm):")}</label>
+      <div class="hw-upload-row">
+        <label class="hw-upload-btn" for="receipt-file">
+          <span class="hw-upload-ico" aria-hidden="true">${ico('folder', 18)}</span>
+          <span>${t('Fayl tanlash')}</span>
+        </label>
+        <input type="file" id="receipt-file" accept="image/*" class="hw-file-input" />
+        <span class="muted small" id="receipt-file-name">${t('Fayl tanlanmagan')}</span>
+      </div>
       <div id="receipt-preview-wrap" style="display:none;margin-top:8px;text-align:center">
-        <img id="receipt-preview-img" src="" alt="Chek rasmi" style="max-height:160px;max-width:100%;border-radius:8px;border:1px solid #e2e8f0" />
+        <img id="receipt-preview-img" src="" alt="${esc(t('Chek rasmi'))}" style="max-height:160px;max-width:100%;border-radius:8px;border:1px solid #e2e8f0" />
       </div>
       <div class="field-error" id="receipt-error"></div>
     </div>
 
     <div class="modal-actions">
-      <button type="button" class="btn btn-ghost" data-act="close-modal">Bekor qilish</button>
-      <button type="button" class="btn btn-primary" data-act="do-submit-receipt" data-amount="${sum}" data-period="${esc(per)}">${ico('upload', 14)} Chekni yuborish</button>
+      <button type="button" class="btn btn-ghost" data-act="close-modal">${t('Bekor qilish')}</button>
+      <button type="button" class="btn btn-primary" data-act="do-submit-receipt" data-amount="${sum}" data-period="${esc(per)}">${ico('upload', 14)} ${t('Chekni yuborish')}</button>
     </div>
   `);
 
@@ -8695,6 +8740,8 @@ function openPayReceiptModal(amount, period) {
       const file = fi.files && fi.files[0];
       const wrap = $('#receipt-preview-wrap');
       const img = $('#receipt-preview-img');
+      const nameEl = $('#receipt-file-name');
+      if (nameEl) nameEl.textContent = file ? (file.name || '') : t('Fayl tanlanmagan');
       if (file && wrap && img && window.URL) {
         img.src = URL.createObjectURL(file);
         wrap.style.display = 'block';
@@ -8728,7 +8775,7 @@ async function doSubmitPaymentReceipt() {
     render();
     toast("Chekingiz qabul qilindi! Ustoz tasdiqlashi bilan qarzingiz o'chiriladi.");
   } catch (e) {
-    if (btn) { btn.disabled = false; btn.innerHTML = ico('upload', 14) + ' Chekni yuborish'; }
+    if (btn) { btn.disabled = false; btn.innerHTML = ico('upload', 14) + ' ' + t('Chekni yuborish'); }
     if (err) { err.textContent = "Yuklashda xatolik: " + ((e && e.message) || 'xatolik'); err.classList.add('show'); }
   }
 }
@@ -8869,16 +8916,16 @@ document.addEventListener('click', function (e) {
         { has_debt: !!(stu && Number(stu.speakingDebt) > 0) });
       openModal(`
         <div class="modal-head">
-          <h3>${ico('mic', 20)} Speaking topshirish</h3>
+          <h3>${ico('mic', 20)} ${t('Speaking topshirish')}</h3>
           <button type="button" class="icon-btn" data-act="close-modal" aria-label="Yopish">✕</button>
         </div>
         <div class="confirm-body">
           <div class="confirm-emoji tint-sky">${ICON.smartphone}</div>
-          <p class="confirm-text">Ovozli topshirish uchun <b>Telegram botga</b> kiring va u yerga ${ico('mic', 14)} ovozli xabar (voice) yoki ${ico('video', 14)} krujok (video note) yuboring.</p>
-          <p class="muted small" style="margin-top:9px">Muzaffar Amirov baholagach, natijani shu kabinetda ko'rasiz.</p>
+          <p class="confirm-text">${t('Ovozli topshirish uchun Telegram botga kiring va u yerga ovozli xabar (voice) yoki krujok (video note) yuboring.')}</p>
+          <p class="muted small" style="margin-top:9px">${t("Muzaffar Amirov baholagach, natijani shu kabinetda ko'rasiz.")}</p>
         </div>
         <div class="confirm-actions">
-          <button type="button" class="btn btn-primary" data-act="close-modal">Tushunarli</button>
+          <button type="button" class="btn btn-primary" data-act="close-modal">${t('Tushunarli')}</button>
         </div>
       `);
     },

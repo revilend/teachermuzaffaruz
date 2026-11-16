@@ -267,7 +267,7 @@ function i18nLeftovers(scope) {
   if (!scope) return [];
   const SKIP = '.s-name, .login-val, .profile-name, .brand, .avatar, .chip-btn, ' +
     '.chip-class, .gc-name, .group-name, .msg-text, .hw-file-name';
-  const UZ = /(yo'q|uchun|kerak|mavjud|qo'sh|bo'l|o'quvchi|o'qituvchi|guruh|davomat|baho|vazifa|topshiriq|to'lov|qarz|hafta|oylik|belgilan|eslatma|saqlash|bekor|yopish|kirish|parol|jami|keldi|kelmadi|sababli|noyabr|yanvar|fevral|aprel|iyun|iyul|avgust|sentabr|oktabr|dekabr|sinf)/i;
+  const UZ = /(yo'q|uchun|kerak|mavjud|qo'sh|bo'l|o'quvchi|o'qituvchi|guruh|davomat|baho|vazifa|topshiriq|to'lov|qarz|hafta|oylik|belgilan|eslatma|saqlash|bekor|yopish|kirish|parol|jami|keldi|kelmadi|sababli|noyabr|yanvar|fevral|aprel|iyun|iyul|avgust|sentabr|oktabr|dekabr|sinf|karta|egasi|chek|diqqat|tushunarli|nusxa|kiring|ovozli|krujok|kutilmoqda|qatnash|qoldiril|mening|hozircha|barchasini|darsdagi|javob|tanlan|tanlash|yuborish|ko'rdim|baholangan)/i;
   const add = (v) => {
     const s = String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
     if (!s || !UZ.test(s)) return;
@@ -3268,6 +3268,33 @@ await (async () => {
   if (openAct('open-pay-receipt')) scanModal('student:receipt');
   forceNav('home');
   if (openAct('open-chat')) scanModal('student:chat');
+
+  /* To'lov cheki va speaking modallari: aniq yorliqlar inglizchada */
+  forceNav('home');
+  if (openAct('open-pay-receipt')) {
+    const rc = q('#modal-sheet').textContent || '';
+    check(/Payment by card/.test(rc) && /Cardholder/.test(rc) && /Copy/.test(rc) &&
+          /Month:/.test(rc) && /Upload payment receipt \(image\):/.test(rc) &&
+          /Choose file/.test(rc) && /No file chosen/.test(rc) && /Send receipt/.test(rc) &&
+          /Cancel/.test(rc),
+      'i18n EN: to‘lov cheki modali to‘liq inglizchada (karta, oy, fayl tanlash, yuborish)');
+    const fi = q('#receipt-file');
+    check(!!fi && fi.classList.contains('hw-file-input'),
+      'to‘lov cheki: fayl maydoni brauzer tilidagi yozuvsiz — o‘z “Choose file” tugmasi bilan');
+    click('[data-act="close-modal"]');
+  }
+  forceNav('home');
+  if (openAct('speak-cta')) {
+    const sc = q('#modal-sheet').textContent || '';
+    check(/To submit your speaking task/.test(sc) && /after Muzaffar Amirov grades it/.test(sc) &&
+          /Got it/.test(sc),
+      'i18n EN: speaking modali to‘liq inglizchada');
+    click('[data-act="close-modal"]');
+  }
+  forceNav('home');
+  const payCard = text();
+  check(/No payments yet|Last payment:/.test(payCard) && !/So'nggi to'lov|Karta orqali to'lash/.test(payCard),
+    'i18n EN: kabinetdagi to‘lov kartasi inglizchada');
 
   check(i18nMissed.length === 0,
     'i18n EN: barcha ekran va modallarda tarjima qilingan' +
