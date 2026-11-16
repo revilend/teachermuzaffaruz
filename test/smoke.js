@@ -3073,6 +3073,38 @@ await (async () => {
   check(/create policy "homework-media anon select"\s+on storage\.objects[\s\S]*?using \(bucket_id = 'homework-media'\)/i.test(sqlText),
     'sql: anon SELECT policy faqat homework-media bucket uchun');
 
+  /* ================= 34. UZ | EN TIL ALMASHTIRGICH (i18n) ================= */
+  win.localStorage.removeItem('app_lang');
+  forceNav('home');
+  check(!!q('[data-act="toggle-lang"]'), 'i18n: headerda UZ | EN almashtirgich bor');
+  check(text().includes('Xush kelibsiz'), 'i18n: standart holat — o‘zbekcha matnlar');
+  clickAct('toggle-lang');
+  check((win.localStorage.getItem('app_lang') || '').indexOf('en') >= 0,
+    'i18n: tanlangan til localStorage’da saqlanadi (app_lang=en)');
+  check(!text().includes('Xush kelibsiz') && /Welcome/.test(text()),
+    'i18n: bosh sahifa matnlari sahifa yuklanmasdan inglizchaga o‘tadi');
+  check(/Quick actions/i.test(text()) && /Assign Homework/i.test(text()),
+    'i18n: “Tez amallar” va “Uyga vazifa berish” inglizchada');
+  const enNav = navLabels().join(' | ');
+  check(/Home/.test(enNav) && /Students/.test(enNav) && /Submissions/.test(enNav) && /Payments/.test(enNav),
+    'i18n: navigatsiya yorliqlari inglizchada');
+  forceNav('students');
+  clickAct('open-add-student');
+  check(/Add student/i.test(q('#modal-sheet').textContent),
+    'i18n: ochiq modal ham darhol inglizchaga o‘tadi');
+  click('[data-act="close-modal"]');
+  forceNav('submissions');
+  check(/Submitted Homework/i.test(text()), 'i18n: topshiriqlar bo‘limi sarlavhasi inglizchada');
+  forceNav('profile');
+  check(/Diagnostics/i.test(text()) && /Security/i.test(text()),
+    'i18n: profil bo‘limlari inglizchada');
+  forceNav('home');
+  clickAct('toggle-lang');
+  check((win.localStorage.getItem('app_lang') || '').indexOf('uz') >= 0,
+    'i18n: til qayta o‘zbekchaga o‘tadi va saqlanadi');
+  check(text().includes('Xush kelibsiz') && text().includes('Tez amallar'),
+    'i18n: sahifa yuklanmasdan o‘zbekcha matnlar qaytadi');
+
   console.log(failed ? '\n' + failed + ' ta test YIQILDI' : '\nBarcha testlar o\'tdi ✓');
   process.exit(failed ? 1 : 0);
 })();

@@ -2606,6 +2606,7 @@ function suggestLogin(fullName) {
 
 /* ---- Toast ---- */
 function toast(msg, type) {
+  msg = i18nText(msg, getLang()) || msg;
   const el = $('#toast');
   if (!el) return;
   el.textContent = msg;
@@ -3019,6 +3020,303 @@ const I18N_EN = {
   'Komentariya yuborildi': 'Comment sent',
   'Ko‘rilmagan': 'New',
 };
+/* --- Kengaytirilgan UZ→EN lug'ati (barcha ekran va modallar) ---
+   Mavjud tarjimalar ustidan yozilmaydi — faqat yetishmayotgan kalitlar qo'shiladi. */
+(function (extra) {
+  Object.keys(extra).forEach(function (k) {
+    if (!Object.prototype.hasOwnProperty.call(I18N_EN, k)) I18N_EN[k] = extra[k];
+  });
+})({
+  "Xush kelibsiz,": "Welcome,",
+  "Tez amallar": "Quick actions",
+  "Uyga vazifa berish": "Assign Homework",
+  "Baholar jurnali": "Gradebook",
+  "Tezkor davomat": "Quick Attendance",
+  "Speaking slotlari": "Speaking Slots",
+  "Bajarilgan topshiriqlar": "Submitted Homework",
+  "To'lovlar": "Payments",
+  "To'lov": "Payments",
+  "Guruhlar": "Groups",
+  "O'quvchilar": "Students",
+  "O'quvchi": "Students",
+  "Sinflar": "Classes",
+  "Sinf": "Grade",
+  "Guruh": "Group",
+  "Baholar": "Grades",
+  "Davomat": "Attendance",
+  "Profil": "Profile",
+  "Kabinet": "Dashboard",
+  "Bosh": "Home",
+  "Bosh sahifa": "Home",
+  "Yuklash": "Upload",
+  "Yuklash ruxsati": "Upload allowed",
+  "Uyga vazifa yuklashga ruxsat": "Allow homework upload",
+  "Uyga vazifa yuklashga ruxsat yo'q": "Homework upload is not allowed",
+  "Uyga vazifalar va media darslar": "Homework and media lessons",
+  "Topshiriqni yuklash": "Upload homework",
+  "Topshiriqlar": "Submissions",
+  "Izoh (ixtiyoriy)": "Comment (optional)",
+  "Fayl tanlang yoki izoh yozing": "Choose a file or write a comment",
+  "Rasm, Word, PDF, Excel, video va audio fayllarni yuklash mumkin (har biri 50MB gacha).": "Upload images, Word, PDF, Excel, video and audio files (up to 50MB each).",
+  "Har bir fayl uchun maksimal hajm: 50MB · bir nechta fayl tanlash mumkin": "Max size per file: 50MB · multiple files allowed",
+  "Siz yuklagan fayllar": "Files you uploaded",
+  "O'qituvchi komentariyasi": "Teacher's comment",
+  "Komentariya yozish": "Write a comment",
+  "Komentariya yuborildi": "Comment sent",
+  "Komentariyani saqlashda xatolik": "Failed to save the comment",
+  "Yuborish": "Send",
+  "Saqlash": "Save",
+  "Bekor qilish": "Cancel",
+  "Yopish": "Close",
+  "Tahrirlash": "Edit",
+  "O'chirish": "Delete",
+  "Qo'shish": "Add",
+  "+ Qo'shish": "+ Add",
+  "Orqaga": "Back",
+  "Keyingi qadam": "Next step",
+  "Ha, o'chirish": "Yes, delete",
+  "Ha, yuborish": "Yes, send",
+  "Ko'rdim": "Got it",
+  "Ko'rinish": "Role",
+  "Holat": "Status",
+  "Yangi": "New",
+  "Yangi parol": "New password",
+  "Parol": "Password",
+  "Parolni o'zgartirish": "Change password",
+  "Parolni yangilash": "Reset Password",
+  "Kirish": "Sign In",
+  "Hisobdan chiqish": "Log Out",
+  "Hisobdan chiqdingiz": "You have logged out",
+  "Tizimga kirish": "Sign in",
+  "Kirish ma'lumotlari": "Sign-in details",
+  "Kirishni tiklash": "Recover access",
+  "Login yoki parol noto'g'ri": "Incorrect login or password",
+  "Login va parolingizni kiriting": "Enter your login and password",
+  "Login va parolni kiriting": "Enter login and password",
+  "Login noto'g'ri": "Incorrect login",
+  "Login yuborildi": "Login sent",
+  "Login ma'lumoti": "Login details",
+  "Joriy parol noto'g'ri": "Current password is incorrect",
+  "Parollar mos kelmadi": "Passwords do not match",
+  "Parol kamida 3 ta belgi bo'lsin": "Password must be at least 3 characters",
+  "Yangi parol kamida 3 ta belgi bo'lsin": "New password must be at least 3 characters",
+  "Dastlabki parol kamida 3 ta belgi bo'lsin": "Initial password must be at least 3 characters",
+  "Tekshiruv (CAPTCHA)": "Verification (CAPTCHA)",
+  "Javob": "Answer",
+  "Tekshiruv javobi noto'g'ri — yangi misolni yeching": "Wrong verification answer — solve the new example",
+  "5 xonali kod": "5-digit code",
+  "Kod (6 xona)": "Code (6 digits)",
+  "Kod yuborish": "Send code",
+  "Telefon raqam": "Phone number",
+  "Telefon yoki Gmail": "Phone or Gmail",
+  "Telefon raqam noto'g'ri: +998 90 123 45 67": "Invalid phone number: +998 90 123 45 67",
+  "Gmail manzili": "Gmail address",
+  "Gmail manzil noto'g'ri": "Invalid Gmail address",
+  "Gmail olib tashlandi": "Gmail removed",
+  "Ustoz Gmail manzili": "Teacher Gmail address",
+  "Tasdiqlangan": "Verified",
+  "Tasdiqlanmagan": "Not verified",
+  "Aloqa va tiklash ma'lumotlari": "Contact and recovery details",
+  "2FA va tiklash sozlamalari": "2FA and recovery settings",
+  "Ishonchli qurilmalar": "Trusted devices",
+  "Ishonchli qurilmalarni tozalash": "Clear trusted devices",
+  "Barcha boshqa qurilmalardan chiqish": "Log out from all other devices",
+  "Faol qurilmalar": "Active devices",
+  "Bu qurilma": "This device",
+  "bu qurilma": "this device",
+  "qurilma": "device",
+  "ishonchli": "trusted",
+  "yangi": "new",
+  "joriy sessiya": "current session",
+  "Noma'lum qurilma": "Unknown device",
+  "Qurilma chiqarib yuborildi": "Device removed",
+  "Siz ushbu qurilmadan chiqarildingiz!": "You were removed from this device!",
+  "Boshqa qurilmalar ulanmagan": "No other devices connected",
+  "Bu ilova tashqi tahlil xizmatlariga ma'lumot yubormaydi.": "This app does not send data to external analytics services.",
+  "Maxfiylik": "Privacy",
+  "Xavfsizlik": "Security",
+  "Muammoni tanlang — kod tasdiqlangan Telegram yoki Gmailga yuboriladi.": "Choose the issue — the code is sent to your verified Telegram or Gmail.",
+  "Avval Gmail manzilni kiriting": "Enter your Gmail address first",
+  "Parolni tiklash kodi shu telefon (Telegram) yoki Gmail manzilga yuboriladi.": "The password reset code is sent to this phone (Telegram) or Gmail address.",
+  "Kirishdagi 2 bosqichli kod va parolni tiklash kodi shu manzillarga yuboriladi.": "The 2-step sign-in code and password reset code are sent to these addresses.",
+  "Asosiy oyna": "Home",
+  "Mening ma'lumotlarim": "My details",
+  "Ma'lumotlar Bazasi Zaxirasi": "Database Backup",
+  "Bazani yuklab olish (Backup)": "Download backup",
+  "Bazani qayta tiklash (Restore)": "Restore backup",
+  "Bazani qayta tiklashda xatolik": "Failed to restore the backup",
+  "Zaxira fayli topilmadi": "Backup file not found",
+  "Zaxira maydoni topilmadi": "Backup field not found",
+  "Zaxira tayyorlanmoqda...": "Preparing backup...",
+  "Zaxirani yuklab bo'lmadi": "Could not download the backup",
+  "Baza qayta tiklanmoqda...": "Restoring database...",
+  "Baza tozalanmoqda...": "Cleaning database...",
+  "Tozalash": "Cleanup",
+  "Tozalashdan oldin barcha jadvallar fayl ko'rinishida avtomatik yuklab olinadi.": "Before cleanup all tables are downloaded automatically as a file.",
+  "Tanlangan jadvalni tozalash": "Clean selected table",
+  "Bildirishnomalar yoqildi": "Notifications enabled",
+  "Bildirishnomalar o'chirib qoldi": "Notifications turned off",
+  "Brauzerda bildirishnomalar bloklangan": "Notifications are blocked in the browser",
+  "Boshqa qurilmalar": "Other devices",
+  "Avval guruh yarating": "Create a group first",
+  "Avval o'quvchi tayinlang": "Assign a student first",
+  "Avval komentariyani yozing": "Write a comment first",
+  "Guruh qo'shish": "Add group",
+  "O'quvchi qo'shish": "Add student",
+  "O'quvchini tahrirlash": "Edit student",
+  "Guruh nomini kiriting": "Enter the group name",
+  "Ism familiyani kiriting": "Enter full name",
+  "Guruhni tanlang": "Choose a group",
+  "Maktab sinfini tanlang": "Choose the school class",
+  "Dars kunlarini tanlang": "Choose lesson days",
+  "Dars vaqtlari (har kun uchun)": "Lesson times (per day)",
+  "Guruh o'zgartirilsa, mavjud baholar va davomat tarixi saqlanib qoladi.": "If the group changes, existing grades and attendance history are kept.",
+  "Guruh turi faqat sizga ko'rinadi — o'quvchilarga hech qachon ko'rsatilmaydi.": "The group type is visible only to you — never shown to students.",
+  "Bosib, guruh o'quvchilarini ko'rish": "Tap to see the group's students",
+  "Berilgan vazifalar guruh sahifasida ko'rinadi.": "Assigned homework appears on the group page.",
+  "Guruhlar, o'quvchilar, davomat, baholar, xabarlar va speaking topshiriqlari JSON faylda saqlanadi.": "Groups, students, attendance, grades, messages and speaking tasks are saved in a JSON file.",
+  "Har bir oy uchun alohida summa belgilang. Kiritilmagan oyda guruhning eski oylik summasi ishlatiladi.": "Set a separate amount for each month. If a month is missing, the group's previous monthly fee is used.",
+  "Har bir tanlangan kun uchun alohida dars vaqtini belgilang.": "Set a separate lesson time for each selected day.",
+  "Kunni tanlang — har bir kun uchun alohida vaqtni belgilang (masalan Dushanba 09:15, Shanba 11:00).": "Pick the day — set a separate time for each day (e.g. Monday 09:15, Saturday 11:00).",
+  "Kiritilgan summa qarzdan ayiriladi va o'quvchi kabinetida so'nggi to'lov sifatida ko'rinadi.": "The entered amount is deducted from the debt and shown as the latest payment in the student dashboard.",
+  "Ball tanlansa, o'quvchining baholar jurnaliga darhol yoziladi.": "Selecting a score writes it to the student's gradebook immediately.",
+  "Baho qo'yish uchun katakchaga bosing.": "Tap a cell to set a grade.",
+  "Har bir darsdagi baholar, o'rtacha reyting va qatnashish statistikasi.": "Grades for every lesson, average rating and attendance statistics.",
+  "Muzaffar Amirov baholagach, natijani shu kabinetda ko'rasiz.": "You will see the result in this dashboard after Muzaffar Amirov grades it.",
+  "Ovozli va video speaking topshirish hamda baho/xabarlarni tezkor olish.": "Submit voice and video speaking tasks and get grades/messages quickly.",
+  "Video, audio va hujjatlarni saytning o'zida tezlikni boshqarib o'rganish.": "Study video, audio and documents on the site with adjustable speed.",
+  "10 ballik jurnal va davomat": "10-point gradebook and attendance",
+  "5–11-sinf va repetitorlik guruhlari uchun ingliz tili ta'lim platformasi: uyga vazifalar, 10 ballik baholar jurnali, davomat va speaking nazorati.": "English learning platform for grades 5–11 and tutoring groups: homework, a 10-point gradebook, attendance and speaking control.",
+  "Oylik to'lov summasi (so'mda)": "Monthly fee (in sum)",
+  "To'lov qarzi (so'mda)": "Payment debt (in sum)",
+  "To'lov summasi (so'mda)": "Payment amount (in sum)",
+  "Qo'shiladigan summa (so'mda)": "Amount to add (in sum)",
+  "Karta raqami (16 ta raqam)": "Card number (16 digits)",
+  "Qarz qo'shish": "Add debt",
+  "To'lov kiritish": "Add payment",
+  "Qaysi oy uchun to'lov": "Payment for which month",
+  "Oyni tanlang": "Choose the month",
+  "Summani kiriting": "Enter the amount",
+  "Sanani tanlang": "Choose the date",
+  "Vaqt oralig'ini kiriting": "Enter the time range",
+  "Tugash vaqti boshlanishdan keyin bo'lishi kerak": "End time must be after the start time",
+  "Xabar matnini kiriting": "Enter the message text",
+  "Xabar yozish": "Message",
+  "Eslatma yuborish": "Send reminder",
+  "Eslatma yuborilmadi:": "Reminder was not sent:",
+  "Barcha qarzdorlarga eslatma yuborish": "Send a reminder to all debtors",
+  "Qarzdorlar ro'yxati": "Debtors list",
+  "Qarzdorlar": "Debtors",
+  "To'langan": "Paid",
+  "Yig'ilgan": "Collected",
+  "Kutilgan": "Expected",
+  "Qolgan": "Remaining",
+  "hali to'lov yo'q": "no payment yet",
+  "So'nggi to'lov:": "Last payment:",
+  "Oxirgi to'lov:": "Last payment:",
+  "Joriy qarz:": "Current debt:",
+  "Oylik:": "Monthly:",
+  "Maktab guruhi bepul — to'lov yo'q": "School group is free — no payment",
+  "Maktab guruhi bepul — jadval kerak emas": "School group is free — no schedule needed",
+  "Maktab guruhida qarz yo'q (bepul)": "No debt in a school group (free)",
+  "Bu o'quvchida qarz yo'q": "This student has no debt",
+  "Bu sanada shu vaqtda slot bor": "There is already a slot at this time on this date",
+  "Slot o'chirildi": "Slot deleted",
+  "Uyga vazifa o'chirildi": "Homework deleted",
+  "Topshiriq o'chirildi": "Submission deleted",
+  "Topshiriq yozuvi topilmadi": "Submission record not found",
+  "Fayl o'chirildi": "File deleted",
+  "Fayl noto'g'ri: bu mos kelmaydigan zaxira fayli": "Invalid file: this is not a matching backup file",
+  "Faylni o'qib bo'lmadi": "Could not read the file",
+  "Fayl hajmi 50 MB dan oshmasligi kerak:": "File size must not exceed 50 MB:",
+  "Bulutda tozalab bo'lmadi": "Could not clean in the cloud",
+  "Xatolik: bulut bilan aloqa yo'q (Supabase sozlanmagan)": "Error: no cloud connection (Supabase is not configured)",
+  "Xatolik:": "Error:",
+  "Xatolik: ...": "Error: ...",
+  "Ruxsat yo'q": "Permission denied",
+  "O'chirishda xatolik:": "Delete failed:",
+  "Bahani faqat Muzaffar Amirov qo'yadi": "Only Muzaffar Amirov can grade",
+  "Baho o'chirildi": "Grade deleted",
+  "Baho qo'yish": "Set grade",
+  "Baho saqlandi": "Grade saved",
+  "Hozircha baho yo'q": "No grades yet",
+  "O'rtacha baho": "Average score",
+  "O'rtacha": "Average",
+  "O'rtacha bahosi": "Average score",
+  "Davomatni saqlash": "Save attendance",
+  "Davomat yozuvi yo'q": "No attendance records",
+  "Oldingi hafta": "Previous week",
+  "Bugun": "Today",
+  "Keyingi hafta": "Next week",
+  "Speaking qarzi": "Speaking debt",
+  "Speaking qarzi (o'quvchilar)": "Speaking debt (students)",
+  "Speaking": "Speaking",
+  "Maktab guruhi": "School group",
+  "Repetitor guruhi": "Tutoring group",
+  "Maktab guruhi bepul": "School group is free",
+  "Bepul": "Free",
+  "Lavozim": "Role",
+  "O'quvchi kabineti": "Student dashboard",
+  "O'quvchida Telegram ulanmagan": "Student has not connected Telegram",
+  "O'quvchilarda Telegram ulanmagan": "Students have not connected Telegram",
+  "O'quvchi ma'lumoti topilmadi": "Student record not found",
+  "O'quvchi ma'lumoti topilmadi — qayta kiring": "Student record not found — sign in again",
+  "Profilingiz bulutga ulanmagan — ustozga murojaat qiling": "Your profile is not connected to the cloud — contact the teacher",
+  "Bu vazifa hali bulutga yozilmagan — keyinroq urinib ko'ring": "This homework is not saved to the cloud yet — try again later",
+  "O'qituvchi vazifangizga komentariya yozdi:": "The teacher commented on your homework:",
+  "Vazifa ichida o'qib, fayllaringizni ko'rish mumkin.": "Inside the task you can read it and see your files.",
+  "To'lov eslatmasi!": "Payment reminder!",
+  "To'lov qabul qilindi!": "Payment received!",
+  "To'lov cheki ko'rib chiqilmoqda!": "Your payment receipt is under review!",
+  "Chekingiz qabul qilindi! Ustoz tasdiqlashi bilan qarzingiz o'chiriladi.": "Your receipt was accepted! Your debt is cleared once the teacher confirms it.",
+  "Ustoz tasdiqlashi bilan qarzingiz o'chiriladi.": "Your debt is cleared once the teacher confirms it.",
+  "Iltimos, to'lov cheki rasmini tanlang": "Please choose a payment receipt image",
+  "To'lanadigan summa:": "Amount to pay:",
+  "Karta:": "Card:",
+  "Qurilma:": "Device:",
+  "Karta egasining ism-familiyasi": "Cardholder full name",
+  "Kartani saqlash": "Save card",
+  "To'lov kartasi sozlamalari": "Payment card settings",
+  "Tasdiqlash": "Confirm",
+  "Kiritish": "Enter",
+  "Chiqarib yuborish": "Remove",
+  "Yangi qurilma aniqlandi — 6 xonali kod Telegram (ustoz) va Gmail orqali yuborildi. Qurilma:": "New device detected — a 6-digit code was sent via Telegram (teacher) and Gmail. Device:",
+  "Telegram bot (@uzbekspeakingcheckbot)": "Telegram bot (@uzbekspeakingcheckbot)",
+  "Bu raqamga Telegram bot ulanmagan. Avval @uzbekspeakingcheckbot da /login qiling": "Telegram bot is not linked to this number. Run /login in @uzbekspeakingcheckbot first",
+  "Telegram kirishi tekshiruvi majburiy — kirish rad etildi": "Telegram sign-in verification is required — sign-in denied",
+  "Telegram navbati yozilmadi — bot sozlanmagan bo'lishi mumkin": "Telegram queue was not written — the bot may not be configured",
+  "Gmail yuborish navbati ishlamadi — botda": "Gmail queue did not work — in the bot",
+  "Eslatma yuborilmadi": "Reminder was not sent",
+  "O'quvchi qo'shildi": "Student added",
+  "Guruh qo'shildi": "Group added",
+  "Diagnostika": "Diagnostics",
+  "Diagnostikani ishga tushirish": "Run diagnostics",
+  "Qayta tekshirish": "Re-check",
+  "Hammasi joyida — yuklash ishlashi kerak": "Everything looks good — upload should work",
+  "ta muammo topildi": "issues found",
+  "Yuklash (o'quvchi)": "Upload (student)",
+  "To'lovlar va qarzdorlar": "Payments and debtors",
+  "Guruhlar va o'quvchilar": "Groups and students",
+  "Vazifa berish": "Assign homework",
+  "Uyga vazifa": "Homework",
+  "Uyga vazifalar": "Homework",
+  "Barcha o'quvchilar": "All students",
+  "Barchasi": "All",
+  "Maktab": "School",
+  "Repetitorlik": "Tutoring",
+  "Ko'rilmagan": "New",
+  "Yangi topshiriq": "New submission",
+  "O'qituvchi": "Teacher",
+  "Ustoz": "Teacher",
+  "ta guruh": "groups",
+  "ta o'quvchi": "students",
+  "guruhidagi o'quvchilar": "students in the group",
+  "guruhini o'chirmoqchimisiz?": "group? Do you want to delete it?",
+  "o'chirmoqchimisiz? Uning barcha baholari va davomat tarixi ham o'chiriladi.": "? All their grades and attendance history will also be deleted.",
+  "Kirish — English Teacher": "Sign in — English Teacher",
+  "English Teacher — Muzaffar Amirov": "English Teacher — Muzaffar Amirov",
+  "8–10 A'lo": "8–10 Excellent",
+});
 function getLang() { return store.get('app_lang', 'uz'); }
 function t(s) {
   if (getLang() !== 'en') return s;
@@ -3039,10 +3337,136 @@ function tStudCnt(n) {
 function tGrpCnt(n) {
   return getLang() === 'en' ? n + ' student' + (n === 1 ? '' : 's') : n + " o'quvchi";
 }
+/* --- DOM bo'ylab tarjima: qattiq yozilgan matnlar ham tanlangan tilga o'tadi --- */
+const I18N_UZ = (function () {
+  /* Faqat bir xil ingliz matnga ega bo'lgan yagona o'zbek kaliti olinadi —
+     aks holda "Speaking" kabi so'zlar noto'g'ri almashib ketadi. */
+  const count = {};
+  Object.keys(I18N_EN).forEach(function (k) {
+    const en = I18N_EN[k];
+    if (!en) return;
+    count[en] = (count[en] || 0) + 1;
+  });
+  const m = {};
+  Object.keys(I18N_EN).forEach(function (k) {
+    const en = I18N_EN[k];
+    if (en && count[en] === 1) m[en] = k;
+  });
+  return m;
+})();
+const I18N_SKIP_TAGS = ['script', 'style', 'noscript', 'svg', 'path'];
+const I18N_SKIP_SEL = '.s-name, .profile-name, .login-val, .brand';
+function i18nNorm(s) { return String(s == null ? '' : s).replace(/\s+/g, ' ').trim(); }
+/* Sonlar bilan keladigan dinamik matnlar */
+function i18nPattern(s, lang) {
+  if (lang !== 'en') return null;
+  let m;
+  if ((m = /^(\d+) ta guruh$/.exec(s))) return m[1] + ' groups';
+  if ((m = /^(\d+) ta o'quvchi$/.exec(s))) return m[1] + ' students';
+  if ((m = /^(\d+) nafar · umumiy qarz: (.+)$/.exec(s))) return m[1] + ' students · total debt: ' + m[2];
+  if ((m = /^(\d+) nafar repetitor o'quvchisi · (.+)$/.exec(s))) return m[1] + ' tutoring students · ' + m[2];
+  if ((m = /^(\d+) ta muammo topildi$/.exec(s))) return m[1] + ' issues found';
+  if ((m = /^(\d+) ta fayl yuborildi$/.exec(s))) return m[1] + ' files sent';
+  if ((m = /^(\d+)\/(\d+) fayl yuklandi · (\d+)%$/.exec(s))) return m[1] + '/' + m[2] + ' files uploaded · ' + m[3] + '%';
+  if ((m = /^(\d+) ta$/.exec(s))) return m[1];
+  return null;
+}
+let i18nSegCache = { map: null, keys: [] };
+function i18nSegments(s, map) {
+  if (i18nSegCache.map !== map) {
+    i18nSegCache = {
+      map: map,
+      keys: Object.keys(map).filter(function (k) { return k.length >= 3; })
+        .sort(function (a, b) { return b.length - a.length; })
+    };
+  }
+  let out = s;
+  const keys = i18nSegCache.keys;
+  for (let i = 0; i < keys.length; i++) {
+    const k = keys[i];
+    if (out.indexOf(k) < 0) continue;
+    const safe = k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp('(^|[\\s:·(])' + safe + '(?=$|[\\s.,:;!?)·])', 'g');
+    out = out.replace(re, function (_, pre) { return pre + map[k]; });
+  }
+  return out;
+}
+function i18nText(src, lang) {
+  const core = i18nNorm(src);
+  if (!core || !/[A-Za-z]/.test(core)) return null;
+  const map = lang === 'en' ? I18N_EN : I18N_UZ;
+  if (Object.prototype.hasOwnProperty.call(map, core)) return map[core];
+  const pat = i18nPattern(core, lang);
+  if (pat != null) return pat;
+  const seg = i18nSegments(core, map);
+  return seg !== core ? seg : null;
+}
+function i18nApply(root, lang) {
+  if (!root || typeof document === 'undefined') return;
+  const walker = document.createTreeWalker(root, 4, null);
+  const nodes = [];
+  let n;
+  while ((n = walker.nextNode())) nodes.push(n);
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i];
+    const parent = node.parentNode;
+    if (!parent || parent.nodeType !== 1) continue;
+    if (I18N_SKIP_TAGS.indexOf(parent.tagName.toLowerCase()) >= 0) continue;
+    if (parent.closest && parent.closest(I18N_SKIP_SEL)) continue;
+    const raw = node.nodeValue;
+    if (!raw || !/\S/.test(raw)) continue;
+    const lead = raw.match(/^\s*/)[0];
+    const trail = raw.match(/\s*$/)[0];
+    const next = i18nText(raw, lang);
+    if (next != null) node.nodeValue = lead + next + trail;
+  }
+  const els = root.querySelectorAll ? root.querySelectorAll('[placeholder],[title],[aria-label]') : [];
+  for (let i = 0; i < els.length; i++) {
+    ['placeholder', 'title', 'aria-label'].forEach(function (at) {
+      const v = els[i].getAttribute(at);
+      if (!v) return;
+      const next = i18nText(v, lang);
+      if (next != null) els[i].setAttribute(at, next);
+    });
+  }
+}
+function applyCurrentLang(root) { i18nApply(root || document.body, getLang()); }
+/* Dinamik qo'shilgan matnlar (toast, xato, modal) ham darhol tarjima qilinadi */
+let i18nBusy = false;
+function startI18nObserver() {
+  if (typeof MutationObserver === 'undefined' || !document.body) return;
+  const obs = new MutationObserver(function (list) {
+    if (getLang() !== 'en' || i18nBusy) return;
+    i18nBusy = true;
+    try {
+      for (let i = 0; i < list.length; i++) {
+        const m = list[i];
+        if (m.type === 'characterData' && m.target && m.target.parentNode) {
+          i18nApply(m.target.parentNode, 'en');
+        } else if (m.addedNodes) {
+          for (let j = 0; j < m.addedNodes.length; j++) {
+            const nd = m.addedNodes[j];
+            if (nd.nodeType === 1) i18nApply(nd, 'en');
+            else if (nd.nodeType === 3 && nd.parentNode) i18nApply(nd.parentNode, 'en');
+          }
+        }
+      }
+    } finally {
+      setTimeout(function () { i18nBusy = false; }, 0);
+    }
+  });
+  obs.observe(document.body, { childList: true, subtree: true, characterData: true });
+}
 function toggleLang() {
   store.set('app_lang', getLang() === 'uz' ? 'en' : 'uz');
+  const modalOpen = $('#modal-overlay') && !$('#modal-overlay').hidden;
   render();
+  if (modalOpen) applyCurrentLang($('#modal-sheet'));
+  applyCurrentLang(document.body);
+  try { document.documentElement.setAttribute('lang', getLang()); } catch (e) {}
+  toast(getLang() === 'en' ? 'Language: English' : "Til: o'zbekcha");
 }
+
 function getTheme() { return store.get('theme', 'light'); }
 function applyTheme() {
   try { document.documentElement.setAttribute('data-theme', getTheme() === 'dark' ? 'dark' : 'light'); }
@@ -5276,6 +5700,7 @@ function profileScreen() {
 function openModal(html) {
   $('#modal-sheet').innerHTML = html;
   $('#modal-overlay').hidden = false;
+  applyCurrentLang($('#modal-sheet'));
 }
 function closeModal() {
   stopResendTimer();
@@ -7910,6 +8335,7 @@ function render() {
   if (scr === 'speaking') ensureSpeakState();
   if (scr === 'home' && !isTeacher()) refreshChat();
   syncLoginLock();
+  applyCurrentLang();
 }
 
 /* ==================== CHAT (Ustoz ↔ O'quvchi) ==================== */
@@ -8620,6 +9046,7 @@ $('#modal-overlay').addEventListener('click', function (e) {
   if (!s || !accounts[s.login]) store.del(K.session);
   state.screen = currentUser() ? 'home' : 'login';
   applyTheme();
+  startI18nObserver();
   /* Aniq qurilma modeli (SM-A546B / Redmi Note 12 ...) — bir marta, erta aniqlanadi */
   resolveDeviceModel();
   render();
