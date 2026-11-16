@@ -2732,7 +2732,7 @@ const Notif = (function () {
 
   function showPrompt() {
     if (permission() !== 'default') return false;
-    toastAction(PROMPT_TEXT, PROMPT_BUTTON, request);
+    toastAction(t(PROMPT_TEXT), t(PROMPT_BUTTON), request);
     return true;
   }
 
@@ -3425,6 +3425,10 @@ const I18N_EN = {
   "Slotga o'quvchi tayinlanadi. Ovozli/video topshiriklar botga tushadi (foydalanuvchi ruxsati bilan) — \"Baholash\" orqali 1–10 ball qo'yiladi, ball baholar jurnaliga tushadi va Speaking qarzi 1 ga kamayadi.": "A student is assigned to the slot. Voice/video submissions arrive in the bot (with the user's consent) — use \"Grade\" to give a score from 1 to 10; the score goes to the gradebook and the Speaking debt is reduced by 1.",
   "O'quvchilar repetitorlik to'lovini o'tkazishi uchun karta raqamingiz va ism-familiyangizni kiriting:": "Enter your card number and full name so students can transfer the tutoring fee:",
   "Diqqat:": "Attention:",
+  "so'm": "UZS",
+  "Yangi baholar va xabarlarni o'tkazib yubormaslik uchun bildirishnomalarni yoqing": "Turn on notifications so you don't miss new grades and messages",
+  "Ruxsat berish": "Allow",
+  "Bildirishnomalar o'chirib qoldi": "Notifications were turned off",
   "Speaking qarzingiz: {n} ta": "Your Speaking debt: {n}",
   "Fayllar biriktirish — bir nechta fayl tanlash mumkin (rasm, video, audio, pdf, doc):": "Attach files — you can choose several (image, video, audio, pdf, doc):",
   "— Tanlanmagan —": "— Not selected —",
