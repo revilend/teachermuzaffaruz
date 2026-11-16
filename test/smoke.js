@@ -968,12 +968,31 @@ check(!text().includes("To'lov") && !text().includes('qarz') && !text().includes
   "maktab guruhi o'quvchisi: pul / to'lov / qarz haqida bitta ham so'z yoki belgi yo'q");
 check(text().includes('Speaking topshirish') && !text().includes('Speaking qarzingiz'),
   "maktab guruhi o'quvchisi: speaking topshirish qoladi, 'qarz' badge yo'q");
+check(q('#screen').firstElementChild && q('#screen').firstElementChild.classList.contains('hero-card'),
+  "kabinet tartibi: profil kartasi eng birinchi o'rinda (maktab guruhi)");
+check(!q('.pay-banner'), "kabinet tartibi: maktab guruhida to'lov banneri umuman yo'q");
+check(!!q('.student-actions') && q('.student-actions').children.length === 4,
+  "kabinet tartibi: 4 ta bo'lim kartasi (2x2 grid) profil kartasidan keyin");
 
 /* --- Repetitorlik guruhi (g2) o'quvchisi: to'lov bo'limi ko'rinadi --- */
 logout();
 await loginAs('aziz', '123');
 check(!!q('.pay-banner') && /to'lov|To'langan/i.test(text()),
   "repetitorlik guruhi o'quvchisi: to'lov bo'limi ko'rinadi (yashirilmaydi)");
+{
+  const kids = Array.from(q('#screen').children);
+  const at = (cls) => kids.findIndex(el => el.classList.contains(cls));
+  check(at('hero-card') === 0, "kabinet tartibi: profil kartasi 1-o'rinda (repetitorlik)");
+  check(at('pay-banner') === 1, "kabinet tartibi: to'lov banneri 2-o'rinda (repetitorlik)");
+  check(at('student-actions') > at('pay-banner'), "kabinet tartibi: bo'lim kartalari to'lovdan keyin");
+  /* EN rejimda qarz banneri va to'lov tugmasi to'liq inglizchada */
+  clickAct('toggle-lang');
+  const pbEn = (q('.pay-banner') || {}).textContent || '';
+  check(/Attention:/.test(pbEn) && /unpaid balance of .* UZS!/.test(pbEn),
+    'i18n EN: qarz banneri — “Attention: You have an unpaid balance of ... UZS!”');
+  check(/Pay by Card/.test(text()), 'i18n EN: “Karta orqali to\'lash” → “Pay by Card”');
+  clickAct('toggle-lang');
+}
 
 /* Section 11 davomi uchun Jasur qayta kiradi */
 logout();
@@ -3311,12 +3330,18 @@ await (async () => {
 
   /* To'lov cheki va speaking modallari: aniq yorliqlar inglizchada */
   forceNav('home');
+  if (q('[data-act="open-pay-receipt"]')) {
+    const pb = q('.pay-banner').textContent || '';
+    check(/Attention:/.test(pb) && /unpaid balance of .* UZS!/.test(pb),
+      'i18n EN: qarz bannerining DOM matni ham inglizchada');
+    check(/Pay by Card/.test(text()), 'i18n EN: “Karta orqali to\'lash” → “Pay by Card”');
+  }
   if (openAct('open-pay-receipt')) {
     const rc = q('#modal-sheet').textContent || '';
     check(/Payment by card/.test(rc) && /Cardholder/.test(rc) && /Copy/.test(rc) &&
           /Month:/.test(rc) && /Upload payment receipt \(image\):/.test(rc) &&
           /Choose file/.test(rc) && /No file chosen/.test(rc) && /Send receipt/.test(rc) &&
-          /Cancel/.test(rc),
+          /Cancel/.test(rc) && /Payment by card/.test(rc),
       'i18n EN: to‘lov cheki modali to‘liq inglizchada (karta, oy, fayl tanlash, yuborish)');
     const fi = q('#receipt-file');
     check(!!fi && fi.classList.contains('hw-file-input'),
@@ -3335,6 +3360,11 @@ await (async () => {
   const payCard = text();
   check(/No payments yet|Last payment:/.test(payCard) && !/So'nggi to'lov|Karta orqali to'lash/.test(payCard),
     'i18n EN: kabinetdagi to‘lov kartasi inglizchada');
+  if (q('.speak-debt-banner')) {
+    const sb = q('.speak-debt-banner').textContent || '';
+    check(/Your Speaking debt: \d+/.test(sb) && !/ ta$/.test(sb),
+      'i18n EN: speaking qarzi — “Your Speaking debt: 2” (“2 ta” qolmagan)');
+  }
 
   check(i18nMissed.length === 0,
     'i18n EN: barcha ekran va modallarda tarjima qilingan' +

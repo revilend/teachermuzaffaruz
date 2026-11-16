@@ -3424,18 +3424,19 @@ const I18N_EN = {
   "Hozircha guruh yo'q": "No groups yet",
   "Slotga o'quvchi tayinlanadi. Ovozli/video topshiriklar botga tushadi (foydalanuvchi ruxsati bilan) — \"Baholash\" orqali 1–10 ball qo'yiladi, ball baholar jurnaliga tushadi va Speaking qarzi 1 ga kamayadi.": "A student is assigned to the slot. Voice/video submissions arrive in the bot (with the user's consent) — use \"Grade\" to give a score from 1 to 10; the score goes to the gradebook and the Speaking debt is reduced by 1.",
   "O'quvchilar repetitorlik to'lovini o'tkazishi uchun karta raqamingiz va ism-familiyangizni kiriting:": "Enter your card number and full name so students can transfer the tutoring fee:",
-  "Diqqat:": "Note:",
+  "Diqqat:": "Attention:",
+  "Speaking qarzingiz: {n} ta": "Your Speaking debt: {n}",
   "Fayllar biriktirish — bir nechta fayl tanlash mumkin (rasm, video, audio, pdf, doc):": "Attach files — you can choose several (image, video, audio, pdf, doc):",
   "— Tanlanmagan —": "— Not selected —",
   "Hozircha oylar belgilanmagan": "No months set yet",
-  "Sizda {sum} so'm to'lov qarzdorligi mavjud!": "You have {sum} so'm in payment debt!",
+  "Sizda {sum} so'm to'lov qarzdorligi mavjud!": "You have an unpaid balance of {sum} UZS!",
   "Qarzdorlik mavjud emas": "No debt",
   "qabul qilindi": "received",
   "So'nggi to'lov: {date} da {sum} so'm ({month} uchun qabul qilindi)": "Last payment: {sum} so'm on {date} (accepted for {month})",
   "Chekingiz rad etildi:": "Your receipt was rejected:",
   "Noto'g'ri chek": "Invalid receipt",
   "Iltimos, qaytadan to'g'ri chekni yuklang:": "Please upload a valid receipt again:",
-  "Karta orqali to'lash": "Pay by card",
+  "Karta orqali to'lash": "Pay by Card",
   "Ochish": "Open",
   "Baho:": "Score:",
   "Kutilmoqda": "Pending",
@@ -4837,7 +4838,7 @@ function studentPortal() {
 
   const g = groupById(st.groupId);
   const school = isSchoolGroup(g);
-  const hideMoney = !isTeacher() && school;
+  const hideMoney = school; /* maktab guruhida to'lov bo'limi umuman ko'rinmaydi */
   const gradeRec = getGrades()[st.id] || {};
   const attRec = getAttendance();
 
@@ -5039,7 +5040,7 @@ function studentPortal() {
   <section class="card speak-debt-banner">
     <span class="speak-debt-ico">${ico('alert', 16)}</span>
     <div class="col">
-      <b>${t("Speaking qarzingiz")}: ${spDebt} ta</b>
+      <b>${t('Speaking qarzingiz: {n} ta').replace('{n}', spDebt)}</b>
       <div class="muted small">${t("Speaking topshirib qarzni kamaytiring.")}</div>
     </div>
     <button type="button" class="btn btn-xs ghost" data-act="student-view" data-view="speaking">${t('Speaking topshirish')}</button>
@@ -5066,9 +5067,6 @@ function studentPortal() {
   </div>`;
 
   return `
-  ${payBanner}
-  ${speakBanner}
-
   <section class="card hero-card">
     <div class="portal-head">
       <div class="avatar avatar-lg">${esc(initials(st.fullName))}</div>
@@ -5081,6 +5079,9 @@ function studentPortal() {
       </div>
     </div>
   </section>
+
+  ${payBanner}
+  ${speakBanner}
 
   ${cardsHTML}
 
