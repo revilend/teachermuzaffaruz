@@ -2185,3 +2185,142 @@ html[data-theme="dark"] .auth-card-ico { background: rgba(99, 102, 241, 0.18); }
 
 /* Nofaol (cooldown) tugmalar */
 .btn:disabled, .btn[disabled] { opacity: 0.55; cursor: default; box-shadow: none; }
+
+/* ==================== MOBIL (o'qituvchi Home) JOYLASHUV: header, stat, tez amallar, nav ==================== */
+@media (max-width: 767px) {
+  /* 1. Header — brend chapda, tema + UZ|EN o'ngda; hech narsa yopishmaydi */
+  .app-header .header-inner {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: space-between;
+    column-gap: 10px;
+    row-gap: 0;
+    height: auto;
+    min-height: calc(56px + env(safe-area-inset-top));
+    padding: calc(8px + env(safe-area-inset-top)) 14px 10px;
+  }
+  .app-header .header-inner > .brand-wrap {
+    order: 1;
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    line-height: 1.15;
+  }
+  .app-header .header-inner > .brand,
+  .app-header .header-inner > .brand-wrap > .brand {
+    min-width: 0;
+    font-size: 15.5px;
+    line-height: 1.15;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .app-header .header-inner > .brand { flex: 1 1 auto; display: flex; align-items: center; }
+  .app-header .header-inner .brand-logo {
+    width: 30px;
+    height: 30px;
+    margin-right: 7px;
+    flex: none;
+  }
+  .app-header .header-inner .brand-sub { font-size: 11px; }
+  /* Rol nishoni mobil sarlavhada ortiqcha joy egallaydi — ism hero kartada bor */
+  .app-header .header-inner > .role-badge { display: none; }
+  .app-header .header-inner > .header-controls {
+    order: 2;
+    flex: none;
+    width: auto;
+    margin-left: 0;
+    gap: 8px;
+  }
+  .app-header .header-inner > .auth-head-btn {
+    order: 2;
+    flex: none;
+    margin-left: 0;
+  }
+
+  /* 2. Statistika kartalari — uchtasi ham bir xil balandlik va padding */
+  .stat-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    align-items: stretch;
+  }
+  .stat-grid > .stat {
+    height: 100%;
+    min-height: 118px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 14px 8px;
+    overflow: hidden;
+    text-align: center;
+  }
+  .stat-grid .stat-ico { margin: 0 auto; flex: none; }
+  .stat-grid .stat-num { width: 100%; line-height: 1.05; }
+  .stat-grid .stat-label {
+    width: 100%;
+    font-size: 10.5px;
+    line-height: 1.25;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  /* 3. Tez amallar — 2 ustun, bir xil min-height va 14px padding, matn kesilmaydi */
+  .quick-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    align-items: stretch;
+    grid-auto-rows: 1fr;
+  }
+  .quick {
+    width: 100%;
+    height: auto;
+    min-height: 104px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 10px;
+    overflow: hidden;
+    font-size: 13px;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+  }
+  .quick > span:not(.quick-ico) {
+    display: block;
+    padding-right: 2px;
+    -webkit-line-clamp: unset;
+    overflow: visible;
+    white-space: normal;
+    text-overflow: clip;
+  }
+
+  /* 4. Asosiy konteyner + "Uyga vazifa berish" tugmasi */
+  .app-content {
+    padding-top: calc(66px + env(safe-area-inset-top));
+    padding-left: 14px;
+    padding-right: 14px;
+    padding-bottom: calc(96px + env(safe-area-inset-bottom) + 16px);
+  }
+  body.auth-mode .app-content {
+    padding-bottom: calc(30px + env(safe-area-inset-bottom));
+  }
+  #screen > .btn-block[data-act="open-hw"] { margin: 20px 0 16px; }
+
+  /* 5. Pastki navigatsiya — elementlar bir-biriga tiqilmaydi */
+  .bottom-nav {
+    gap: 2px;
+    padding-bottom: calc(env(safe-area-inset-bottom) + 2px);
+  }
+  .bottom-nav .nav-item {
+    padding: 8px 2px 9px;
+    gap: 4px;
+    overflow: hidden;
+  }
+  .bottom-nav .nav-item span { font-size: 10px; letter-spacing: -0.3px; }
+}
