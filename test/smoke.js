@@ -3371,6 +3371,78 @@ await (async () => {
     (i18nMissed.length ? ' — qoldi: ' + i18nMissed.slice(0, 25).join(' | ') : ''));
   win.localStorage.setItem('app_lang', JSON.stringify('uz'));
 
+  /* ============ 36. CLOUDFLARE TURNSTILE ============ */
+  logout();
+  const prevFetchTs = win.fetch;
+  const prevTurnstile = win.turnstile;
+  let tsVerifyOk = true;
+  const tsCalls = { render: [], reset: 0 };
+  const tsVerifyCalls = [];
+  win.fetch = function (url, opts) {
+    if (String(url).indexOf('/verify-turnstile') >= 0) {
+      tsVerifyCalls.push({ url: String(url), opts: opts });
+      const okFlag = tsVerifyOk;
+      return Promise.resolve({ ok: true, status: 200, json: function () { return Promise.resolve({ ok: okFlag }); } });
+    }
+    return prevFetchTs ? prevFetchTs(url, opts) : Promise.resolve({ ok: true, status: 200 });
+  };
+
+  /* Skript yuklanmagan holat: eski matematik CAPTCHA fallback ko'rinadi */
+  delete win.turnstile;
+  click('[data-act="auth-login-open"]');
+  await new Promise(r => setTimeout(r, 80));
+  const tsHost = q('#turnstile-box');
+  const tsFallback = q('#login-captcha-fallback');
+  check(!!tsHost && !tsHost.__tsRendered && !!tsFallback && !tsFallback.hidden,
+    'Turnstile: skript yo‘q bo‘lsa matematik CAPTCHA fallback ko‘rinadi');
+
+  /* Skript mavjud: vidjet render bo'ladi, fallback yashiriladi */
+  win.turnstile = {
+    render: function (host, opts) {
+      tsCalls.render.push({ host: host, opts: opts });
+      setTimeout(function () { if (opts && opts.callback) opts.callback('ts-token-123'); }, 0);
+      return 'widget-1';
+    },
+    reset: function () { tsCalls.reset++; }
+  };
+  click('[data-act="auth-login-open"]');
+  await new Promise(r => setTimeout(r, 150));
+  const tsRender = tsCalls.render[0] || {};
+  check(!!tsRender.host && tsRender.host.id === 'turnstile-box' &&
+        tsRender.opts && tsRender.opts.sitekey === '0x4AAAAAAGDZyGmTRBp6DcVs' &&
+        (tsRender.opts.theme === 'light' || tsRender.opts.theme === 'dark'),
+    'Turnstile: login ekranida vidjet sayt kaliti va mavzu bilan joylashtiriladi');
+  check(!!q('#login-captcha-fallback') && q('#login-captcha-fallback').hidden === true,
+    'Turnstile: vidjet chizilganda matematik CAPTCHA yashiriladi');
+
+  /* 1) Server "ok:false" qaytarsa — reset + ogohlantirish */
+  tsVerifyOk = false;
+  setVal('#login-input', 'aziz');
+  setVal('#password-input', '123');
+  await new Promise(r => setTimeout(r, 60));
+  clickAct('do-login');
+  await new Promise(r => setTimeout(r, 300));
+  check(/Tekshiruv tasdiqlanmadi/.test((q('#login-error') || {}).textContent || ''),
+    'Turnstile: token tasdiqlanmasa kirish bloklanadi va xabar chiqadi');
+  check(tsCalls.reset > 0 && tsVerifyCalls.length > 0 &&
+        String(tsVerifyCalls[0].url).indexOf('/verify-turnstile') >= 0 &&
+        tsVerifyCalls[0].opts && tsVerifyCalls[0].opts.method === 'POST' &&
+        JSON.parse(tsVerifyCalls[0].opts.body || '{}').token === 'ts-token-123',
+    'Turnstile: token POST { token } bilan verify URL’ga yuboriladi, xatoda vidjet reset qilinadi');
+
+  /* 2) "ok:true" bo'lsa kirish davom etadi */
+  tsVerifyOk = true;
+  if (tsRender.opts && tsRender.opts.callback) tsRender.opts.callback('ts-token-123');
+  setVal('#login-input', 'restore1');
+  setVal('#password-input', '9876');
+  await new Promise(r => setTimeout(r, 80));
+  clickAct('do-login');
+  check(await until(() => text().includes('Restored Student'), 6000),
+    'Turnstile: token serverda tasdiqlangach login muvaffaqiyatli yakunlanadi');
+
+  win.turnstile = prevTurnstile;
+  win.fetch = prevFetchTs;
+
   console.log(failed ? '\n' + failed + ' ta test YIQILDI' : '\nBarcha testlar o\'tdi ✓');
   process.exit(failed ? 1 : 0);
 })();

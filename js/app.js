@@ -178,6 +178,7 @@ const state = {
   hwAttachments: [],
   payMonth: '',
   captcha: null,
+  turnstileToken: '',
   pending2fa: null,
   subGroup: 'all',
   studentView: '',
@@ -3425,6 +3426,8 @@ const I18N_EN = {
   "Slotga o'quvchi tayinlanadi. Ovozli/video topshiriklar botga tushadi (foydalanuvchi ruxsati bilan) — \"Baholash\" orqali 1–10 ball qo'yiladi, ball baholar jurnaliga tushadi va Speaking qarzi 1 ga kamayadi.": "A student is assigned to the slot. Voice/video submissions arrive in the bot (with the user's consent) — use \"Grade\" to give a score from 1 to 10; the score goes to the gradebook and the Speaking debt is reduced by 1.",
   "O'quvchilar repetitorlik to'lovini o'tkazishi uchun karta raqamingiz va ism-familiyangizni kiriting:": "Enter your card number and full name so students can transfer the tutoring fee:",
   "Diqqat:": "Attention:",
+  "Tekshiruvni yakunlang": "Complete the verification",
+  "Tekshiruv tasdiqlanmadi — qayta urinib ko'ring": "Verification failed — please try again",
   "so'm": "UZS",
   "Yangi baholar va xabarlarni o'tkazib yubormaslik uchun bildirishnomalarni yoqing": "Turn on notifications so you don't miss new grades and messages",
   "Ruxsat berish": "Allow",
@@ -3778,7 +3781,95 @@ function renderTopNavTabs() {
 }
 
 /* ==================== KIRISH EKRANI (login / parol) ==================== */
-/* ==================== CAPTCHA (matematik + Canvas) ==================== */
+/* ==================== CLOUDFLARE TURNSTILE ==================== */
+const TURNSTILE_SITE_KEY = '0x4AAAAAAGDZyGmTRBp6DcVs';
+const TURNSTILE_VERIFY_URL = 'https://teachermuzaffar-upload.amirovmuzaffar070.workers.dev/verify-turnstile';
+
+function turnstileReady() {
+  return !!(window.turnstile && typeof window.turnstile.render === 'function');
+}
+function turnstileTheme() { return getTheme() === 'dark' ? 'dark' : 'light'; }
+function turnstileHost(kind) {
+  return kind === 'recover' ? $('#recover-turnstile-box') : $('#turnstile-box');
+}
+function turnstileFallback(kind) {
+  return kind === 'recover' ? $('#recover-captcha-fallback') : $('#login-captcha-fallback');
+}
+/* Vidjetni joylashtiradi. Skript hali yuklanmagan bo'lsa qisqa kutadi;
+   umuman yuklanmasa — eski matematik CAPTCHA fallback bo'lib qoladi. */
+function mountTurnstile(kind) {
+  const host = turnstileHost(kind);
+  if (!host) return false;
+  const tryRender = function () {
+    if (!document.body || !document.body.contains(host)) return true; /* boshqa ekranga o'tilgan */
+    return renderTurnstile(kind);
+  };
+  if (tryRender()) return true;
+  if (!host.__tsWait) {
+    let tries = 0;
+    host.__tsWait = setInterval(function () {
+      if (tryRender() || ++tries > 30) {
+        clearInterval(host.__tsWait);
+        host.__tsWait = null;
+      }
+    }, 200);
+  }
+  return false;
+}
+function renderTurnstile(kind) {
+  const host = turnstileHost(kind);
+  const fallback = turnstileFallback(kind);
+  if (!host || !turnstileReady()) return false;
+  if (host.__tsRendered) return true;
+  try {
+    const id = window.turnstile.render(host, {
+      sitekey: TURNSTILE_SITE_KEY,
+      theme: turnstileTheme(),
+      callback: function (token) { state.turnstileToken = String(token || ''); },
+      'expired-callback': function () { state.turnstileToken = ''; },
+      'timeout-callback': function () { state.turnstileToken = ''; },
+      'error-callback': function () { state.turnstileToken = ''; }
+    });
+    host.__tsRendered = true;
+    host.__tsId = id;
+    host.hidden = false;
+    if (fallback) fallback.hidden = true;
+    return true;
+  } catch (e) {
+    console.warn('[turnstile] render:', (e && e.message) || e);
+    return false;
+  }
+}
+function turnstileInUse(kind) {
+  const host = turnstileHost(kind);
+  return !!(host && host.__tsRendered);
+}
+function resetTurnstile(kind) {
+  state.turnstileToken = '';
+  try {
+    const host = turnstileHost(kind);
+    if (window.turnstile && typeof window.turnstile.reset === 'function') {
+      window.turnstile.reset(host && host.__tsId != null ? host.__tsId : undefined);
+    }
+  } catch (e) { console.warn('[turnstile] reset:', (e && e.message) || e); }
+}
+async function verifyTurnstileToken(token) {
+  try {
+    const res = await fetch(TURNSTILE_VERIFY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: String(token || '') })
+    });
+    let data = null;
+    try { data = await res.json(); } catch (e) { data = null; }
+    return !!(res && res.ok && data && data.ok === true);
+  } catch (e) {
+    console.warn('[turnstile] verify:', (e && e.message) || e);
+    return false;
+  }
+}
+
+/* ==================== CAPTCHA (matematik + Canvas, fallback) ==================== */
 function makeCaptcha() {
   if (Math.random() < 0.5) {
     const c = 2 + Math.floor(Math.random() * 4);
@@ -3794,6 +3885,7 @@ function makeCaptcha() {
 /* Canvas mavjud bo'lsa misol rasmga chiziladi, aks holda matn ko'rinadi.
    Ikkala holatda ham savol canvas'ning data-q atributida turadi. */
 function paintCaptcha() {
+  mountTurnstile('login');
   const box = $('#captcha-canvas');
   const fallback = $('#captcha-text');
   const cap = state.captcha || (state.captcha = makeCaptcha());
@@ -3927,13 +4019,16 @@ function loginFormScreen() {
         </div>
         <input type="text" name="bot_check_field" id="login-bot-hp" style="display:none !important; position:absolute; left:-9999px;" tabindex="-1" autocomplete="off" aria-hidden="true" />
 
-        <label class="field-label" for="login-captcha">${t('Tekshiruv (CAPTCHA)')}</label>
-        <div class="captcha-row">
-          <canvas id="captcha-canvas" width="170" height="44" data-q="" aria-label="Tekshiruv misoli"></canvas>
-          <span class="captcha-text" id="captcha-text">—</span>
-          <button type="button" class="icon-btn" data-act="captcha-refresh" aria-label="CAPTCHA yangilash" title="Yangi misol">${ico('refresh', 16)}</button>
+        <div id="turnstile-box" class="turnstile-box" aria-label="Cloudflare Turnstile"></div>
+        <div id="login-captcha-fallback" class="captcha-fallback">
+          <label class="field-label" for="login-captcha">${t('Tekshiruv (CAPTCHA)')}</label>
+          <div class="captcha-row">
+            <canvas id="captcha-canvas" width="170" height="44" data-q="" aria-label="Tekshiruv misoli"></canvas>
+            <span class="captcha-text" id="captcha-text">—</span>
+            <button type="button" class="icon-btn" data-act="captcha-refresh" aria-label="CAPTCHA yangilash" title="Yangi misol">${ico('refresh', 16)}</button>
+          </div>
+          <input class="input" id="login-captcha" inputmode="numeric" autocomplete="off" placeholder="${t('Javob')}" />
         </div>
-        <input class="input" id="login-captcha" inputmode="numeric" autocomplete="off" placeholder="${t('Javob')}" />
 
         <div class="field-error${state.forcedOut ? ' show' : ''}" id="login-error">${state.forcedOut ? 'Siz ushbu qurilmadan chiqarildingiz!' : ''}</div>
         <button type="button" class="btn btn-primary btn-block" data-act="do-login">${t('Tizimga kirish')}</button>
@@ -3979,13 +4074,16 @@ function recoverScreen() {
                value="${esc(state.resetContact || '')}"
                placeholder="${isPw ? 'Login' : t('+998 90 123 45 67 yoki ism@gmail.com')}" />
 
-        ${isPw ? `<label class="field-label" for="fr-captcha-input">${t('Tekshiruv (CAPTCHA)')}</label>
-        <div class="captcha-row">
-          <canvas id="fr-captcha" class="recover-captcha" width="150" height="44" aria-label="Tekshiruv kodi"></canvas>
-          <span class="captcha-text" id="fr-captcha-text">—</span>
-          <button type="button" class="icon-btn" data-act="recover-captcha-refresh" aria-label="CAPTCHA yangilash" title="Yangi kod">${ico('refresh', 16)}</button>
-        </div>
-        <input class="input" id="fr-captcha-input" inputmode="numeric" maxlength="5" autocomplete="off" placeholder="${t('5 xonali kod')}" />` : ''}
+        ${isPw ? `<div id="recover-turnstile-box" class="turnstile-box" aria-label="Cloudflare Turnstile"></div>
+        <div id="recover-captcha-fallback" class="captcha-fallback">
+          <label class="field-label" for="fr-captcha-input">${t('Tekshiruv (CAPTCHA)')}</label>
+          <div class="captcha-row">
+            <canvas id="fr-captcha" class="recover-captcha" width="150" height="44" aria-label="Tekshiruv kodi"></canvas>
+            <span class="captcha-text" id="fr-captcha-text">—</span>
+            <button type="button" class="icon-btn" data-act="recover-captcha-refresh" aria-label="CAPTCHA yangilash" title="Yangi kod">${ico('refresh', 16)}</button>
+          </div>
+          <input class="input" id="fr-captcha-input" inputmode="numeric" maxlength="5" autocomplete="off" placeholder="${t('5 xonali kod')}" />
+        </div>` : ''}
 
         <div class="field-error" id="fp-error"></div>
         ${state.resetDone ? `<div class="field-hint" id="fp-done">${esc(state.resetDone)}</div>` : ''}
@@ -4020,6 +4118,7 @@ function makeRecoverCaptcha() {
 }
 
 function paintRecoverCaptcha() {
+  mountTurnstile('recover');
   const box = $('#fr-captcha');
   const fallback = $('#fr-captcha-text');
   const cap = state.recoverCaptcha || (state.recoverCaptcha = makeRecoverCaptcha());
@@ -7614,7 +7713,7 @@ function telegramInitDataOK() {
   } catch (e) { return false; }
 }
 
-function doLogin() {
+async function doLogin() {
   /* Bot honeypot: bu maydon to'ldirilgan bo'lsa — jimjimrad rad etiladi */
   const hp = $('#login-bot-hp');
   if (hp && hp.value) return;
@@ -7638,15 +7737,26 @@ function doLogin() {
 
   if (!login || !pass) { fail("Login va parolni kiriting"); return; }
 
-  /* CAPTCHA: noto'g'ri javobda kirish bloklanadi va yangi misol beriladi */
-  const capEl = $('#login-captcha');
-  const capExpected = String((state.captcha && state.captcha.answer) || '');
-  const capGiven = String((capEl && capEl.value) || '').trim();
-  if (!capExpected || capGiven !== capExpected) {
-    refreshCaptcha(true);
-    fail("Tekshiruv javobi noto'g'ri — yangi misolni yeching");
-    if (capEl) capEl.focus();
-    return;
+  /* CAPTCHA: Turnstile mavjud bo'lsa token serverda tekshiriladi,
+     skript yuklanmagan bo'lsa eski matematik savol ishlaydi. */
+  if (turnstileInUse('login')) {
+    if (!state.turnstileToken) { fail('Tekshiruvni yakunlang'); return; }
+    const okToken = await verifyTurnstileToken(state.turnstileToken);
+    if (!okToken) {
+      resetTurnstile('login');
+      fail("Tekshiruv tasdiqlanmadi — qayta urinib ko'ring");
+      return;
+    }
+  } else {
+    const capEl = $('#login-captcha');
+    const capExpected = String((state.captcha && state.captcha.answer) || '');
+    const capGiven = String((capEl && capEl.value) || '').trim();
+    if (!capExpected || capGiven !== capExpected) {
+      refreshCaptcha(true);
+      fail("Tekshiruv javobi noto'g'ri — yangi misolni yeching");
+      if (capEl) capEl.focus();
+      return;
+    }
   }
   if (err) { err.textContent = ''; err.classList.remove('show'); }
 
@@ -8098,13 +8208,23 @@ async function sendResetCode() {
     return;
   }
 
-  /* 2-tanlov: 5 xonali CAPTCHA majburiy */
-  const capExpected = String((state.recoverCaptcha && state.recoverCaptcha.answer) || '');
-  const capGiven = String((($('#fr-captcha-input') || {}).value || '')).trim();
-  if (!capExpected || capGiven !== capExpected) {
-    refreshRecoverCaptcha();
-    resetError("Tekshiruv kodi noto'g'ri — yangi kodni yeching");
-    return;
+  /* 2-tanlov: Turnstile (bo'lsa) yoki 5 xonali CAPTCHA majburiy */
+  if (turnstileInUse('recover')) {
+    if (!state.turnstileToken) { resetError('Tekshiruvni yakunlang'); return; }
+    const okToken = await verifyTurnstileToken(state.turnstileToken);
+    if (!okToken) {
+      resetTurnstile('recover');
+      resetError("Tekshiruv tasdiqlanmadi — qayta urinib ko'ring");
+      return;
+    }
+  } else {
+    const capExpected = String((state.recoverCaptcha && state.recoverCaptcha.answer) || '');
+    const capGiven = String((($('#fr-captcha-input') || {}).value || '')).trim();
+    if (!capExpected || capGiven !== capExpected) {
+      refreshRecoverCaptcha();
+      resetError("Tekshiruv kodi noto'g'ri — yangi kodni yeching");
+      return;
+    }
   }
 
   const digits = raw.replace(/\D/g, '');
@@ -8549,6 +8669,7 @@ function render() {
   renderTopNavControls();
   $('#screen').innerHTML = (SCREENS[scr] || loginScreen)();
   if (scr === 'login') {
+    state.turnstileToken = '';
     if (authStep() === 'recover') { paintRecoverCaptcha(); startResendTimer(); }
     else if (authStep() === 'login') paintCaptcha();
   }
