@@ -134,6 +134,7 @@ function createStub(seed) {
   const storageCalls = [];
   const removeCalls = [];
   let storageError = null;
+  let bucketPublic = true;
   const bucket = {
     upload: function (path, file, opts) {
       storageCalls.push({ path: path, file: file, opts: opts || {} });
@@ -151,7 +152,12 @@ function createStub(seed) {
     from: from,
     channel: function () { return channel; },
     removeChannel: function () { return Promise.resolve('ok'); },
-    storage: { from: function () { return bucket; } },
+    storage: {
+      from: function () { return bucket; },
+      getBucket: function (id) {
+        return Promise.resolve({ data: { id: id, name: id, public: bucketPublic }, error: null });
+      }
+    },
     auth: {
       getSession: function () { return Promise.resolve({ data: { session: null }, error: null }); },
       signOut: function () { return Promise.resolve({ error: null }); }
@@ -164,6 +170,7 @@ function createStub(seed) {
     rows: table,
     storageCalls: storageCalls,
     removeCalls: removeCalls,
+    setBucketPublic: function (v) { bucketPublic = !!v; },
     setStorageError: function (err) { storageError = err || null; },
     reset: function (name) { db[name] = []; seq[name] = 0; }
   };

@@ -3032,7 +3032,39 @@ await (async () => {
         .some(p => String((p || [])[0] || '').indexOf('submissions/') === 0),
     "topshiriq: ustoz o‘chirganda Storage obyekti ham tozalandi");
 
-  /* (h) Supabase SQL: homework-media bucket + anon storage policy'lari */
+  /* (h) Diagnostika: bucket public, Storage policy'lari, jadval ustunlari */
+  win.fetch = function () { return Promise.resolve({ ok: true, status: 200 }); };
+  forceNav('profile');
+  check(!!q('[data-act="run-diagnostics"]'),
+    "diagnostika: ustoz profilida “Diagnostika” tugmasi bor");
+  clickAct('run-diagnostics');
+  check(await until(() => qa('#diag-list .diag-row').length >= 5, 4500),
+    "diagnostika: tekshiruv natijalari aniq ro‘yxat bo‘lib chiqadi");
+  const diagRows = qa('#diag-list .diag-row');
+  check(diagRows.length >= 5 && diagRows.every(r => !!r.querySelector('svg')),
+    "diagnostika: har bir qatorda SVG ikonka (emoji yo‘q)");
+  check(!!q('#diag-list .diag-summary.is-ok') &&
+        /Hammasi joyida/.test((q('#diag-list .diag-summary') || {}).textContent || ''),
+    "diagnostika: xatosiz holatda “Hammasi joyida” xulosasi");
+  const diagLabels = qa('#diag-list .diag-row b').map(b => b.textContent).join(' | ');
+  check(diagLabels.indexOf('homework_submissions') >= 0 &&
+        diagLabels.indexOf('homework_upload_allowed') >= 0 &&
+        diagLabels.indexOf('homework-media') >= 0,
+    "diagnostika: jadval ustunlari va bucket nomi ro‘yxatda ko‘rinadi");
+  check((cloudStub.storageCalls || []).some(c => String(c.path).indexOf('submissions/_diagnostika/') === 0),
+    "diagnostika: yozish policy‘si kichik test fayl bilan sinaladi");
+  check((cloudStub.removeCalls || []).some(p => String((p || [])[0] || '').indexOf('submissions/_diagnostika/') === 0),
+    "diagnostika: test fayl o‘chiriladi (DELETE policy)");
+  cloudStub.setBucketPublic(false);
+  clickAct('diag-rerun');
+  check(await until(() => !!q('#diag-list .diag-summary.is-err'), 4500),
+    "diagnostika: bucket private bo‘lsa muammo sifatida ko‘rsatiladi");
+  check(/PRIVATE/.test((q('#diag-list') || {}).textContent || ''),
+    "diagnostika: private bucket uchun aniq maslahat beriladi");
+  cloudStub.setBucketPublic(true);
+  click('[data-act="close-modal"]');
+
+  /* (i) Supabase SQL: homework-media bucket + anon storage policy'lari */
   const sqlText = fs.readFileSync(path.join(root, 'supabase.sql'), 'utf8');
   check(/insert into storage\.buckets[\s\S]*?'homework-media'[\s\S]*?true/i.test(sqlText),
     'sql: homework-media bucket public sifatida yaratiladi (mavjud bo‘lsa public=true qilinadi)');

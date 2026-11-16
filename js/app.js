@@ -1294,6 +1294,103 @@ const CloudSync = (function () {
     }
     throw new Error('Baza (homework_submissions INSERT): ' + apiErrText(lastErr));
   }
+  /* --- Diagnostika: bucket public holati, Storage policy'lari, jadval ustunlari --- */
+  async function diagnostics() {
+    const out = [];
+    const add = function (ok, label, detail) {
+      out.push({ ok: !!ok, label: label, detail: String(detail || '') });
+    };
+    if (!ready()) {
+      add(false, 'Supabase ulanishi', 'URL yoki anon kalit topilmadi (js/config.js)');
+      return out;
+    }
+    add(true, 'Supabase ulanishi', 'anon kalit bilan client yaratildi');
+
+    /* 1) homework_submissions ustunlari */
+    const subCols = ['student_id', 'homework_id', 'student_name', 'group_name',
+      'files', 'note', 'status', 'teacher_comment', 'commented_at'];
+    try {
+      const res = await client.from('homework_submissions').select(subCols.join(',')).limit(1);
+      if (res.error) add(false, 'homework_submissions ustunlari', apiErrText(res.error));
+      else add(true, 'homework_submissions ustunlari', subCols.join(', ') + ' — joyida');
+    } catch (e) { add(false, 'homework_submissions ustunlari', apiErrText(e)); }
+
+    /* 2) students.homework_upload_allowed */
+    try {
+      const res = await client.from('students').select('homework_upload_allowed').limit(1);
+      if (res.error) add(false, 'students.homework_upload_allowed', apiErrText(res.error));
+      else add(true, 'students.homework_upload_allowed', 'ustoz ruxsati ustuni joyida');
+    } catch (e) { add(false, 'students.homework_upload_allowed', apiErrText(e)); }
+
+    /* 3) Bucket mavjudligi va public holati */
+    let bucketName = null;
+    for (let i = 0; i < MEDIA_BUCKETS.length; i++) {
+      const b = MEDIA_BUCKETS[i];
+      try {
+        const res = await client.storage.getBucket(b);
+        if (!res.error && res.data) {
+          bucketName = b;
+          add(!!res.data.public, "Storage bucket '" + b + "' public",
+            res.data.public
+              ? 'bucket public — yuklangan fayllar URL orqali ochiladi'
+              : "bucket PRIVATE — Storage bo'limida bucket'ni Public qiling");
+          break;
+        }
+        if (res.error && i === MEDIA_BUCKETS.length - 1) {
+          add(false, "Storage bucket '" + b + "'", apiErrText(res.error));
+        }
+      } catch (e) {
+        if (i === MEDIA_BUCKETS.length - 1) add(false, "Storage bucket '" + b + "'", apiErrText(e));
+      }
+    }
+    if (!bucketName) {
+      add(false, 'Storage bucket', MEDIA_BUCKETS.join(' / ') + " topilmadi — supabase.sql 17-bo'limini Run qiling");
+      return out;
+    }
+
+    /* 4) Yozish (INSERT policy): kichik test fayl */
+    const diagPath = 'submissions/_diagnostika/' + Date.now() + '_diag.txt';
+    const testFile = new Blob(['diag'], { type: 'text/plain' });
+    let canWrite = false;
+    try {
+      const up = await client.storage.from(bucketName).upload(diagPath, testFile, {
+        cacheControl: '60', upsert: true, contentType: 'text/plain', headers: { 'x-upsert': 'true' }
+      });
+      canWrite = !up.error;
+      add(canWrite, 'Storage yozish (INSERT policy)',
+        canWrite ? 'test fayl muvaffaqiyatli yuklandi' : apiErrText(up.error));
+    } catch (e) {
+      add(false, 'Storage yozish (INSERT policy)', apiErrText(e));
+    }
+
+    if (canWrite) {
+      /* 5) O'qish: public URL ochiladimi */
+      const pub = client.storage.from(bucketName).getPublicUrl(diagPath);
+      const url = (pub && pub.data && pub.data.publicUrl) || '';
+      if (!url) {
+        add(false, "Storage o'qish (public URL)", 'public URL olinmadi');
+      } else {
+        try {
+          const r = await fetch(url + (url.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now(),
+            { cache: 'no-store' });
+          add(r.ok, "Storage o'qish (public URL)",
+            r.ok ? 'HTTP ' + r.status : 'HTTP ' + r.status + " — bucket public emas yoki SELECT policy yo'q");
+        } catch (e) {
+          add(false, "Storage o'qish (public URL)", 'Failed to fetch — CORS yoki bucket public emas');
+        }
+      }
+      /* 6) O'chirish (DELETE policy) + test faylni tozalash */
+      try {
+        const rm = await client.storage.from(bucketName).remove([diagPath]);
+        add(!rm.error, 'Storage ochirish (DELETE policy)',
+          rm.error ? apiErrText(rm.error) : 'test fayl tozalandi');
+      } catch (e) {
+        add(false, 'Storage ochirish (DELETE policy)', apiErrText(e));
+      }
+    }
+    return out;
+  }
+
   /* Topshiriq yozuvini o'chirish: avval Storage obyektlari, keyin jadval qatori */
   async function deleteSubmission(id, files) {
     if (!ready() || id == null) throw new Error('Baza: topshiriq id topilmadi');
@@ -1931,6 +2028,7 @@ const CloudSync = (function () {
     saveHomeworkSubmission: saveHomeworkSubmission,
     commentSubmission: commentSubmission,
     deleteSubmission: deleteSubmission,
+    diagnostics: diagnostics,
     uploadSubmissionFile: uploadSubmissionFile,
     removeHomeworkMedia: removeHomeworkMedia,
     queueMessages: queueMessages,
@@ -5156,6 +5254,13 @@ function profileScreen() {
     <button type="button" class="btn btn-primary btn-block" data-act="save-card-settings" style="margin-top:10px">${ico('save', 14)} Kartani saqlash</button>
   </div>` : ''}
 
+  ${isTeacher() ? `
+  <div class="section-title">${ico('shield', 15)} Diagnostika</div>
+  <div class="card">
+    <div class="muted small">Uyga vazifa yuklash ishlamasa: homework-media bucket public holati, Storage policy'lari va homework_submissions ustunlari shu yerda tekshiriladi.</div>
+    <button type="button" class="btn btn-ghost btn-block" data-act="run-diagnostics" style="margin-top:8px">${ico('shield', 16)} Diagnostikani ishga tushirish</button>
+  </div>` : ''}
+
   ${sessionsSectionHTML()}
 
   <div class="section-title">${t('Maxfiylik')}</div>
@@ -5672,6 +5777,53 @@ function saveChangePwd() {
   closeModal();
   render();
   toast("Parol o'zgartirildi ✓");
+}
+
+/* ==================== DIAGNOSTIKA (faqat ustoz) ==================== */
+function diagRowHTML(r) {
+  return `<div class="diag-row ${r.ok ? 'is-ok' : 'is-err'}">
+    <span class="diag-ico">${r.ok ? ico('checkCircle', 15) : ico('alert', 15)}</span>
+    <span class="diag-body">
+      <b>${esc(r.label)}</b>
+      ${r.detail ? `<span class="diag-detail">${esc(r.detail)}</span>` : ''}
+    </span>
+  </div>`;
+}
+
+async function fillDiagnostics() {
+  const box = $('#diag-list');
+  if (!box) return;
+  box.innerHTML = '<div class="muted small">Tekshirilmoqda...</div>';
+  let rows = [];
+  try {
+    rows = await CloudSync.diagnostics();
+  } catch (e) {
+    rows = [{ ok: false, label: 'Diagnostika', detail: (e && e.message) || 'xatolik' }];
+  }
+  const target = $('#diag-list');
+  if (!target) return;
+  const fails = rows.filter(function (r) { return !r.ok; }).length;
+  target.innerHTML = (fails
+    ? `<div class="diag-summary is-err">${ico('alert', 15)} ${fails} ta muammo topildi</div>`
+    : `<div class="diag-summary is-ok">${ico('checkCircle', 15)} Hammasi joyida — yuklash ishlashi kerak</div>`)
+    + rows.map(diagRowHTML).join('');
+}
+
+async function openDiagnostics() {
+  if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+  openModal(`
+    <div class="modal-head">
+      <h3>${ico('shield', 16)} Diagnostika</h3>
+      <button type="button" class="icon-btn" data-act="close-modal" aria-label="Yopish">✕</button>
+    </div>
+    <div class="muted small">Bucket public holati, Storage policy'lari (yozish/o'qish/o'chirish) va homework_submissions ustunlari tekshiriladi.</div>
+    <div id="diag-list" class="diag-list"><div class="muted small">Tekshirilmoqda...</div></div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" data-act="close-modal">Yopish</button>
+      <button type="button" class="btn btn-primary" data-act="diag-rerun">${ico('refresh', 15)} Qayta tekshirish</button>
+    </div>
+  `);
+  await fillDiagnostics();
 }
 
 /* ==================== O'CHIRISH (tasdiq bilan, faqat ustoz) ==================== */
@@ -8143,6 +8295,8 @@ document.addEventListener('click', function (e) {
     'hw-del-sub': function () { openDeleteSubmission(btn.getAttribute('data-sub')); },
     'sub-del': function () { openDeleteSubmission(btn.getAttribute('data-sub')); },
     'do-del-sub': function () { doDeleteSubmission(btn.getAttribute('data-sub')); },
+    'run-diagnostics': function () { openDiagnostics(); },
+    'diag-rerun': function () { fillDiagnostics(); },
     'sub-group': function () { state.subGroup = btn.getAttribute('data-gid') || 'all'; render(); },
     'sub-comment': function () { sendSubmissionComment(btn); },
     'save-reset': function () { saveResetPwd(btn.getAttribute('data-sid')); },
