@@ -84,6 +84,9 @@ create policy "demo homework all" on public.homework
 --    ovozli topshirishga ruxsat bayrog'i
 alter table public.students add column if not exists telegram_chat_id bigint;
 alter table public.students add column if not exists voice_allowed boolean not null default true;
+-- Saytda speaking topshirish alohida ruxsat: true bo'lsagina brauzerda video yoziladi.
+-- false yoki ustun bo'lmasa — o'quvchi Telegram botga yo'naltiriladi.
+alter table public.students add column if not exists web_speaking_allowed boolean not null default false;
 alter table public.students add column if not exists payment_debt integer not null default 0;
 
 -- Guruh oylik tolamasi
@@ -285,6 +288,12 @@ alter table public.payment_receipts add column if not exists admin_messages json
 -- payments_channel_id sozlamasi
 insert into public.bot_settings (key, value) values
   ('payments_channel_id', '')
+on conflict (key) do nothing;
+
+-- Ustoz Telegram ID (ixtiyoriy): saytga speaking videosi kelganda
+-- telegram_outbox orqali ustozga xabar yuborish uchun shu yerga yozing.
+insert into public.bot_settings (key, value) values
+  ('teacher_telegram_id', '')
 on conflict (key) do nothing;
 
 -- ============================================================

@@ -361,6 +361,7 @@ function fmtAvg(v) { return v == null ? '—' : v.toFixed(1); }
    (masalan 'https://api.teachermuzaffar.uz') — TURNSTILE_VERIFY_URL ham shundan hosil bo'ladi. */
 const R2_UPLOAD_URL = 'https://teachermuzaffar-upload.amirovmuzaffar070.workers.dev';
 const R2_PUBLIC_BASE = 'https://pub-836df3817ab64cee9075b55d51fe6061.r2.dev/';
+const SPEAKING_BOT_URL = 'https://t.me/uzbekspeakingcheckbot';
 function isR2Url(url) {
   return String(url || '').indexOf(R2_PUBLIC_BASE) === 0;
 }
@@ -481,6 +482,7 @@ const CloudSync = (function () {
       last_payment_info: s.lastPaymentInfo || null,
       last_paid_month: s.lastPaidMonth || null,
       voice_allowed: s.voiceAllowed === true,
+      web_speaking_allowed: s.webSpeakingAllowed === true,
       homework_upload_allowed: s.homeworkUploadAllowed === true
     };
     /* Kontaktlar ham faqat mavjud bo'lsa yoziladi — eski qiymat o'chmasin */
@@ -659,6 +661,25 @@ const CloudSync = (function () {
     return res.data && res.data[0] ? res.data[0] : null;
   }
 
+  /* Sayt videosini o'chirish: avval R2 fayli (DELETE ?path=), keyin Supabase qatori.
+     Baholash bu funksiyani chaqirmaydi — video faqat ustoz "O'chirish"ni tasdiqlaganda o'chadi. */
+  async function deleteSpeakingSubmission(dbId, mediaUrl) {
+    const out = { fileDeleted: false, rowDeleted: false };
+    if (mediaUrl) out.fileDeleted = await deleteFileFromR2(mediaUrl);
+    if (!ready() || !hasTg || dbId == null) {
+      out.rowDeleted = dbId == null;
+      return out;
+    }
+    try {
+      const res = await client.from('speaking_submissions').delete().eq('id', dbId);
+      if (res.error && !missing(res.error)) throw res.error;
+      out.rowDeleted = true;
+    } catch (e) {
+      console.warn('[cloud] speaking del:', (e && e.message) || e);
+    }
+    return out;
+  }
+
   async function pushSpeakingGrade(localId) {
     if (!ready() || !hasTg) return;
     const sub = store.get(K.tgsubs, []).filter(function (x) { return x.id === localId; })[0];
@@ -819,6 +840,7 @@ const CloudSync = (function () {
           feePeriod: r.fee_period || '',
           telegramChatId: r.telegram_chat_id == null ? null : Number(r.telegram_chat_id),
           voiceAllowed: r.voice_allowed === true,
+          webSpeakingAllowed: r.web_speaking_allowed === true,
           homeworkUploadAllowed: r.homework_upload_allowed === true,
           lastDevice: r.last_device || '',
           lastSeen: r.last_seen || null,
@@ -943,6 +965,7 @@ const CloudSync = (function () {
       feePeriod: row.fee_period || '',
       telegramChatId: row.telegram_chat_id == null ? null : Number(row.telegram_chat_id),
       voiceAllowed: row.voice_allowed === true,
+      webSpeakingAllowed: row.web_speaking_allowed === true,
       homeworkUploadAllowed: row.homework_upload_allowed === true,
       lastDevice: row.last_device || '',
       lastSeen: row.last_seen || null,
@@ -1058,7 +1081,13 @@ const CloudSync = (function () {
       if (g && g.dbId == null) await pushGroup(g);
       const payload = payloadOf(st);
       if (st.dbId == null) {
-        const res = await client.from('students').insert(payload).select();
+        let res = await client.from('students').insert(payload).select();
+        /* Yangi ustunlar hali migratsiya qilinmagan bo'lsa — ularsiz qayta urinamiz */
+        const optionalCols = ['web_speaking_allowed', 'homework_upload_allowed', 'voice_allowed'];
+        for (let i = 0; i < optionalCols.length && res.error && res.error.code === 'PGRST204'; i++) {
+          delete payload[optionalCols[i]];
+          res = await client.from('students').insert(payload).select();
+        }
         if (res.error) throw res.error;
         const list = getStudents();
         const t = list.filter(function (x) { return x.id === sid; })[0];
@@ -1066,7 +1095,7 @@ const CloudSync = (function () {
       } else {
         let res = await client.from('students').update(payload).eq('id', st.dbId);
         /* Yangi (ixtiyoriy) ustunlar hali bazada bo'lmasa — ularsiz qayta yozamiz */
-        const optionalCols = ['homework_upload_allowed', 'voice_allowed'];
+        const optionalCols = ['web_speaking_allowed', 'homework_upload_allowed', 'voice_allowed'];
         for (let i = 0; i < optionalCols.length && res.error && res.error.code === 'PGRST204'; i++) {
           delete payload[optionalCols[i]];
           res = await client.from('students').update(payload).eq('id', st.dbId);
@@ -1859,7 +1888,7 @@ const CloudSync = (function () {
       const plan = [
         ['groups', ['id', 'name', 'days', 'time']],
         ['students', ['id', 'name', 'school_class', 'group_id', 'login', 'password', 'speaking_debt',
-                      'voice_allowed', 'telegram_chat_id', 'last_device', 'last_seen']],
+                      'voice_allowed', 'web_speaking_allowed', 'telegram_chat_id', 'last_device', 'last_seen']],
         ['speaking_slots', ['id', 'date', 'start_time', 'end_time', 'student_id', 'score', 'created_at']],
         ['homework', ['id', 'group_id', 'title', 'description', 'due_date', 'created_at']],
         ['attendance', ['id', 'student_id', 'date', 'status']],
@@ -2134,6 +2163,7 @@ const CloudSync = (function () {
     pullSpeaking: pullSpeaking,
     pushSpeakingGrade: pushSpeakingGrade,
     submitSpeakingVideo: submitSpeakingVideo,
+    deleteSpeakingSubmission: deleteSpeakingSubmission,
     pullSlots: pullSlots,
     pushSlot: pushSlot,
     deleteSlot: deleteSlot,
@@ -2857,17 +2887,35 @@ function onCloudNotifChange(table, row, old) {
 
     const st = linkedStudent();
     if (!st || st.dbId == null || row.id !== st.dbId) return;
-    if (row.voice_allowed !== true) return;
-    /* faqat false -> true: lokal keshda ham yangilaymiz */
+    /* Ikkala ruxsatni ham real vaqtda sinxronlaymiz (sayt ruxsati voice'dan mustaqil) */
+    const voiceNow = typeof row.voice_allowed === 'undefined'
+      ? st.voiceAllowed === true
+      : row.voice_allowed === true;
+    const webNow = typeof row.web_speaking_allowed === 'undefined'
+      ? st.webSpeakingAllowed === true
+      : row.web_speaking_allowed === true;
     const was = old && typeof old.voice_allowed !== 'undefined'
       ? old.voice_allowed
       : st.voiceAllowed;
-    if (was === true) return;
+    const webWas = old && typeof old.web_speaking_allowed !== 'undefined'
+      ? old.web_speaking_allowed
+      : st.webSpeakingAllowed;
+    if (was === voiceNow && webWas === webNow) return;
     const list = getStudents();
     const t = list.filter(function (x) { return x.id === st.id; })[0];
-    if (t) { t.voiceAllowed = true; store.set(K.students, list); }
-    Notif.notifyOnce('voice:' + row.id,
-      TEACHER_NAME + ': Ovozli speaking topshirishga ruxsat berildi!');
+    if (t) {
+      t.voiceAllowed = voiceNow;
+      t.webSpeakingAllowed = webNow;
+      store.set(K.students, list);
+    }
+    if (voiceNow && was !== true) {
+      Notif.notifyOnce('voice:' + row.id,
+        TEACHER_NAME + ': Ovozli speaking topshirishga ruxsat berildi!');
+    }
+    if (webNow && webWas !== true) {
+      Notif.notifyOnce('webspeak:' + row.id,
+        TEACHER_NAME + ': Saytda speaking topshirishga ruxsat berildi!');
+    }
     render();
     return;
   }
@@ -2928,7 +2976,11 @@ function onCloudNotifChange(table, row, old) {
     if (!isWebSubmission(rec)) return;
     const s = getStudents().filter(function (x) { return x.dbId === row.student_id; })[0];
     if (!s) return;
-    Notif.notifyOnce('sub:' + row.id, s.fullName + ': Yangi speaking topshirildi!');
+    const g = groupById(s.groupId);
+    const gname = g ? g.name : t('Guruh tayinlanmagan');
+    Notif.notifyOnce('sub:' + row.id, t('Yangi sayt speaking videosi'),
+      s.fullName + ' — ' + gname);
+    if (!old) toast(s.fullName + ' (' + gname + '): ' + t('yangi speaking videosi'));
   }
 }
 window.onCloudNotifChange = onCloudNotifChange;
@@ -3448,6 +3500,22 @@ const I18N_EN = {
   "Speaking topshirish": "Submit Speaking",
   "Ustoz ruxsati kerak": "Teacher permission required",
   "Speaking topshirish uchun ustozdan ruxsat so'rang.": "Ask your teacher for permission to submit speaking tasks.",
+  "Saytda speaking topshirish": "Website speaking submission",
+  "Saytda yozish yopiq": "Website recording is off",
+  "Saytda video yozish uchun ustoz ruxsati kerak. Speaking topshirig'ini Telegram bot orqali yuboring.": "Website recording requires teacher permission. Submit your speaking task via the Telegram bot.",
+  "Telegram botga o'tish": "Open the Telegram bot",
+  "Botda ovozli xabar yoki dumaloq video yuboring.": "Send a voice message or a round video in the bot.",
+  "Saytda speaking topshirishga ruxsat berildi": "Website speaking submission allowed",
+  "Saytda speaking topshirish cheklandi": "Website speaking submission disabled",
+  "Baholandi": "Graded",
+  "Bekor qilindi": "Rejected",
+  "Baholangan sayt videolari": "Graded website videos",
+  "Video baholashdan keyin ham saqlanadi.": "The video is kept after grading.",
+  "Yangi sayt speaking videosi": "New website speaking video",
+  "Sayt videolari": "Website videos",
+  "Guruhlar bo'yicha": "By group",
+  "Sayt videolari guruhlar bo'yicha shu yerda; bot topshiriqlari botda ko'rinadi. \"Baholash\" orqali 1–10 ball qo'yiladi, video saqlanadi, ball baholar jurnaliga tushadi va Speaking qarzi 1 ga kamayadi. Video faqat \"O'chirish\" tasdiqlanganda R2 va bazadan o'chadi.": "Website videos appear here grouped by group; bot submissions stay in the bot. Grade 1–10, the video is kept, the score goes to the gradebook and the Speaking debt drops by one. A video is removed from R2 and the database only after the teacher confirms Delete.",
+  "yangi speaking videosi": "new speaking video",
   "Videoni shu yerda yozib topshirasiz.": "Record your video right here.",
   "Kamera va mikrofon ochilmoqda...": "Opening camera and microphone...",
   "Kamera yoki mikrofonga ruxsat berilmadi.": "Camera or microphone permission was not granted.",
@@ -3846,10 +3914,21 @@ function navItems() {
 function newSubmissionsCount() {
   return submissionsList().filter(function (s) { return !String(s.teacherComment || '').trim(); }).length;
 }
+function pendingWebSpeakingCount() {
+  return getTgSubs().filter(function (x) {
+    return isWebSubmission(x) && x.status !== 'baholandi' && x.status !== 'graded' && x.status !== 'rad_etildi';
+  }).length;
+}
 function navBadgeHTML(key) {
-  if (key !== 'submissions') return '';
-  const n = newSubmissionsCount();
-  return n ? `<span class="nav-badge">${n > 99 ? '99+' : n}</span>` : '';
+  if (key === 'submissions') {
+    const n = newSubmissionsCount();
+    return n ? `<span class="nav-badge">${n > 99 ? '99+' : n}</span>` : '';
+  }
+  if (key === 'speaking') {
+    const n = pendingWebSpeakingCount();
+    return n ? `<span class="nav-badge nav-badge-speak">${n > 99 ? '99+' : n}</span>` : '';
+  }
+  return '';
 }
 function renderNav() {
   if (AUTH_SCREENS.indexOf(state.screen) >= 0) return '';
@@ -5048,7 +5127,7 @@ function teacherHome() {
     <button type="button" class="card quick" data-act="nav" data-screen="payments"><span class="quick-ico tint-teal">${ICON.creditCard}</span><span>To'lovlar</span></button>
     <button type="button" class="card quick" data-act="nav" data-screen="grades"><span class="quick-ico tint-indigo">${ICON.grades}</span><span>Baholar jurnali</span></button>
     <button type="button" class="card quick" data-act="nav" data-screen="attendance"><span class="quick-ico tint-emerald">${ICON.cal}</span><span>Tezkor davomat</span></button>
-    <button type="button" class="card quick" data-act="nav" data-screen="speaking"><span class="quick-ico tint-sky">${ICON.mic}</span><span>Speaking slotlari</span></button>
+    <button type="button" class="card quick" data-act="nav" data-screen="speaking"><span class="quick-ico tint-sky">${ICON.mic}</span><span>Speaking slotlari${navBadgeHTML('speaking')}</span></button>
     <button type="button" class="card quick" data-act="nav" data-screen="students"><span class="quick-ico tint-amber">${ICON.gradCap}</span><span>O'quvchilar</span></button>
     <button type="button" class="card quick" data-act="nav" data-screen="homework"><span class="quick-ico tint-blue">${ICON.bookOpen}</span><span>${t('Uyga vazifalar')}</span></button>
     <button type="button" class="card quick" data-act="nav" data-screen="groups"><span class="quick-ico tint-purple">${ICON.groups}</span><span>Guruhlar</span></button>
@@ -5250,10 +5329,19 @@ function studentPortal() {
   </div>
   <div class="card">${gradeRows}</div>`;
 
-  const canSpeak = !!st && st.voiceAllowed === true;
+  const canSpeak = !!st && st.webSpeakingAllowed === true;
+  const botFallback = !!st && st.webSpeakingAllowed !== true;
   const speakingHTML = `
   ${canSpeak ? `<button type="button" class="btn btn-primary btn-block speak-cta" data-act="speak-cta">${ico('video', 20)} ${t('Speaking topshirish')}</button>
-  <div class="speak-rec-hint">${ico('cameraCheck', 14)} ${t('Videoni shu yerda yozib topshirasiz.')}</div>` : `<div class="card speak-locked">
+  <div class="speak-rec-hint">${ico('cameraCheck', 14)} ${t('Videoni shu yerda yozib topshirasiz.')}</div>` : botFallback ? `<div class="card speak-locked speak-bot">
+    <div class="speak-locked-ico">${ICON.telegram}</div>
+    <div class="speak-locked-body">
+      <div class="strong-label">${t('Saytda yozish yopiq')}</div>
+      <div class="muted small">${t("Saytda video yozish uchun ustoz ruxsati kerak. Speaking topshirig'ini Telegram bot orqali yuboring.")}</div>
+    </div>
+  </div>
+  <a class="btn btn-primary btn-block speak-bot-btn" href="${SPEAKING_BOT_URL}" target="_blank" rel="noopener">${ICON.telegram} ${t("Telegram botga o'tish")}</a>
+  <div class="speak-rec-hint">${ico('cameraCheck', 14)} ${t('Botda ovozli xabar yoki dumaloq video yuboring.')}</div>` : `<div class="card speak-locked">
     <div class="speak-locked-ico">${ICON.lock}</div>
     <div class="speak-locked-body">
       <div class="strong-label">${t('Ustoz ruxsati kerak')}</div>
@@ -5812,6 +5900,11 @@ function studentCard(s) {
         <span class="lbl-strong">${ico('mic', 15)} ${t('Ovozli ruxsat')}</span>
         <button type="button" class="switch${s.voiceAllowed === true ? ' on' : ''}" data-act="voice-toggle" data-sid="${s.id}"
                 role="switch" aria-checked="${s.voiceAllowed === true}" aria-label="${t('Ovozli ruxsat')}"></button>
+      </div>
+      <div class="row between st-voice st-web-speak">
+        <span class="lbl-strong">${ico('video', 15)} ${t('Saytda speaking topshirish')}</span>
+        <button type="button" class="switch${s.webSpeakingAllowed === true ? ' on' : ''}" data-act="web-speaking-toggle" data-sid="${s.id}"
+                role="switch" aria-checked="${s.webSpeakingAllowed === true}" aria-label="${t('Saytda speaking topshirish')}"></button>
       </div>
       <div class="row between st-voice st-hw-allow">
         <span class="lbl-strong">${ico('upload', 15)} ${t('Uyga vazifa yuklashga ruxsat')}</span>
@@ -7136,6 +7229,7 @@ function restoreLocal(data) {
       paymentDebt: Number(st.payment_debt) || 0,
       feePeriod: st.fee_period || '',
       voiceAllowed: st.voice_allowed === true,
+      webSpeakingAllowed: st.web_speaking_allowed === true,
       homeworkUploadAllowed: st.homework_upload_allowed === true,
       telegramChatId: st.telegram_chat_id == null ? null : Number(st.telegram_chat_id),
       lastDevice: st.last_device || '',
@@ -7653,12 +7747,13 @@ function speakingScreen() {
 
   ${speakingLogHTML()}
 
-  <div class="section-title">${t('Speaking topshiriqlari (Inbox)')}</div>
+  <div class="section-title">${ico('video', 15)} ${t('Speaking slotlari')} — ${t('Sayt videolari')}</div>
+  <div class="muted small" style="margin:-4px 0 8px">${t('Speaking topshiriqlari (Inbox)')} · ${t("Guruhlar bo'yicha")}</div>
   <div class="card">
     ${renderTgInbox()}
   </div>
 
-  <p class="muted small" style="margin-top:10px">Slotga o'quvchi tayinlanadi. Ovozli/video topshiriklar botga tushadi (foydalanuvchi ruxsati bilan) — "Baholash" orqali 1–10 ball qo'yiladi, ball baholar jurnaliga tushadi va Speaking qarzi 1 ga kamayadi.</p>
+  <p class="muted small" style="margin-top:10px">Sayt videolari guruhlar bo'yicha shu yerda; bot topshiriqlari botda ko'rinadi. "Baholash" orqali 1–10 ball qo'yiladi, video saqlanadi, ball baholar jurnaliga tushadi va Speaking qarzi 1 ga kamayadi. Video faqat "O'chirish" tasdiqlanganda R2 va bazadan o'chadi.</p>
   `;
 }
 
@@ -7755,7 +7850,7 @@ function speakRecMarkup() {
 function openSpeakingRecorder() {
   const st = linkedStudent();
   if (!st) { toast("Avval tizimga kiring", 'error'); return; }
-  if (st.voiceAllowed !== true) { toast(t('Ustoz ruxsati kerak'), 'error'); return; }
+  if (st.webSpeakingAllowed !== true) { toast(t('Saytda yozish yopiq'), 'error'); return; }
   closeSpeakRecorder(true);
   const wrap = document.createElement('div');
   wrap.innerHTML = speakRecMarkup();
@@ -8109,7 +8204,7 @@ async function submitSpeakRecording() {
   if (!speakRec || !speakRec.blob || speakRec.mode !== 'preview') return;
   const st = linkedStudent();
   if (!st) return;
-  if (st.voiceAllowed !== true) { toast(t('Ustoz ruxsati kerak'), 'error'); return; }
+  if (st.webSpeakingAllowed !== true) { toast(t('Saytda yozish yopiq'), 'error'); return; }
   const btn = speakRecQ('[data-act="speak-rec-submit"]');
   if (btn) btn.disabled = true;
   speakRec.mode = 'submitting';
@@ -8143,6 +8238,7 @@ async function submitSpeakRecording() {
       lookAwayCount: metrics.lookAwayCount, eyeContactPercent: metrics.eyeContactPercent
     });
     store.set(K.tgsubs, subs);
+    queueTeacherSpeakingNotice(st);
     closeSpeakRecorder();
     toast(t('Speaking topshirildi'));
     analyticsCall('capture', 'speaking_video_submitted', metrics);
@@ -8152,6 +8248,30 @@ async function submitSpeakRecording() {
     speakRec.mode = 'preview';
     if (btn) btn.disabled = false;
     speakRecStatus(t('Yuborishda xatolik') + ': ' + ((e && e.message) || ''), 'error');
+  }
+}
+
+/* Ustozga Telegram xabari: faqat teacher_telegram_id yoki window.TEACHER_TELEGRAM_ID sozlangan bo'lsa */
+async function queueTeacherSpeakingNotice(st) {
+  if (!st) return;
+  try {
+    let chat = String(window.TEACHER_TELEGRAM_ID || '').trim();
+    if (!chat) chat = String((await CloudSync.getSetting('teacher_telegram_id')) || '').trim();
+    if (!chat) return;
+    const g = groupById(st.groupId);
+    const gname = g ? g.name : 'Guruh tayinlanmagan';
+    const when = new Date().toLocaleString(getLang() === 'en' ? 'en-GB' : 'uz-UZ');
+    await CloudSync.queueMessages([{
+      chat_id: chat,
+      student_id: st.dbId == null ? null : st.dbId,
+      text: "<b>Yangi sayt speaking videosi</b>\n\n" +
+        "O'quvchi: <b>" + esc(st.fullName) + "</b>\n" +
+        "Guruh: <b>" + esc(gname) + "</b>\n" +
+        'Vaqt: ' + esc(when) + "\n\n" +
+        "Videoni saytdagi Speaking slotlari bo'limida ko'ring va baholang."
+    }]);
+  } catch (e) {
+    console.warn('[outbox] speaking:', (e && e.message) || e);
   }
 }
 
@@ -8176,39 +8296,133 @@ function closeSpeakRecorder() {
 }
 
 /* ---- Telegram topshiriklari (ustoz uchun inbox) ---- */
+function speakGroupNameFor(sub) {
+  const st = getStudents().filter(function (x) { return x.id === sub.sid; })[0];
+  const g = st ? groupById(st.groupId) : null;
+  return g ? g.name : t('Guruh tayinlanmagan');
+}
+function speakWhenLabel(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return String(iso).slice(0, 10);
+  return fmtDMY(String(iso).slice(0, 10)) + ' · ' +
+    String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+function groupSpeakingSubs(subs) {
+  const buckets = [], byName = {};
+  subs.forEach(function (sub) {
+    const name = speakGroupNameFor(sub);
+    if (!byName[name]) { byName[name] = { name: name, list: [] }; buckets.push(byName[name]); }
+    byName[name].list.push(sub);
+  });
+  buckets.sort(function (a, b) { return a.name.localeCompare(b.name); });
+  return buckets;
+}
+/* Bitta sayt videosi kartasi: ism, sana/vaqt, holat/ball, ko'z kontakti va inline pleyer */
+function webSpeakCard(sub, st, archived) {
+  const done = archived === true;
+  const rejected = sub.status === 'rad_etildi';
+  const statusLabel = rejected ? t('Bekor qilindi') : done ? t('Baholandi') : t('Kutilmoqda');
+  return `
+  <div class="${done ? 'speak-archived' : 'audio-item'}" data-tgcard="${done ? '' : esc(sub.id)}">
+    <div class="audio-item__meta">
+      <strong>${st ? esc(st.fullName) : '—'}</strong>
+      ${st ? `<span class="chip-class">${esc(st.schoolClass)}</span>` : ''} ·
+      ${ico('video', 14)} ${t('Video')}
+      ${sub.createdAt ? ' · ' + esc(speakWhenLabel(sub.createdAt)) : ''} ·
+      <span class="speak-status ${done ? 'is-done' : 'is-wait'}">${statusLabel}${done && sub.score != null ? ': ' + sub.score + '/10' : ''}</span>
+    </div>
+    ${sub.mediaUrl ? `<div class="speak-video-wrap">
+      <video class="speak-video" controls playsinline preload="metadata" src="${esc(sub.mediaUrl)}"></video>
+    </div>` : ''}
+    ${sub.eyeContactPercent != null || sub.lookAwayCount != null || sub.mediaUrl ? `<div class="speak-metrics">
+      ${sub.mediaUrl ? `<a class="btn btn-xs ghost speak-watch" href="${esc(sub.mediaUrl)}" target="_blank" rel="noopener">${ico('video', 13)} ${t("Videoni ko'rish")}</a>` : ''}
+      ${sub.eyeContactPercent != null ? `<span class="speak-metric${sub.eyeContactPercent < 60 ? ' is-low' : ''}">${ico('eye', 13)} ${t('Kameraga qarash')}: ${sub.eyeContactPercent}%</span>` : ''}
+      ${sub.lookAwayCount != null ? `<span class="speak-metric${sub.lookAwayCount >= 3 ? ' is-low' : ''}">${ico('alert', 13)} ${t('Chetga qarash')}: ${sub.lookAwayCount}</span>` : ''}
+      ${sub.durationSec != null ? `<span class="speak-metric">${ico('clock', 13)} ${Math.floor(sub.durationSec / 60)}:${String(sub.durationSec % 60).padStart(2, '0')}</span>` : ''}
+    </div>` : ''}
+    ${done && sub.feedback ? `<div class="speak-feedback">${ico('message', 13)} ${esc(sub.feedback)}</div>` : ''}
+    <div class="grade-row">
+      ${done ? `<span class="muted small">${t('Video baholashdan keyin ham saqlanadi.')}</span>` : [1,2,3,4,5,6,7,8,9,10].map(n => `
+        <button type="button" class="btn btn-xs ${sub.score === n ? 'btn-primary' : 'ghost'}" data-act="tg-grade" data-tid="${sub.id}" data-score="${n}">${n}</button>`).join('')}
+      ${done ? '' : `<input class="input" style="flex:1;min-width:140px" placeholder="${t('Izoh (ixtiyoriy)')}" value="${esc(sub.feedback || '')}" data-act="tg-feedback" data-tid="${sub.id}" />`}
+      ${done ? '' : `<button type="button" class="btn btn-xs danger" data-act="tg-reject" data-tid="${sub.id}">${t('Bekor qilish')}</button>`}
+      <button type="button" class="btn btn-xs danger" data-act="speak-del" data-tid="${sub.id}">${ico('trash', 13)} ${t("O'chirish")}</button>
+    </div>
+  </div>`;
+}
 function renderTgInbox() {
-  /* Baholangan yoki bekor qilingan topshirik kartalari INBOXdan chiqadi (silliq ravishda) */
-  /* Faqat saytdan topshirilganlar: botdan kelganlar ustozga botda keladi va botda baholanadi */
-  const subs = getTgSubs().filter(function (x) {
-    return isWebSubmission(x) && x.status !== 'baholandi' && x.status !== 'graded' && x.status !== 'rad_etildi';
-  }).slice().reverse(); /* yangisi yuqorida */
-  if (!subs.length) return emptyState(t("Hozircha topshiriq yo'q"));
+  /* Faqat saytdan topshirilganlar. Botdan kelganlar ustozga botda keladi. */
+  const all = getTgSubs().filter(function (x) { return isWebSubmission(x); });
+  const isDone = function (x) {
+    return x.status === 'baholandi' || x.status === 'graded' || x.status === 'rad_etildi';
+  };
+  const pending = all.filter(function (x) { return !isDone(x); }).slice().reverse();
+  const graded = all.filter(isDone).slice().reverse();
+  if (!pending.length && !graded.length) return emptyState(t("Hozircha topshiriq yo'q"));
   const byId = {};
-  getStudents().forEach(s => { byId[s.id] = s; });
-  return subs.map(function (sub) {
-    const st = byId[sub.sid];
-    const day = sub.createdAt ? String(sub.createdAt).slice(0, 10) : '';
-    return `
-    <div class="audio-item" data-tgcard="${esc(sub.id)}">
-      <div class="audio-item__meta">
-        <strong>${st ? esc(st.fullName) : '—'}</strong> ${st ? `<span class="chip-class">${esc(st.schoolClass)}</span>` : ''} ·
-        ${sub.mediaType === 'voice' ? ico('mic', 14) + ' ' + t('Audio') : ico('video', 14) + ' ' + t('Video')}${day ? ' · ' + fmtDMY(day) : ''} ·
-        ${ico('clock', 14)} ${t('Kutilmoqda')}
-      </div>
-      ${sub.eyeContactPercent != null || sub.lookAwayCount != null || sub.mediaUrl ? `<div class="speak-metrics">
-        ${sub.mediaUrl ? `<a class="btn btn-xs ghost speak-watch" href="${esc(sub.mediaUrl)}" target="_blank" rel="noopener">${ico('video', 13)} ${t("Videoni ko'rish")}</a>` : ''}
-        ${sub.eyeContactPercent != null ? `<span class="speak-metric${sub.eyeContactPercent < 60 ? ' is-low' : ''}">${ico('eye', 13)} ${t('Kameraga qarash')}: ${sub.eyeContactPercent}%</span>` : ''}
-        ${sub.lookAwayCount != null ? `<span class="speak-metric${sub.lookAwayCount >= 3 ? ' is-low' : ''}">${ico('alert', 13)} ${t('Chetga qarash')}: ${sub.lookAwayCount}</span>` : ''}
-        ${sub.durationSec != null ? `<span class="speak-metric">${ico('clock', 13)} ${Math.floor(sub.durationSec / 60)}:${String(sub.durationSec % 60).padStart(2, '0')}</span>` : ''}
-      </div>` : ''}
-      <div class="grade-row">
-        ${[1,2,3,4,5,6,7,8,9,10].map(n => `
-          <button type="button" class="btn btn-xs ${sub.score === n ? 'btn-primary' : 'ghost'}" data-act="tg-grade" data-tid="${sub.id}" data-score="${n}">${n}</button>`).join('')}
-        <input class="input" style="flex:1;min-width:140px" placeholder="${t('Izoh (ixtiyoriy)')}" value="${esc(sub.feedback || '')}" data-act="tg-feedback" data-tid="${sub.id}" />
-        <button type="button" class="btn btn-xs danger" data-act="tg-reject" data-tid="${sub.id}">${t('Bekor qilish')}</button>
+  getStudents().forEach(function (s) { byId[s.id] = s; });
+  const groupBlock = function (g, archived) {
+    return `<div class="speak-group">
+      <div class="speak-group-head">${ico('groups', 15)} <b>${esc(g.name)}</b>
+        <span class="pill">${g.list.length}</span></div>
+      <div class="speak-group-list">
+        ${g.list.map(function (sub) { return webSpeakCard(sub, byId[sub.sid], archived); }).join('')}
       </div>
     </div>`;
-  }).join('');
+  };
+  const pendingHTML = pending.length
+    ? `<div class="speak-groups">${groupSpeakingSubs(pending).map(function (g) { return groupBlock(g, false); }).join('')}</div>`
+    : '';
+  const gradedHTML = graded.length
+    ? `<div class="section-title speak-archived-title">${ico('checkCircle', 15)} ${t('Baholangan sayt videolari')}</div>
+       <div class="speak-groups speak-groups-done">${groupSpeakingSubs(graded).map(function (g) { return groupBlock(g, true); }).join('')}</div>`
+    : '';
+  return pendingHTML + gradedHTML;
+}
+
+/* ---- Sayt videosini butunlay o'chirish (faqat ustoz tasdiqi bilan) ---- */
+function openDeleteSpeaking(tid) {
+  if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+  const sub = getTgSubs().filter(function (x) { return String(x.id) === String(tid); })[0];
+  if (!sub) { toast('Topshiriq topilmadi', 'error'); return; }
+  const st = getStudents().filter(function (x) { return x.id === sub.sid; })[0];
+  const g = st ? groupById(st.groupId) : null;
+  openModal(`
+    <div class="modal-head">
+      <h3>Videoni o'chirish</h3>
+      <button type="button" class="icon-btn" data-act="close-modal" aria-label="Yopish">✕</button>
+    </div>
+    <div class="confirm-body">
+      <div class="confirm-emoji tint-rose">${ICON.trash}</div>
+      <p class="confirm-text"><strong>${esc(st ? st.fullName : "O'quvchi")}</strong>${g ? ' — <strong>' + esc(g.name) + '</strong>' : ''} yuborgan speaking videosi Cloudflare R2'dan va bazadan butunlay o'chiriladi. Davom etasizmi?</p>
+      ${sub.mediaUrl ? `<p class="muted small" style="margin-top:7px;word-break:break-all">${esc(sub.mediaUrl)}</p>` : ''}
+    </div>
+    <div class="confirm-actions">
+      <button type="button" class="btn btn-ghost" data-act="close-modal">Bekor qilish</button>
+      <button type="button" class="btn btn-danger" data-act="do-speak-del" data-tid="${esc(sub.id)}">Ha, o'chirish</button>
+    </div>
+  `);
+}
+function doDeleteSpeaking(tid) {
+  if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+  const sub = getTgSubs().filter(function (x) { return String(x.id) === String(tid); })[0];
+  if (!sub) { closeModal(); return; }
+  closeModal();
+  /* Lokal ro'yxatdan darhol olib tashlaymiz */
+  store.set(K.tgsubs, getTgSubs().filter(function (x) { return String(x.id) !== String(tid); }));
+  render();
+  CloudSync.deleteSpeakingSubmission(sub.dbId, sub.mediaUrl).then(function (r) {
+    if (!r || !r.rowDeleted) {
+      toast("Video bazadan o'chmadi — qayta urinib ko'ring", 'error');
+      return;
+    }
+    toast(r.fileDeleted || !sub.mediaUrl ? "Video o'chirildi" : "Baza yozuvi o'chirildi, R2 fayli o'chmadi");
+    render();
+  }).catch(function (e) {
+    toast("O'chirishda xatolik: " + ((e && e.message) || 'xatolik'), 'error');
+    render();
+  });
 }
 
 /* ---- Slot yaratish / tayinlash ---- */
@@ -10046,6 +10260,8 @@ document.addEventListener('click', function (e) {
     'tg-reject': function () {
       rejectTgSub(btn.getAttribute('data-tid'));
     },
+    'speak-del': function () { openDeleteSpeaking(btn.getAttribute('data-tid')); },
+    'do-speak-del': function () { doDeleteSpeaking(btn.getAttribute('data-tid')); },
 
     /* --- Ovozli topshirishga ruxsat (voice_allowed) --- */
     'voice-toggle': function () {
@@ -10058,6 +10274,19 @@ document.addEventListener('click', function (e) {
       CloudSync.pushStudent(st.id);
       render();
       toast(st.voiceAllowed ? "Ovozli topshirishga ruxsat berildi" : "Ovozli topshirish cheklandi");
+    },
+
+    /* --- Saytda speaking topshirishga ruxsat (web_speaking_allowed) --- */
+    'web-speaking-toggle': function () {
+      if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+      const list = getStudents();
+      const st = list.filter(x => x.id === btn.getAttribute('data-sid'))[0];
+      if (!st) return;
+      st.webSpeakingAllowed = !(st.webSpeakingAllowed === true);
+      store.set(K.students, list);
+      CloudSync.pushStudent(st.id);
+      render();
+      toast(st.webSpeakingAllowed ? t('Saytda speaking topshirishga ruxsat berildi') : t('Saytda speaking topshirish cheklandi'));
     },
 
     /* --- Uyga vazifalar --- */

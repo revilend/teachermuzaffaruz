@@ -126,7 +126,7 @@ function buildCloudSeed(w) {
       group_id: s.groupId ? num(s.groupId) : null,
       login: s.login || '', password: sha('123'),
       speaking_debt: Number(s.speakingDebt) || 0, payment_debt: Number(s.paymentDebt) || 0,
-      voice_allowed: true, telegram_chat_id: s.telegramChatId || null
+      voice_allowed: true, web_speaking_allowed: true, telegram_chat_id: s.telegramChatId || null
     })),
     grades: [], attendance: [],
     speaking_submissions: [
@@ -1213,16 +1213,31 @@ closeStudentView();
 /* Ruxsat berilmagan o'quvchi: recorder umuman ko'rinmaydi */
 {
   const noVoiceRow = (cloudStub.db.students || []).filter(r => r.login === 'malika')[0];
-  if (noVoiceRow) noVoiceRow.voice_allowed = false;
+  if (noVoiceRow) { noVoiceRow.voice_allowed = false; noVoiceRow.web_speaking_allowed = false; }
   logout();
   await loginAs('malika', '123');
   openStudentView('speaking');
-  check(!!q('.speak-locked') && !q('[data-act="speak-cta"]'),
-    "speaking: ustoz ruxsati yo'q → recorder yashirilgan");
-  check(text().includes('Ustoz ruxsati kerak'),
-    "speaking: 'Ustoz ruxsati kerak' ogohlantirishi ko'rinadi");
-  if (noVoiceRow) noVoiceRow.voice_allowed = true;
-  closeStudentView();
+  check(!!q('.speak-bot') && !q('[data-act="speak-cta"]'),
+    "speaking: sayt ruxsati yo'q → recorder yashirilgan, bot rejimi");
+  check(!!q('a.speak-bot-btn[href="https://t.me/uzbekspeakingcheckbot"]'),
+    "speaking: bot rejimida Telegram havolasi ko'rinadi");
+  if (noVoiceRow) { noVoiceRow.voice_allowed = true; noVoiceRow.web_speaking_allowed = true; }
+
+  /* Ovoz ruxsati bor, lekin saytda speaking ruxsati yo'q → Telegram bot rejimi */
+  if (noVoiceRow) {
+    noVoiceRow.voice_allowed = true;
+    noVoiceRow.web_speaking_allowed = false;
+    logout();
+    await loginAs('malika', '123');
+    openStudentView('speaking');
+    check(!!q('.speak-bot') && !q('[data-act="speak-cta"]'),
+      "speaking: sayt ruxsati yo'q → recorder yashirilgan, bot rejimi faol");
+    check(!!q('a.speak-bot-btn[href="https://t.me/uzbekspeakingcheckbot"]'),
+      "speaking: Telegram botga o'tish havolasi ko'rinadi");
+    check(!text().includes('Yozishni boshlash'), "speaking: bot rejimida yozish taklif qilinmaydi");
+    noVoiceRow.web_speaking_allowed = true;
+    closeStudentView();
+  }
   logout();
   await loginAs('jasur', '4321');
 }
@@ -1879,9 +1894,11 @@ await (async () => {
     check(shownNotifs.length === 1 && shownNotifs[0].title === stuName + ': Yangi xabar keldi',
       "notif: ustoz — o'quvchi xabari sarlavhasi specda aniq");
 
-    win.onCloudNotifChange('speaking_submissions', { id: 8008, student_id: S5_DB }, null);
-    check(shownNotifs.length === 2 && shownNotifs[1].title === stuName + ': Yangi speaking topshirildi!',
-      "notif: ustoz — yangi speaking sarlavhasi specda aniq");
+    win.onCloudNotifChange('speaking_submissions', { id: 8008, student_id: S5_DB,
+      media_url: 'https://pub-836df3817ab64cee9075b55d51fe6061.r2.dev/speaking/w8008.webm' }, null);
+    check(shownNotifs.length === 2 && shownNotifs[1].title === 'Yangi sayt speaking videosi' &&
+      String(shownNotifs[1].body || '').indexOf(stuName) >= 0,
+      "notif: ustoz — yangi sayt speaking videosi (ism va guruh bilan)");
 
     win.onCloudNotifChange('grades', { id: 8009, student_id: S5_DB, grade: 10 }, null);
     check(shownNotifs.length === 2, "notif: ustozga o'quvchi bahosi xabari ketmaydi (faqat o'quvchiga)");

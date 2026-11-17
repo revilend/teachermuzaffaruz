@@ -2626,3 +2626,93 @@ html[data-theme="dark"] .speak-metric { background: rgba(96, 165, 250, .14); col
 .speak-metric.is-low { background: rgba(245, 158, 11, .16); color: #b45309; }
 html[data-theme="dark"] .speak-metric.is-low { background: rgba(245, 158, 11, .22); color: #fbbf24; }
 .speak-watch { text-decoration: none; }
+
+/* ===== Saytda speaking ruxsati, bot fallback, guruhlangan slotlar ===== */
+.st-web-speak { margin-top: 8px; }
+.speak-bot { border-color: rgba(37, 99, 235, .28); }
+.speak-bot .speak-locked-ico {
+  background: rgba(37, 99, 235, .12);
+  color: #2563eb;
+}
+html[data-theme="dark"] .speak-bot .speak-locked-ico {
+  background: rgba(96, 165, 250, .18);
+  color: #93c5fd;
+}
+.speak-bot-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 9px;
+  text-decoration: none;
+}
+.speak-bot-btn svg { width: 18px; height: 18px; }
+.speak-groups { display: flex; flex-direction: column; gap: 14px; }
+.speak-group {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--card);
+}
+.speak-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(37, 99, 235, .06);
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--text);
+}
+.speak-group-head svg { width: 15px; height: 15px; color: var(--accent); flex: none; }
+.speak-group-head b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.speak-group-list { display: flex; flex-direction: column; }
+.speak-group-list .audio-item { padding: 12px; border-bottom: 1px solid var(--line); }
+.speak-group-list .audio-item:last-child { border-bottom: 0; }
+.speak-video-wrap {
+  margin: 8px 0 4px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #000;
+  max-width: 420px;
+}
+.speak-video {
+  display: block;
+  width: 100%;
+  max-height: 420px;
+  aspect-ratio: 3 / 4;
+  background: #000;
+}
+.speak-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.speak-status.is-wait { background: rgba(245, 158, 11, .14); color: #b45309; }
+.speak-status.is-done { background: rgba(16, 185, 129, .14); color: #047857; }
+html[data-theme="dark"] .speak-status.is-wait { background: rgba(245, 158, 11, .2); color: #fbbf24; }
+html[data-theme="dark"] .speak-status.is-done { background: rgba(16, 185, 129, .2); color: #34d399; }
+.speak-feedback {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 7px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--surface-2, rgba(148, 163, 184, .12));
+  font-size: 12px;
+  color: var(--muted);
+}
+.speak-feedback svg { width: 13px; height: 13px; flex: none; margin-top: 2px; }
+.speak-archived-title { margin-top: 16px; }
+.speak-groups-done .speak-group-head { background: rgba(16, 185, 129, .07); }
+.speak-archived {
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.speak-archived:last-child { border-bottom: 0; }
+.speak-archived .audio-item__meta { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+.nav-badge-speak { background: #0ea5e9; }
