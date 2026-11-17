@@ -265,6 +265,12 @@ async def on_cleanup_answer(call: types.CallbackQuery):
 
 
 # ---------------- Ustoz: 🎙 Yangi Speakinglar ----------------
+def is_web_submission(row: dict) -> bool:
+    """Sayt orqali yozilgan video: telegram_file_id o'rnida R2 havolasi saqlanadi."""
+    fid = str((row or {}).get("telegram_file_id") or "").strip().lower()
+    return fid.startswith("http://") or fid.startswith("https://")
+
+
 @dp.message(F.text == ADMIN_MENU["speak"])
 async def btn_admin_new_speakings(message: types.Message):
     if await _deny_non_admin(message):
@@ -272,7 +278,10 @@ async def btn_admin_new_speakings(message: types.Message):
     try:
         subs = supabase.table("speaking_submissions").select(
             "id, student_id, media_type, telegram_file_id, status, created_at"
-        ).eq("status", "kutilmoqda").order("id", desc=True).limit(15).execute().data or []
+        ).eq("status", "kutilmoqda").order("id", desc=True).limit(100).execute().data or []
+        # Saytdan topshirilgan videolar (telegram_file_id = R2 havolasi) saytdagi ustoz
+        # inboxiga tushadi — botda faqat Telegram orqali kelganlari ko'rsatiladi.
+        subs = [s for s in subs if not is_web_submission(s)][:15]
         stud_ids = {s.get("student_id") for s in subs}
         studs = {}
         if stud_ids:

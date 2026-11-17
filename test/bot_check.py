@@ -1012,13 +1012,19 @@ async def main():
          "status": "kutilmoqda", "created_at": "2026-10-15T10:00:00Z"},
         {"id": 2, "student_id": 2, "media_type": "video_note", "telegram_file_id": "A2",
          "status": "kutilmoqda", "created_at": "2026-10-15T11:00:00Z"},
+        # Saytdan yozilgan video (R2 havolasi) — botda ko'rsatilmaydi, saytdagi inboxga tushadi
+        {"id": 3, "student_id": 1, "media_type": "video",
+         "telegram_file_id": "https://pub-836df3817ab64cee9075b55d51fe6061.r2.dev/speaking/w.webm",
+         "status": "kutilmoqda", "created_at": "2026-10-15T12:00:00Z"},
     ]
     fb.sent.clear()
     m = Msg(ADMIN, B.ADMIN_MENU["speak"])
     await B.btn_admin_new_speakings(m)
     t = m.answers[0]["text"]
     check("Yangi speakinglar" in t and "2 ta kutilmoqda" in t,
-          "yangi speakinglar: ro'yxat (2 ta kutilmoqda)")
+          "yangi speakinglar: ro'yxat (2 ta kutilmoqda; saytdan kelgan video qo'shilmadi)")
+    check(not any("w.webm" in str(s) for s in fb.sent),
+          "yangi speakinglar: saytdan kelgan video ustozga botda qayta yuborilmadi")
     check("Jasur Karimov" in t, "yangi speakinglar: o'quvchi ismi")
     check(len([s for s in fb.sent if s["chat_id"] == ADMIN]) >= 1,
           "yangi speakinglar: topshiriklar ustozga qayta yuborildi")

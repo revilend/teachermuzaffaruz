@@ -410,6 +410,23 @@ async function deleteFileFromR2(fileUrl) {
   }
 }
 
+/* Speaking topshirig'ining manbasi: sayt (R2 havolasi bor) yoki Telegram bot (telegram_file_id).
+   Sayt topshiriqlari faqat saytdagi ustoz inboxiga, bot topshiriqlari faqat botga boradi.
+   media_url ustuni bo'lmagan eski bazada havola telegram_file_id ichida saqlanadi. */
+function speakingExtrasOf(row) {
+  const r = row || {};
+  const fid = String(r.telegram_file_id || '');
+  const url = r.media_url || (/^https?:\/\//i.test(fid) ? fid : '');
+  return {
+    mediaUrl: url,
+    source: url ? 'web' : 'telegram',
+    durationSec: r.duration_sec == null ? null : Number(r.duration_sec),
+    lookAwayCount: r.look_away_count == null ? null : Number(r.look_away_count),
+    eyeContactPercent: r.eye_contact_percent == null ? null : Number(r.eye_contact_percent)
+  };
+}
+function isWebSubmission(x) { return !!(x && (x.source === 'web' || x.mediaUrl)); }
+
 const CloudSync = (function () {
   const url = window.SUPABASE_URL || 'https://mvjoeqyqaylfccqcnwwe.supabase.co';
   const key = window.SUPABASE_ANON_KEY || 'sb_publishable_PHMC_kfQfu5BLFgDOzHsjw_B0VO2xDI';
@@ -608,10 +625,7 @@ const CloudSync = (function () {
         score: r.score == null ? null : Number(r.score),
         feedback: r.feedback || '',
         createdAt: r.created_at || '',
-        mediaUrl: r.media_url || '',
-        durationSec: r.duration_sec == null ? null : Number(r.duration_sec),
-        lookAwayCount: r.look_away_count == null ? null : Number(r.look_away_count),
-        eyeContactPercent: r.eye_contact_percent == null ? null : Number(r.eye_contact_percent)
+        ...speakingExtrasOf(r)
       };
     }).filter(function (x) { return x.sid !== 'snull'; });
     store.set(K.tgsubs, list);
@@ -2886,13 +2900,17 @@ function onCloudNotifChange(table, row, old) {
       status: row.status || 'kutilmoqda',
       score: row.score == null ? null : Number(row.score),
       feedback: row.feedback || '',
-      createdAt: row.created_at || ''
+      createdAt: row.created_at || '',
+      ...speakingExtrasOf(row)
     };
     if (rec.sid !== 'snull') {
       const subs = getTgSubs();
       const i = subs.map(function (x) { return x.dbId; }).indexOf(row.id);
       if (i < 0) subs.push(rec);  /* INSERT — render teskari yig'adi, ya'ni yuqorida */
-      else subs[i] = rec;         /* UPDATE — lokal holat darhol yangilanadi */
+      else {                      /* UPDATE — lokal holat darhol yangilanadi (manba/havola saqlanadi) */
+        const keep = rec.mediaUrl ? {} : { mediaUrl: subs[i].mediaUrl || '', source: subs[i].source || rec.source };
+        subs[i] = Object.assign({}, rec, keep);
+      }
       store.set(K.tgsubs, subs);
     }
 
@@ -2906,6 +2924,8 @@ function onCloudNotifChange(table, row, old) {
     }
 
     if (!isTeacher()) return;
+    /* Bot topshiriqlari haqida ustozga botning o'zi xabar beradi — saytda takrorlanmaydi */
+    if (!isWebSubmission(rec)) return;
     const s = getStudents().filter(function (x) { return x.dbId === row.student_id; })[0];
     if (!s) return;
     Notif.notifyOnce('sub:' + row.id, s.fullName + ': Yangi speaking topshirildi!');
@@ -8158,8 +8178,9 @@ function closeSpeakRecorder() {
 /* ---- Telegram topshiriklari (ustoz uchun inbox) ---- */
 function renderTgInbox() {
   /* Baholangan yoki bekor qilingan topshirik kartalari INBOXdan chiqadi (silliq ravishda) */
+  /* Faqat saytdan topshirilganlar: botdan kelganlar ustozga botda keladi va botda baholanadi */
   const subs = getTgSubs().filter(function (x) {
-    return x.status !== 'baholandi' && x.status !== 'graded' && x.status !== 'rad_etildi';
+    return isWebSubmission(x) && x.status !== 'baholandi' && x.status !== 'graded' && x.status !== 'rad_etildi';
   }).slice().reverse(); /* yangisi yuqorida */
   if (!subs.length) return emptyState(t("Hozircha topshiriq yo'q"));
   const byId = {};

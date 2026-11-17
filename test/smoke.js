@@ -1891,7 +1891,8 @@ await (async () => {
     click('[data-act="nav"][data-screen="speaking"]');
     const inboxBefore = qa('.audio-item').length;
     win.onCloudNotifChange('speaking_submissions',
-      { id: 8101, student_id: S5_DB, media_type: 'voice', status: 'kutilmoqda',
+      { id: 8101, student_id: S5_DB, media_type: 'video', status: 'kutilmoqda',
+        media_url: 'https://pub-836df3817ab64cee9075b55d51fe6061.r2.dev/speaking/w8101.webm',
         score: null, created_at: '2026-10-15T12:00:00.000Z' }, null);
     check(qa('.audio-item').length === inboxBefore + 1,
       'realtime: INSERT → yangi karta INBOXda darhol (qayta yuklashsiz)');
@@ -2014,9 +2015,19 @@ await (async () => {
   /* bulut — haqiqat manbai: qarz stub bazasida ham 2 bo'lsin */
   (cloudStub.db.students || []).forEach(r => { if (Number(r.id) === 77) r.speaking_debt = 2; });
   win.onCloudNotifChange('speaking_submissions',
-    { id: 8301, student_id: 77, media_type: 'voice', status: 'kutilmoqda', score: null,
+    { id: 8301, student_id: 77, media_type: 'video', status: 'kutilmoqda', score: null,
+      media_url: 'https://pub-836df3817ab64cee9075b55d51fe6061.r2.dev/speaking/w8301.webm',
       created_at: TODAY + 'T10:00:00.000Z' }, null);
   check(!!q('[data-tgcard="t8301"]'), 'speaking: yangi topshirik INBOXda paydo bo\'ldi');
+  /* Botdan (Telegram) kelgan topshirik saytdagi ustoz inboxiga tushmaydi — ustozga botda keladi */
+  win.onCloudNotifChange('speaking_submissions',
+    { id: 8399, student_id: 77, media_type: 'voice', telegram_file_id: 'AwACAgIAAxkBAAIBot', status: 'kutilmoqda',
+      score: null, created_at: TODAY + 'T10:30:00.000Z' }, null);
+  check(!q('[data-tgcard="t8399"]'), "speaking: botdan kelgan topshirik saytdagi inboxda ko'rinmaydi");
+  check(JSON.parse(win.localStorage.getItem('et_tg_subs') || '[]').some(x => x.dbId === 8399 && x.source === 'telegram'),
+    "speaking: botdan kelgan topshirik manbasi 'telegram' deb belgilandi (o'quvchi tarixi uchun saqlanadi)");
+  check(JSON.parse(win.localStorage.getItem('et_tg_subs') || '[]').some(x => x.dbId === 8301 && x.source === 'web'),
+    "speaking: saytdan kelgan topshirik manbasi 'web'");
   click(q('[data-act="tg-grade"][data-tid="t8301"][data-score="8"]'));
   await new Promise(r => setTimeout(r, 330));
   let gRec = (JSON.parse(win.localStorage.getItem('et_grades') || '{}').s77 || {})[TODAY];
@@ -2031,7 +2042,8 @@ await (async () => {
 
   /* SHU SANA IKKINCHI SESSIYA — avvalgisini yo'qotmaydi */
   win.onCloudNotifChange('speaking_submissions',
-    { id: 8302, student_id: 77, media_type: 'voice', status: 'kutilmoqda', score: null,
+    { id: 8302, student_id: 77, media_type: 'video', status: 'kutilmoqda', score: null,
+      media_url: 'https://pub-836df3817ab64cee9075b55d51fe6061.r2.dev/speaking/w8302.webm',
       created_at: TODAY + 'T11:00:00.000Z' }, null);
   check(!!q('[data-tgcard="t8302"]'), 'speaking: ikkinchi topshirik ham INBOXda');
   click(q('[data-act="tg-grade"][data-tid="t8302"][data-score="9"]'));
@@ -2050,6 +2062,7 @@ await (async () => {
   /* ================= 30b. BEKOR QILISH (qabul qilmaslik) ================= */
   win.onCloudNotifChange('speaking_submissions',
     { id: 8303, student_id: 77, media_type: 'video', status: 'kutilmoqda', score: null,
+      media_url: 'https://pub-836df3817ab64cee9075b55d51fe6061.r2.dev/speaking/w8303.webm',
       created_at: TODAY + 'T13:00:00.000Z' }, null);
   check(!!q('[data-tgcard="t8303"]'), 'reject: yangi topshirik INBOXda paydo boldi');
   check(!!q('[data-act="tg-reject"][data-tid="t8303"]'),
