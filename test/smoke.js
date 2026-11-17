@@ -1748,6 +1748,39 @@ await (async () => {
     'web-speaking: stale pullAll yangi ruxsatni OFF ga qaytarmaydi');
   if (webRow()) webRow().web_speaking_allowed = true;
 
+  /* Eski sxema: aniq ustun yo'q bo'lsa '*' fallback login/pull'ni buzmaydi */
+  const columnErr = { code: 'PGRST204', message: "Could not find the 'web_speaking_allowed' column of 'students' in the schema cache" };
+  cloudStub.failNextSelect('students', columnErr);
+  const fallbackPull = await win.__cloud.pullAll('m_amirov');
+  const fallbackLocal = JSON.parse(win.localStorage.getItem('et_students') || '[]')
+    .filter(x => x.id === 's77')[0] || {};
+  check(fallbackPull === true && fallbackLocal.webSpeakingAllowed === true,
+    'web-speaking: pullAll missing column → select(*) fallback ishlaydi');
+  cloudStub.failNextSelect('students', columnErr);
+  const fallbackLogin = await win.__cloud.selectStudentRows(
+    'id, name, login, password_hash, web_speaking_allowed',
+    q => q.ilike('login', 'restore1').limit(1)
+  );
+  check(!!fallbackLogin && !fallbackLogin.error && !!(fallbackLogin.data && fallbackLogin.data[0]),
+    'web-speaking: login select missing column → select(*) fallback ishlaydi');
+
+  /* Tez ikki marta bosish: bitta o'quvchi uchun bitta update */
+  const realDoubleSetter = win.__cloud.setWebSpeakingAllowed;
+  let webSetCalls = 0;
+  win.__cloud.setWebSpeakingAllowed = function () {
+    webSetCalls++;
+    return new Promise(function (resolve) {
+      setTimeout(function () { resolve({ ok: true, value: false }); }, 120);
+    });
+  };
+  click(webBtn());
+  click(webBtn());
+  check(webSetCalls === 1,
+    'web-speaking: tez ikki marta bosish faqat bitta Supabase update yuboradi');
+  await new Promise(r => setTimeout(r, 180));
+  win.__cloud.setWebSpeakingAllowed = realDoubleSetter;
+  await realDoubleSetter('s77', true);
+
   /* Supabase xatosi: UI optimistik holatdan haqiqiy holatga qaytadi */
   const realWebSetter = win.__cloud.setWebSpeakingAllowed;
   win.__cloud.setWebSpeakingAllowed = async function () { return { ok: false, error: 'test xato' }; };

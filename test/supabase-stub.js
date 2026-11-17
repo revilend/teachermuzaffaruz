@@ -7,6 +7,7 @@
 function createStub(seed) {
   const db = {};
   const seq = {};
+  const nextSelectErrors = {};
 
   function table(name) {
     if (!db[name]) { db[name] = []; seq[name] = 0; }
@@ -77,6 +78,11 @@ function createStub(seed) {
       return { data: touched.map(function (r) { return Object.assign({}, r); }), error: null };
     }
     /* select */
+    if (nextSelectErrors[q.table]) {
+      const err = nextSelectErrors[q.table];
+      delete nextSelectErrors[q.table];
+      return { data: null, error: err };
+    }
     let out = rows.filter(function (r) { return match(r, q.filters); });
     q.orders.forEach(function (o) {
       out = out.slice().sort(function (a, b) {
@@ -172,6 +178,7 @@ function createStub(seed) {
     removeCalls: removeCalls,
     setBucketPublic: function (v) { bucketPublic = !!v; },
     setStorageError: function (err) { storageError = err || null; },
+    failNextSelect: function (name, err) { nextSelectErrors[name] = err || { code: 'PGRST204', message: 'column missing' }; },
     reset: function (name) { db[name] = []; seq[name] = 0; }
   };
 }

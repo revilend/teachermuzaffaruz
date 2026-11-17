@@ -184,6 +184,7 @@ const state = {
   pending2fa: null,
   subGroup: 'all',
   studentView: '',
+  webSpeakingBusy: {},
   resetCtx: null,
   authStep: 'landing',
   resetMode: 'password',
@@ -441,6 +442,15 @@ const CloudSync = (function () {
   const missing = function (e) {
     return !!e && (e.code === 'PGRST205' || /could not find the table|does not exist/i.test(String(e.message || '')));
   };
+  /* Eski bazada yangi ustun hali yo'q: PGRST204 / 42703.
+     Bunday holatda aniq ustunlar ro'yxati o'rniga '*' bilan qayta o'qiymiz. */
+  const missingColumn = function (e) {
+    if (!e) return false;
+    const code = String(e.code || '');
+    const msg = String(e.message || e.details || '');
+    return code === 'PGRST204' || code === '42703' ||
+      /could not find the '.*' column|column .* does not exist|undefined column/i.test(msg);
+  };
   let hasMessages = true;
   let hasAudio = true;
   let subscribed = false;
@@ -502,6 +512,22 @@ const CloudSync = (function () {
     const g = webSpeakingGuard[dbId];
     if (g && g.pending) return;
     webSpeakingGuard[dbId] = { value: value === true, until: Date.now() + WEB_SPEAK_GUARD_MS };
+  }
+
+  /* Aniq ustunlar ro'yxati bilan o'qish; eski sxemada ustun yo'q bo'lsa
+     login/pullAll buzilmasligi uchun '*'ga xavfsiz qaytamiz. */
+  async function selectStudentRows(columns, filter) {
+    const read = function (cols) {
+      let q = client.from('students').select(cols);
+      if (typeof filter === 'function') q = filter(q);
+      return q;
+    };
+    let res = await read(columns);
+    if (res && res.error && missingColumn(res.error)) {
+      console.warn('[cloud] students select fallback:', (res.error && res.error.message) || res.error);
+      res = await read('*');
+    }
+    return res;
   }
 
   function payloadOf(s) {
@@ -845,7 +871,7 @@ const CloudSync = (function () {
     try {
       /* Toza start: bo'sh bazaga demo ma'lumot SEED QILINMAYDI — ustoz o'zi qo'shadi */
       const gRes = await client.from('groups').select('*');
-      const sRes = await client.from('students').select(STUDENT_SYNC_COLS);
+      const sRes = await selectStudentRows(STUDENT_SYNC_COLS);
       if (gRes.error || sRes.error) return false;
       const grRes = await client.from('grades').select('id, student_id, date, grade, category, note');
       const atRes = await client.from('attendance').select('student_id, date, status');
@@ -970,7 +996,9 @@ const CloudSync = (function () {
 
   /* --- O'quvchi: faqat o'z qatori, baholari, davomati, xabarlari --- */
   async function pullStudent(login) {
-    const sRes = await client.from('students').select(STUDENT_SYNC_COLS).ilike('login', login).limit(1);
+    const sRes = await selectStudentRows(STUDENT_SYNC_COLS, function (q) {
+      return q.ilike('login', login).limit(1);
+    });
     if (sRes.error || !sRes.data || !sRes.data.length) return false;
     const row = sRes.data[0];
     const dbId = row.id;
@@ -1768,18 +1796,24 @@ const CloudSync = (function () {
 
     if (last9) {
       const byPhone = await firstOf(function () {
-        return client.from('students').select(STUDENT_SYNC_COLS).ilike('phone', '%' + last9).limit(1);
+        return selectStudentRows(STUDENT_SYNC_COLS, function (q) {
+          return q.ilike('phone', '%' + last9).limit(1);
+        });
       });
       if (byPhone) return byPhone;
     }
     if (lower.indexOf('@') > 0) {
       const byMail = await firstOf(function () {
-        return client.from('students').select(STUDENT_SYNC_COLS).ilike('email', lower).limit(1);
+        return selectStudentRows(STUDENT_SYNC_COLS, function (q) {
+          return q.ilike('email', lower).limit(1);
+        });
       });
       if (byMail) return byMail;
     }
     return firstOf(function () {
-      return client.from('students').select(STUDENT_SYNC_COLS).ilike('login', lower).limit(1);
+      return selectStudentRows(STUDENT_SYNC_COLS, function (q) {
+        return q.ilike('login', lower).limit(1);
+      });
     });
   }
 
@@ -2223,6 +2257,7 @@ const CloudSync = (function () {
     pushGroup: pushGroup,
     pushStudent: pushStudent,
     setWebSpeakingAllowed: setWebSpeakingAllowed,
+    selectStudentRows: selectStudentRows,
     webSpeakingFromRow: webSpeakingFromRow,
     noteWebSpeaking: noteWebSpeaking,
     pushDebt: pushDebt,
@@ -8995,7 +9030,10 @@ async function doLogin() {
         const client = window.__cloudClient || (window.supabase && window.supabase.createClient && window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY));
         let studentRow = null;
         if (client) {
-          const res = await client.from('students').select('id, name, login, password, password_hash, web_speaking_allowed').ilike('login', login).limit(1);
+          const res = await CloudSync.selectStudentRows(
+            'id, name, login, password, password_hash, web_speaking_allowed',
+            function (q) { return q.ilike('login', login).limit(1); }
+          );
           if (res && res.data && res.data.length) studentRow = res.data[0];
         }
         return { client, studentRow };
@@ -10516,26 +10554,40 @@ document.addEventListener('click', function (e) {
     'web-speaking-toggle': async function () {
       if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
       const sid = btn.getAttribute('data-sid');
-      const list = getStudents();
-      const st = list.filter(x => x.id === sid)[0];
-      if (!st) return;
-      const next = !(st.webSpeakingAllowed === true);
-      /* Optimistik UI: darhol ON/OFF, keyin faqat shu ustun Supabase'ga yoziladi */
-      st.webSpeakingAllowed = next;
-      store.set(K.students, list);
-      render();
-      const res = await CloudSync.setWebSpeakingAllowed(sid, next);
-      if (!res || !res.ok) {
-        /* Yozuv muvaffaqiyatsiz bo'lsa, UI'ni ham haqiqiy holatga qaytaramiz */
-        const back = getStudents();
-        const cur = back.filter(x => x.id === sid)[0];
-        if (cur) { cur.webSpeakingAllowed = !next; store.set(K.students, back); }
+      /* Bitta o'quvchi uchun bir vaqtda bitta update: tez ikki marta bosilsa
+         ikkinchi so'rov tashlanadi, update'lar tartibi buzilmaydi. */
+      if (!state.webSpeakingBusy) state.webSpeakingBusy = {};
+      if (state.webSpeakingBusy[sid]) return;
+      state.webSpeakingBusy[sid] = true;
+      try {
+        const list = getStudents();
+        const st = list.filter(x => x.id === sid)[0];
+        if (!st) return;
+        const next = !(st.webSpeakingAllowed === true);
+        /* Optimistik UI: darhol ON/OFF, keyin faqat shu ustun Supabase'ga yoziladi */
+        st.webSpeakingAllowed = next;
+        store.set(K.students, list);
         render();
-        console.warn('[cloud] web_speaking_allowed save:', (res && res.error) || 'unknown error');
-        toast(t('Ruxsatni saqlashda xatolik'), 'error');
-        return;
+        let res;
+        try {
+          res = await CloudSync.setWebSpeakingAllowed(sid, next);
+        } catch (e) {
+          res = { ok: false, error: (e && e.message) || String(e) };
+        }
+        if (!res || !res.ok) {
+          /* Yozuv muvaffaqiyatsiz bo'lsa, UI'ni ham haqiqiy holatga qaytaramiz */
+          const back = getStudents();
+          const cur = back.filter(x => x.id === sid)[0];
+          if (cur) { cur.webSpeakingAllowed = !next; store.set(K.students, back); }
+          render();
+          console.warn('[cloud] web_speaking_allowed save:', (res && res.error) || 'unknown error');
+          toast(t('Ruxsatni saqlashda xatolik'), 'error');
+          return;
+        }
+        toast(next ? t('Saytda speaking topshirishga ruxsat berildi') : t('Saytda speaking topshirish cheklandi'));
+      } finally {
+        delete state.webSpeakingBusy[sid];
       }
-      toast(next ? t('Saytda speaking topshirishga ruxsat berildi') : t('Saytda speaking topshirish cheklandi'));
     },
 
     /* --- Uyga vazifalar --- */
