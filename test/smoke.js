@@ -3375,13 +3375,21 @@ await (async () => {
   logout();
   const prevFetchTs = win.fetch;
   const prevTurnstile = win.turnstile;
-  let tsVerifyOk = true;
+  let tsVerifyMode = 'ok';   /* ok | false | 403 | network */
   const tsCalls = { render: [], reset: 0 };
   const tsVerifyCalls = [];
   win.fetch = function (url, opts) {
     if (String(url).indexOf('/verify-turnstile') >= 0) {
       tsVerifyCalls.push({ url: String(url), opts: opts });
-      const okFlag = tsVerifyOk;
+      if (tsVerifyMode === 'network') return Promise.reject(new TypeError('Failed to fetch'));
+      if (tsVerifyMode === '403') {
+        return Promise.resolve({
+          ok: false,
+          status: 403,
+          json: function () { return Promise.resolve({ ok: false, 'error-codes': ['invalid-input-response'] }); }
+        });
+      }
+      const okFlag = tsVerifyMode !== 'false';
       return Promise.resolve({ ok: true, status: 200, json: function () { return Promise.resolve({ ok: okFlag }); } });
     }
     return prevFetchTs ? prevFetchTs(url, opts) : Promise.resolve({ ok: true, status: 200 });
@@ -3416,7 +3424,7 @@ await (async () => {
     'Turnstile: vidjet chizilganda matematik CAPTCHA yashiriladi');
 
   /* 1) Server "ok:false" qaytarsa — reset + ogohlantirish */
-  tsVerifyOk = false;
+  tsVerifyMode = 'false';
   setVal('#login-input', 'aziz');
   setVal('#password-input', '123');
   await new Promise(r => setTimeout(r, 60));
@@ -3429,9 +3437,11 @@ await (async () => {
         tsVerifyCalls[0].opts && tsVerifyCalls[0].opts.method === 'POST' &&
         JSON.parse(tsVerifyCalls[0].opts.body || '{}').token === 'ts-token-123',
     'Turnstile: token POST { token } bilan verify URL’ga yuboriladi, xatoda vidjet reset qilinadi');
+  check(!q('[data-act="do-login"]').disabled,
+    'Turnstile: rad etilgach kirish tugmasi qayta faollashadi');
 
   /* 2) "ok:true" bo'lsa kirish davom etadi */
-  tsVerifyOk = true;
+  tsVerifyMode = 'ok';
   if (tsRender.opts && tsRender.opts.callback) tsRender.opts.callback('ts-token-123');
   setVal('#login-input', 'restore1');
   setVal('#password-input', '9876');
@@ -3439,6 +3449,41 @@ await (async () => {
   clickAct('do-login');
   check(await until(() => text().includes('Restored Student'), 6000),
     'Turnstile: token serverda tasdiqlangach login muvaffaqiyatli yakunlanadi');
+
+  /* 3) Server 403 qaytarsa — aniq rad: bloklaydi, sabab ko'rsatiladi, reset */
+  logout();
+  click('[data-act="auth-login-open"]');
+  await new Promise(r => setTimeout(r, 150));
+  const tsRender403 = tsCalls.render[tsCalls.render.length - 1] || {};
+  tsVerifyMode = '403';
+  const resetsBefore403 = tsCalls.reset;
+  const callsBefore403 = tsVerifyCalls.length;
+  if (tsRender403.opts && tsRender403.opts.callback) tsRender403.opts.callback('ts-token-403');
+  setVal('#login-input', 'aziz');
+  setVal('#password-input', '123');
+  await new Promise(r => setTimeout(r, 80));
+  clickAct('do-login');
+  await new Promise(r => setTimeout(r, 300));
+  const err403 = (q('#login-error') || {}).textContent || '';
+  check(/Tekshiruv tasdiqlanmadi/.test(err403) && /invalid-input-response/.test(err403) &&
+        tsCalls.reset > resetsBefore403 && tsVerifyCalls.length > callsBefore403,
+    'Turnstile: server 403 qaytarsa kirish bloklanadi, sabab ko‘rsatiladi va vidjet reset qilinadi');
+  check(!JSON.parse(win.localStorage.getItem('et_session') || 'null'),
+    'Turnstile: 403 dan keyin sessiya ochilmaydi');
+
+  /* 4) Tarmoq xatosi ("Failed to fetch") — fail-open: kirish davom etadi */
+  tsVerifyMode = 'network';
+  if (tsRender403.opts && tsRender403.opts.callback) tsRender403.opts.callback('ts-token-net');
+  setVal('#login-input', 'restore1');
+  setVal('#password-input', '9876');
+  await new Promise(r => setTimeout(r, 80));
+  const netCallsBefore = tsVerifyCalls.length;
+  clickAct('do-login');
+  check(await until(() => text().includes('Restored Student'), 6000),
+    'Turnstile: “Failed to fetch” bo‘lsa kirish bloklanmaydi (fail-open)');
+  check(tsVerifyCalls.length > netCallsBefore &&
+        JSON.parse(tsVerifyCalls[tsVerifyCalls.length - 1].opts.body || '{}').token === 'ts-token-net',
+    'Turnstile: fail-open holatida ham token verify URL’ga yuboriladi');
 
   win.turnstile = prevTurnstile;
   win.fetch = prevFetchTs;
