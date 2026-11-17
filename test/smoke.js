@@ -1718,6 +1718,61 @@ await (async () => {
   check(!!stV && stV.voiceAllowed === false, "voice: voiceAllowed=false lokalda saqlandi");
   check(q('#toast').textContent.includes('cheklandi'), "voice: toast xabari");
 
+  /* ================= 21b. SAYTDA SPEAKING RUXSATI (web_speaking_allowed) ================= */
+  const webRow = () => (cloudStub.db.students || []).filter(r => String(r.id) === '77')[0];
+  const webBtn = () => q('[data-act="web-speaking-toggle"][data-sid="s77"]');
+  check(!!webBtn(), 'web-speaking: ustoz kartasida sayt ruxsati kaliti bor');
+  if (webBtn() && webBtn().classList.contains('on')) {
+    click(webBtn());
+    await until(() => webRow() && webRow().web_speaking_allowed === false, 2000);
+  }
+  click(webBtn());
+  check(await until(() => !!webRow() && webRow().web_speaking_allowed === true, 2000),
+    'web-speaking: toggle darhol Supabase students.web_speaking_allowed=true qiladi');
+  const webLocalOn = JSON.parse(win.localStorage.getItem('et_students') || '[]')
+    .filter(x => x.id === 's77')[0] || {};
+  check(webLocalOn.webSpeakingAllowed === true,
+    'web-speaking: lokal o‘quvchi modelida webSpeakingAllowed=true saqlanadi');
+
+  /* To'liq pushStudent ham ruxsatni yo'qotmaydi (serialization round-trip) */
+  await win.__cloud.pushStudent('s77');
+  check(webRow() && webRow().web_speaking_allowed === true,
+    'web-speaking: pushStudent round-trip web_speaking_allowed=true ni saqlaydi');
+
+  /* Ataylab eski (stale) qiymatni qaytargan pull: guard yangi toggle'ni bosib ketmasligi kerak */
+  if (webRow()) webRow().web_speaking_allowed = false;
+  const stalePull = await win.__cloud.pullAll('m_amirov');
+  const webAfterStale = JSON.parse(win.localStorage.getItem('et_students') || '[]')
+    .filter(x => x.id === 's77')[0] || {};
+  check(stalePull === true && webAfterStale.webSpeakingAllowed === true,
+    'web-speaking: stale pullAll yangi ruxsatni OFF ga qaytarmaydi');
+  if (webRow()) webRow().web_speaking_allowed = true;
+
+  /* Supabase xatosi: UI optimistik holatdan haqiqiy holatga qaytadi */
+  const realWebSetter = win.__cloud.setWebSpeakingAllowed;
+  win.__cloud.setWebSpeakingAllowed = async function () { return { ok: false, error: 'test xato' }; };
+  click(webBtn());
+  check(await until(() => q('#toast').textContent.includes('Ruxsatni saqlashda xatolik'), 1500),
+    'web-speaking: Supabase xatosi toast orqali ko‘rsatiladi');
+  const webAfterError = JSON.parse(win.localStorage.getItem('et_students') || '[]')
+    .filter(x => x.id === 's77')[0] || {};
+  check(webAfterError.webSpeakingAllowed === true,
+    'web-speaking: yozuv xatosida UI oldingi holatga qaytadi');
+  win.__cloud.setWebSpeakingAllowed = realWebSetter;
+
+  check(/STUDENT_SYNC_COLS[\s\S]{0,320}web_speaking_allowed/.test(appJs) &&
+        /\.update\(\{ web_speaking_allowed: value \}\)/.test(appJs) &&
+        /web_speaking_allowed: webSpeakingForWrite/.test(appJs),
+    'web-speaking: select/update/serialization yo‘llarida ustun eksplitsit');
+
+  /* O'quvchi tomoni: pullStudent/pullAll(login) ruxsatni to'g'ridan-to'g'ri o'qiydi */
+  const studentPull = await win.__cloud.pullAll('restore1');
+  const webStudentSide = JSON.parse(win.localStorage.getItem('et_students') || '[]')
+    .filter(x => x.id === 's77')[0] || {};
+  check(studentPull === true && webStudentSide.webSpeakingAllowed === true,
+    'web-speaking: student pullStudent web_speaking_allowed=true ni ko‘radi');
+  await win.__cloud.pullAll('m_amirov');
+
   /* ================= 22. 5 SONIYALIK POLLING OLIB TASHLANGAN ================= */
   let fiveSec = 0;
   const origST = win.setTimeout;

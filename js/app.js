@@ -468,6 +468,42 @@ const CloudSync = (function () {
     return st && st.dbId != null ? st.dbId : null;
   }
 
+  /* O'quvchi sinxronlashida ishlatiladigan aniq ustunlar ro'yxati.
+     web_speaking_allowed har bir select'da ochiq ko'rsatiladi — '*'ga tayanmaymiz. */
+  const STUDENT_SYNC_COLS = 'id, name, school_class, group_id, login, speaking_debt, payment_debt, ' +
+    'fee_period, telegram_chat_id, voice_allowed, web_speaking_allowed, homework_upload_allowed, ' +
+    'last_device, last_seen, last_payment_info, last_paid_month, phone, email, email_verified';
+
+  /* Toggle bosilganda ustun darhol yoziladi. Guard shu vaqt ichida eski pull
+     javobi yangi qiymatni bosib ketishining oldini oladi. */
+  const webSpeakingGuard = {};
+  const WEB_SPEAK_GUARD_MS = 8000;
+  function webSpeakingGuardValue(dbId) {
+    if (dbId == null) return null;
+    const g = webSpeakingGuard[dbId];
+    if (!g) return null;
+    if (g.pending || g.until > Date.now()) return g.value;
+    delete webSpeakingGuard[dbId];
+    return null;
+  }
+  function webSpeakingForWrite(dbId, fallback) {
+    const g = webSpeakingGuardValue(dbId);
+    return g == null ? fallback === true : g;
+  }
+  function webSpeakingFromRow(row, fallback) {
+    if (!row) return fallback === true;
+    const g = webSpeakingGuardValue(row.id);
+    if (g != null) return g;
+    if (typeof row.web_speaking_allowed !== 'undefined') return row.web_speaking_allowed === true;
+    return fallback === true;
+  }
+  function noteWebSpeaking(dbId, value) {
+    if (dbId == null) return;
+    const g = webSpeakingGuard[dbId];
+    if (g && g.pending) return;
+    webSpeakingGuard[dbId] = { value: value === true, until: Date.now() + WEB_SPEAK_GUARD_MS };
+  }
+
   function payloadOf(s) {
     const g = groupById(s.groupId);
     const acc = accOfSid(s.id) || {};
@@ -482,7 +518,7 @@ const CloudSync = (function () {
       last_payment_info: s.lastPaymentInfo || null,
       last_paid_month: s.lastPaidMonth || null,
       voice_allowed: s.voiceAllowed === true,
-      web_speaking_allowed: s.webSpeakingAllowed === true,
+      web_speaking_allowed: webSpeakingForWrite(s.dbId, s.webSpeakingAllowed),
       homework_upload_allowed: s.homeworkUploadAllowed === true
     };
     /* Kontaktlar ham faqat mavjud bo'lsa yoziladi — eski qiymat o'chmasin */
@@ -809,18 +845,19 @@ const CloudSync = (function () {
     try {
       /* Toza start: bo'sh bazaga demo ma'lumot SEED QILINMAYDI — ustoz o'zi qo'shadi */
       const gRes = await client.from('groups').select('*');
-      const sRes = await client.from('students').select('*');
+      const sRes = await client.from('students').select(STUDENT_SYNC_COLS);
       if (gRes.error || sRes.error) return false;
       const grRes = await client.from('grades').select('id, student_id, date, grade, category, note');
       const atRes = await client.from('attendance').select('student_id, date, status');
       if (grRes.error || atRes.error) return false;
 
       const prev = getStudents();
-      const newIdByOld = {}, oldIdByDb = {}, audioByOld = {};
+      const newIdByOld = {}, oldIdByDb = {}, audioByOld = {}, prevByDb = {};
       prev.forEach(function (st) {
         if (st.dbId == null) return;
         newIdByOld[st.id] = 's' + st.dbId;
         oldIdByDb[st.dbId] = st.id;
+        prevByDb[st.dbId] = st;
         if (st.audioSubmissions && st.audioSubmissions.length) audioByOld[st.id] = st.audioSubmissions;
       });
 
@@ -840,7 +877,7 @@ const CloudSync = (function () {
           feePeriod: r.fee_period || '',
           telegramChatId: r.telegram_chat_id == null ? null : Number(r.telegram_chat_id),
           voiceAllowed: r.voice_allowed === true,
-          webSpeakingAllowed: r.web_speaking_allowed === true,
+          webSpeakingAllowed: webSpeakingFromRow(r, prevByDb[r.id] && prevByDb[r.id].webSpeakingAllowed),
           homeworkUploadAllowed: r.homework_upload_allowed === true,
           lastDevice: r.last_device || '',
           lastSeen: r.last_seen || null,
@@ -933,7 +970,7 @@ const CloudSync = (function () {
 
   /* --- O'quvchi: faqat o'z qatori, baholari, davomati, xabarlari --- */
   async function pullStudent(login) {
-    const sRes = await client.from('students').select('*').ilike('login', login).limit(1);
+    const sRes = await client.from('students').select(STUDENT_SYNC_COLS).ilike('login', login).limit(1);
     if (sRes.error || !sRes.data || !sRes.data.length) return false;
     const row = sRes.data[0];
     const dbId = row.id;
@@ -965,7 +1002,7 @@ const CloudSync = (function () {
       feePeriod: row.fee_period || '',
       telegramChatId: row.telegram_chat_id == null ? null : Number(row.telegram_chat_id),
       voiceAllowed: row.voice_allowed === true,
-      webSpeakingAllowed: row.web_speaking_allowed === true,
+      webSpeakingAllowed: webSpeakingFromRow(row, prevSt && prevSt.webSpeakingAllowed),
       homeworkUploadAllowed: row.homework_upload_allowed === true,
       lastDevice: row.last_device || '',
       lastSeen: row.last_seen || null,
@@ -1103,6 +1140,37 @@ const CloudSync = (function () {
         if (res.error) throw res.error;
       }
     } catch (e) { console.warn('[cloud] student:', (e && e.message) || e); }
+  }
+
+  /* Faqat shu ustunni to'g'ridan-to'g'ri yozadi. Butun o'quvchi qatorini
+     yubormaymiz — parallel pull yoki eski to'liq update uni qaytarib qo'ymaydi. */
+  async function setWebSpeakingAllowed(sid, enabled) {
+    if (!ready()) return { ok: false, error: "Bulut bilan aloqa yo'q (Supabase sozlanmagan)" };
+    const value = enabled === true;
+    const dbId = await ensureDbId(sid);
+    if (dbId == null) return { ok: false, error: "O'quvchi bazada saqlanmagan (dbId yo'q)" };
+    webSpeakingGuard[dbId] = { value: value, pending: true, until: 0 };
+    try {
+      const res = await client.from('students')
+        .update({ web_speaking_allowed: value })
+        .eq('id', dbId);
+      if (res.error) {
+        delete webSpeakingGuard[dbId];
+        console.warn('[cloud] web_speaking_allowed:', (res.error && res.error.message) || res.error);
+        return { ok: false, error: (res.error && res.error.message) || String(res.error) };
+      }
+      /* Yozuv tugagach ham qisqa muddat guard qoladi: update boshlanishidan
+         oldin ketgan pull javobi keyin kelib, eski qiymatni yozmasin. */
+      webSpeakingGuard[dbId] = { value: value, pending: false, until: Date.now() + WEB_SPEAK_GUARD_MS };
+      const list = getStudents();
+      const t = list.filter(function (x) { return x.id === sid; })[0];
+      if (t) { t.webSpeakingAllowed = value; store.set(K.students, list); }
+      return { ok: true, value: value, error: '' };
+    } catch (e) {
+      delete webSpeakingGuard[dbId];
+      console.warn('[cloud] web_speaking_allowed:', (e && e.message) || e);
+      return { ok: false, error: (e && e.message) || String(e) };
+    }
   }
 
   async function pushDebt(sid) {
@@ -1444,12 +1512,12 @@ const CloudSync = (function () {
       else add(true, 'homework_submissions ustunlari', subCols.join(', ') + ' — joyida');
     } catch (e) { add(false, 'homework_submissions ustunlari', apiErrText(e)); }
 
-    /* 2) students.homework_upload_allowed */
+    /* 2) students ruxsat ustunlari (web speaking + homework) */
     try {
-      const res = await client.from('students').select('homework_upload_allowed').limit(1);
-      if (res.error) add(false, 'students.homework_upload_allowed', apiErrText(res.error));
-      else add(true, 'students.homework_upload_allowed', 'ustoz ruxsati ustuni joyida');
-    } catch (e) { add(false, 'students.homework_upload_allowed', apiErrText(e)); }
+      const res = await client.from('students').select('web_speaking_allowed, homework_upload_allowed').limit(1);
+      if (res.error) add(false, 'students.web_speaking_allowed + homework_upload_allowed', apiErrText(res.error));
+      else add(true, 'students.web_speaking_allowed + homework_upload_allowed', 'ikkala ruxsat ustuni joyida');
+    } catch (e) { add(false, 'students ruxsat ustunlari', apiErrText(e)); }
 
     /* 3) Bucket mavjudligi va public holati */
     let bucketName = null;
@@ -1700,18 +1768,18 @@ const CloudSync = (function () {
 
     if (last9) {
       const byPhone = await firstOf(function () {
-        return client.from('students').select('*').ilike('phone', '%' + last9).limit(1);
+        return client.from('students').select(STUDENT_SYNC_COLS).ilike('phone', '%' + last9).limit(1);
       });
       if (byPhone) return byPhone;
     }
     if (lower.indexOf('@') > 0) {
       const byMail = await firstOf(function () {
-        return client.from('students').select('*').ilike('email', lower).limit(1);
+        return client.from('students').select(STUDENT_SYNC_COLS).ilike('email', lower).limit(1);
       });
       if (byMail) return byMail;
     }
     return firstOf(function () {
-      return client.from('students').select('*').ilike('login', lower).limit(1);
+      return client.from('students').select(STUDENT_SYNC_COLS).ilike('login', lower).limit(1);
     });
   }
 
@@ -2154,6 +2222,9 @@ const CloudSync = (function () {
     fetchMessages: fetchMessages,
     pushGroup: pushGroup,
     pushStudent: pushStudent,
+    setWebSpeakingAllowed: setWebSpeakingAllowed,
+    webSpeakingFromRow: webSpeakingFromRow,
+    noteWebSpeaking: noteWebSpeaking,
     pushDebt: pushDebt,
     adjustDebt: adjustDebt,
     pushGrade: pushGrade,
@@ -2891,9 +2962,7 @@ function onCloudNotifChange(table, row, old) {
     const voiceNow = typeof row.voice_allowed === 'undefined'
       ? st.voiceAllowed === true
       : row.voice_allowed === true;
-    const webNow = typeof row.web_speaking_allowed === 'undefined'
-      ? st.webSpeakingAllowed === true
-      : row.web_speaking_allowed === true;
+    const webNow = CloudSync.webSpeakingFromRow(row, st.webSpeakingAllowed);
     const was = old && typeof old.voice_allowed !== 'undefined'
       ? old.voice_allowed
       : st.voiceAllowed;
@@ -2907,6 +2976,9 @@ function onCloudNotifChange(table, row, old) {
       t.voiceAllowed = voiceNow;
       t.webSpeakingAllowed = webNow;
       store.set(K.students, list);
+    }
+    if (typeof row.web_speaking_allowed !== 'undefined') {
+      CloudSync.noteWebSpeaking(row.id, webNow);
     }
     if (voiceNow && was !== true) {
       Notif.notifyOnce('voice:' + row.id,
@@ -3507,6 +3579,7 @@ const I18N_EN = {
   "Botda ovozli xabar yoki dumaloq video yuboring.": "Send a voice message or a round video in the bot.",
   "Saytda speaking topshirishga ruxsat berildi": "Website speaking submission allowed",
   "Saytda speaking topshirish cheklandi": "Website speaking submission disabled",
+  "Ruxsatni saqlashda xatolik": "Failed to save the permission",
   "Baholandi": "Graded",
   "Bekor qilindi": "Rejected",
   "Baholangan sayt videolari": "Graded website videos",
@@ -8922,7 +8995,7 @@ async function doLogin() {
         const client = window.__cloudClient || (window.supabase && window.supabase.createClient && window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY));
         let studentRow = null;
         if (client) {
-          const res = await client.from('students').select('*').ilike('login', login).limit(1);
+          const res = await client.from('students').select('id, name, login, password, password_hash, web_speaking_allowed').ilike('login', login).limit(1);
           if (res && res.data && res.data.length) studentRow = res.data[0];
         }
         return { client, studentRow };
@@ -10440,16 +10513,29 @@ document.addEventListener('click', function (e) {
     },
 
     /* --- Saytda speaking topshirishga ruxsat (web_speaking_allowed) --- */
-    'web-speaking-toggle': function () {
+    'web-speaking-toggle': async function () {
       if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+      const sid = btn.getAttribute('data-sid');
       const list = getStudents();
-      const st = list.filter(x => x.id === btn.getAttribute('data-sid'))[0];
+      const st = list.filter(x => x.id === sid)[0];
       if (!st) return;
-      st.webSpeakingAllowed = !(st.webSpeakingAllowed === true);
+      const next = !(st.webSpeakingAllowed === true);
+      /* Optimistik UI: darhol ON/OFF, keyin faqat shu ustun Supabase'ga yoziladi */
+      st.webSpeakingAllowed = next;
       store.set(K.students, list);
-      CloudSync.pushStudent(st.id);
       render();
-      toast(st.webSpeakingAllowed ? t('Saytda speaking topshirishga ruxsat berildi') : t('Saytda speaking topshirish cheklandi'));
+      const res = await CloudSync.setWebSpeakingAllowed(sid, next);
+      if (!res || !res.ok) {
+        /* Yozuv muvaffaqiyatsiz bo'lsa, UI'ni ham haqiqiy holatga qaytaramiz */
+        const back = getStudents();
+        const cur = back.filter(x => x.id === sid)[0];
+        if (cur) { cur.webSpeakingAllowed = !next; store.set(K.students, back); }
+        render();
+        console.warn('[cloud] web_speaking_allowed save:', (res && res.error) || 'unknown error');
+        toast(t('Ruxsatni saqlashda xatolik'), 'error');
+        return;
+      }
+      toast(next ? t('Saytda speaking topshirishga ruxsat berildi') : t('Saytda speaking topshirish cheklandi'));
     },
 
     /* --- Uyga vazifalar --- */
