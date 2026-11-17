@@ -8259,26 +8259,49 @@ async function sendLoginReminder(raw) {
   toast('Login yuborildi');
 }
 
+let resetSendBusy = false;
+/* Tiklash tugmasi: tekshiruv paytida "Tekshirilmoqda..." + qayta bosishni bloklash */
+function setResetSendBusy(busy, label) {
+  const b = $('[data-act="forgot-send"]');
+  if (!b) return;
+  b.disabled = !!busy;
+  b.textContent = busy ? 'Tekshirilmoqda...' : label;
+}
+
 async function sendResetCode() {
   const raw = String(($('#fp-contact') || {}).value || '').trim();
   if (!raw) { resetError('Telefon, Gmail yoki loginni kiriting'); return; }
 
+  /* Bir vaqtda faqat bitta so'rov yuboriladi (tugma ikki marta bosilmasin) */
+  if (resetSendBusy) return;
+  const submitBtn = $('[data-act="forgot-send"]');
+  const btnText = submitBtn ? submitBtn.textContent : '';
+  resetSendBusy = true;
+  setResetSendBusy(true, btnText);
+  try {
+    await sendResetCodeWork(raw);
+  } catch (e) {
+    console.warn('[reset] send:', (e && e.message) || e);
+    resetError('Xatolik: ' + ((e && e.message) || e));
+  } finally {
+    resetSendBusy = false;
+    setResetSendBusy(false, btnText);
+  }
+}
+
+async function sendResetCodeWork(raw) {
   /* 1 va 3-tanlov: login eslatmasi (kod kerak emas) */
   if (state.resetMode === 'login' || state.resetMode === 'both') {
     await sendLoginReminder(raw);
     return;
   }
 
-  /* 2-tanlov: Turnstile (bo'lsa) yoki 5 xonali CAPTCHA majburiy */
+  /* 2-tanlov: Turnstile (bo'lsa) yoki 5 xonali CAPTCHA majburiy.
+     Turnstile server tekshiruvi kontakt izlash bilan parallel yuboriladi. */
+  let tsPromise = null;
   if (turnstileInUse('recover')) {
     if (!state.turnstileToken) { resetError('Tekshiruvni yakunlang'); return; }
-    const tsVerify = await verifyTurnstileToken(state.turnstileToken);
-    if (!tsVerify || !tsVerify.ok) {
-      resetTurnstile('recover');
-      const detail = tsVerify && tsVerify.detail ? ' (' + tsVerify.detail + ')' : '';
-      resetError("Tekshiruv tasdiqlanmadi — qayta urinib ko'ring" + detail);
-      return;
-    }
+    tsPromise = verifyTurnstileToken(state.turnstileToken);
   } else {
     const capExpected = String((state.recoverCaptcha && state.recoverCaptcha.answer) || '');
     const capGiven = String((($('#fr-captcha-input') || {}).value || '')).trim();
@@ -8291,13 +8314,38 @@ async function sendResetCode() {
 
   const digits = raw.replace(/\D/g, '');
   const last9 = digits.length >= 9 ? digits.slice(-9) : '';
-  let isTeacher = raw.toLowerCase() === TEACHER_LOGIN;
+  const isTeacherLogin = raw.toLowerCase() === TEACHER_LOGIN;
+
+  /* Turnstile bilan bir vaqtda (Promise.all): ustoz telefonini aniqlash va
+     o'quvchi kontaktini izlash — ikkalasi ham faqat o'qish so'rovlari. */
+  const admin9Promise = (!isTeacherLogin && last9)
+    ? adminPhoneLast9().catch(function () { return ''; })
+    : Promise.resolve('');
+  const rowPromise = isTeacherLogin
+    ? Promise.resolve(null)
+    : Promise.resolve().then(function () {
+        return CloudSync.lookupStudentByContact(raw);
+      }).catch(function () { return null; });
+
+  const tsResults = await Promise.all([
+    tsPromise || Promise.resolve({ ok: true, skip: true }),
+    admin9Promise,
+    rowPromise
+  ]);
+  const tsVerify = tsResults[0];
+  const admin9 = tsResults[1];
+  const lookedUpRow = tsResults[2];
+
+  if (tsPromise && (!tsVerify || !tsVerify.ok)) {
+    resetTurnstile('recover');
+    const detail = tsVerify && tsVerify.detail ? ' (' + tsVerify.detail + ')' : '';
+    resetError("Tekshiruv tasdiqlanmadi — qayta urinib ko'ring" + detail);
+    return;
+  }
 
   /* Ustoz telefoni kiritilgan bo'lsa ham kod ADMIN kanaliga ketadi */
-  if (!isTeacher && last9) {
-    const admin9 = await adminPhoneLast9();
-    if (admin9 && admin9 === last9) isTeacher = true;
-  }
+  let isTeacher = isTeacherLogin;
+  if (!isTeacher && last9 && admin9 && admin9 === last9) isTeacher = true;
 
   let row = null;
   let telegramChat = null;
@@ -8308,8 +8356,7 @@ async function sendResetCode() {
     telegramChat = 'ADMIN';
     emailTo = await teacherVerifiedEmail();   /* faqat tasdiqlangan Gmail */
   } else {
-    try { row = await CloudSync.lookupStudentByContact(raw); }
-    catch (e) { row = null; }
+    row = lookedUpRow;
     if (!row) { resetError("Bunday telefon, Gmail yoki login topilmadi — qayta tekshirib ko'ring"); return; }
     if (row.telegram_chat_id) telegramChat = String(row.telegram_chat_id);
     if (row.email && row.email_verified) emailTo = String(row.email).trim();   /* faqat tasdiqlangan */
@@ -8383,7 +8430,33 @@ async function sendResetCode() {
   toast(isTeacher ? 'Kod ustoz kanallariga yuborildi' : 'Kod yuborildi — Telegram/Gmailni tekshiring');
 }
 
+let resetPwBusy = false;
+/* "Parolni yangilash" tugmasi: "Tekshirilmoqda..." + qayta bosishni bloklash */
+function setResetPwBusy(busy, label) {
+  const b = $('[data-act="forgot-reset"]');
+  if (!b) return;
+  b.disabled = !!busy;
+  b.textContent = busy ? 'Tekshirilmoqda...' : label;
+}
+
 async function resetPassword() {
+  if (resetPwBusy) return;
+  const submitBtn = $('[data-act="forgot-reset"]');
+  const btnText = submitBtn ? submitBtn.textContent : '';
+  resetPwBusy = true;
+  setResetPwBusy(true, btnText);
+  try {
+    await resetPasswordWork();
+  } catch (e) {
+    console.warn('[reset] password:', (e && e.message) || e);
+    resetError('Xatolik: ' + ((e && e.message) || e));
+  } finally {
+    resetPwBusy = false;
+    setResetPwBusy(false, btnText);
+  }
+}
+
+async function resetPasswordWork() {
   const ctx = state.resetCtx;
   const code = String(($('#fp-code') || {}).value || '').trim();
   const n1 = String(($('#fp-new') || {}).value || '');
