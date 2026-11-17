@@ -3654,6 +3654,21 @@ const I18N_EN = {
   "Repetitorlik guruhi": "Tutoring group",
   "Vazifa (tavsif)": "Task (description)",
   "Nima bajarishi kerak...": "What should they do...",
+  "O'quvchi ismini kiriting...": "Enter student name...",
+  "O'quvchiga izoh...": "Comment for student...",
+  "Xabar yozing...": "Type a message...",
+  "Masalan: Present Perfect": "For example: Present Perfect",
+  "Masalan: 100000": "For example: 100000",
+  "Masalan: 50000": "For example: 50000",
+  "Masalan: Noyabr 2026 yoki Oktyabr 2026": "For example: November 2026 or October 2026",
+  "Masalan: IELTS Band 7.0": "For example: IELTS Band 7.0",
+  "Masalan: 300000": "For example: 300000",
+  "Masalan: Aziz Rahimov": "For example: Aziz Rahimov",
+  "Masalan: jasur09": "For example: jasur09",
+  "Masalan: 1234": "For example: 1234",
+  "Masalan: A'lo faollik": "For example: Excellent participation",
+  "ism@gmail.com": "name@gmail.com",
+  "ustoz@gmail.com": "teacher@gmail.com",
   "Tanlangan faylni bekor qilish": "Cancel selected file",
   "Slot qo'shish": "Add slot",
   "Uyga vazifalar": "Homework",
@@ -4733,7 +4748,7 @@ function hwStudentSubmissionHTML(h) {
       <summary>${ico('upload', 15)} Topshiriqni yuklash</summary>
       <div class="hw-more-body">
         <input type="file" class="input hw-sub-input" multiple accept="*/*" data-hid="${esc(String(h.id))}" />
-        <textarea class="input hw-sub-note" rows="2" placeholder="Izoh (ixtiyoriy)"></textarea>
+        <textarea class="input hw-sub-note" rows="2" placeholder="${t('Izoh (ixtiyoriy)')}"></textarea>
         <div class="hw-sub-progress" hidden><span class="hw-sub-progress-bar" style="width:0%"></span></div>
         <div class="hw-sub-status muted small" hidden></div>
         <div class="field-error hw-sub-error"></div>
@@ -4917,9 +4932,9 @@ function openHwModal(hid, preGroup) {
       ${groups.map(g => `<option value="${g.id}"${(cur ? cur.groupId === g.id : (preGroup && preGroup === g.id)) ? ' selected' : ''}>${esc(g.name)}</option>`).join('')}
     </select>
     <label class="field-label" for="hw-title">Mavzu</label>
-    <input class="input" id="hw-title" type="text" placeholder="Masalan: Present Perfect" value="${cur ? esc(cur.title) : ''}" />
+    <input class="input" id="hw-title" type="text" placeholder="${t('Masalan: Present Perfect')}" value="${cur ? esc(cur.title) : ''}" />
     <label class="field-label" for="hw-desc">Vazifa (tavsif)</label>
-    <textarea class="input" id="hw-desc" rows="3" placeholder="Nima bajarishi kerak...">${cur ? esc(cur.description) : ''}</textarea>
+    <textarea class="input" id="hw-desc" rows="3" placeholder="${t('Nima bajarishi kerak...')}">${cur ? esc(cur.description) : ''}</textarea>
     <label class="field-label" for="hw-due">Topshirish muddati</label>
     <input class="input" id="hw-due" type="date" value="${cur && cur.dueDate ? esc(cur.dueDate) : todayKey()}" />
 
@@ -5648,7 +5663,7 @@ function submissionCardHTML(s) {
         <span><b>Komentariya:</b> ${esc(s.teacherComment)}${s.commentedAt ? ` <span class="muted small">${esc(timeAgoText(s.commentedAt))}</span>` : ''}</span>
       </div>` : `<div class="sub-new-badge">${ico('alert', 13)} Ko'rilmagan</div>`}
     <label class="field-label" for="sub-comment-${esc(String(s.id))}">${ico('message', 14)} Komentariya yozish</label>
-    <textarea class="input sub-comment" id="sub-comment-${esc(String(s.id))}" rows="2" placeholder="O'quvchiga izoh...">${esc(s.teacherComment || '')}</textarea>
+    <textarea class="input sub-comment" id="sub-comment-${esc(String(s.id))}" rows="2" placeholder="${t("O'quvchiga izoh...")}">${esc(s.teacherComment || '')}</textarea>
     <button type="button" class="btn btn-primary btn-block" data-act="sub-comment" data-sub="${esc(String(s.id))}">${ico('upload', 15)} Yuborish</button>
   </div>`;
 }
@@ -5859,7 +5874,7 @@ function openFeeSchedule(gid) {
     <label class="field-label" for="fee-period">Oy</label>
     <input class="input" id="fee-period" type="month" value="${esc(state.payMonth || currentPeriod())}" />
     <label class="field-label" for="fee-amount">Summa (so'mda)</label>
-    <input class="input" id="fee-amount" type="number" min="0" step="1000" inputmode="numeric" placeholder="Masalan: 100000" />
+    <input class="input" id="fee-amount" type="number" min="0" step="1000" inputmode="numeric" placeholder="${t('Masalan: 100000')}" />
     <div class="modal-actions">
       <button type="button" class="btn btn-ghost" data-act="close-modal">Yopish</button>
       <button type="button" class="btn btn-primary" data-act="fee-add" data-gid="${gid}">+ Qo'shish</button>
@@ -6178,7 +6193,7 @@ function studentsScreen() {
 ` : ''}
 
   <div class="search-wrap">
-    <input class="input" id="s-search" type="search" placeholder="O'quvchi ismini kiriting..." value="${esc(state.search)}" />
+    <input class="input" id="s-search" type="search" placeholder="${t("O'quvchi ismini kiriting...")}" value="${esc(state.search)}" />
   </div>
 
   ${showDebtTools ? `<button type="button" class="btn btn-primary btn-block debtors-btn" data-act="remind-debtors">
@@ -6223,7 +6238,7 @@ function openAddDebtModal(sid) {
         <span class="pay-status ${debt > 0 ? 'due' : 'ok'}">${debt > 0 ? fmtSom(debt) + " so'm" : "Qarz yo'q"}</span></div>
     </div>
     <label class="field-label" for="debt-sum">Qo'shiladigan summa (so'mda)</label>
-    <input class="input" id="debt-sum" type="number" min="0" step="1000" inputmode="numeric" placeholder="Masalan: 50000" />
+    <input class="input" id="debt-sum" type="number" min="0" step="1000" inputmode="numeric" placeholder="${t('Masalan: 50000')}" />
     <p class="pay-hint">${ico('bellOff', 14)} Bu amalda o'quvchiga xabar yuborilmaydi. Eslatma faqat kartadagi <b>${ico('bell', 14)} Eslatma yuborish</b> tugmasi bilan ketadi.</p>
     <div class="field-error" id="debt-error"></div>
     <div class="modal-actions">
@@ -6323,7 +6338,7 @@ function openPayModal(sid, period) {
     <input class="input" id="pay-sum" type="number" min="0" step="1000" inputmode="numeric" value="${debt > 0 ? debt : (fee || '')}" />
     
     <label class="field-label" for="pay-month-name" style="margin-top:8px">Qaysi oy uchun to'lov</label>
-    <input class="input" id="pay-month-name" type="text" placeholder="Masalan: Noyabr 2026 yoki Oktyabr 2026" value="${esc(defaultMonthName)}" />
+    <input class="input" id="pay-month-name" type="text" placeholder="${t('Masalan: Noyabr 2026 yoki Oktyabr 2026')}" value="${esc(defaultMonthName)}" />
     
     <p class="pay-hint">Kiritilgan summa qarzdan ayiriladi va o'quvchi kabinetida so'nggi to'lov sifatida ko'rinadi.</p>
     <div class="field-error" id="pay-error"></div>
@@ -6454,7 +6469,7 @@ function profileScreen() {
     <label class="field-label" for="st-phone">${t('Telefon raqam')}</label>
     <input class="input" id="st-phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="+998 90 123 45 67" value="${esc(st.phone || '')}" />
     <label class="field-label" for="st-email" style="margin-top:6px">${t('Gmail manzili')}</label>
-    <input class="input" id="st-email" type="email" autocomplete="email" placeholder="ism@gmail.com" value="${esc(st.email || '')}" />
+    <input class="input" id="st-email" type="email" autocomplete="email" placeholder="${t('ism@gmail.com')}" value="${esc(st.email || '')}" />
     <div class="muted small" style="margin-top:4px">${st.email ? (st.emailVerified ? ico('checkCircle', 14) + ' ' + t('Tasdiqlangan') : ico('alert', 14) + ' ' + t('Tasdiqlanmagan')) : ''}</div>
     ${(st.email && !st.emailVerified) ? `<button type="button" class="btn btn-ghost btn-block" data-act="resend-verify-existing" style="margin-top:6px">${ico('mail', 14)} ${t('Kod yuborish')}</button>` : ''}
     <div class="muted small" style="margin-top:6px">${t("Parolni tiklash kodi shu telefon (Telegram) yoki Gmail manzilga yuboriladi.")}</div>
@@ -6466,7 +6481,7 @@ function profileScreen() {
   <div class="card">
     <div class="muted small" style="margin-bottom:8px">${t("Kirishdagi 2 bosqichli kod va parolni tiklash kodi shu manzillarga yuboriladi.")}</div>
     <label class="field-label" for="tc-email">${t('Ustoz Gmail manzili')}</label>
-    <input class="input" id="tc-email" type="email" autocomplete="email" placeholder="ustoz@gmail.com" value="${esc(adminContacts.email || '')}" />
+    <input class="input" id="tc-email" type="email" autocomplete="email" placeholder="${t('ustoz@gmail.com')}" value="${esc(adminContacts.email || '')}" />
     <div class="muted small" style="margin-top:4px">${adminContacts.email ? (adminContacts.verified ? ico('checkCircle', 14) + ' ' + t('Tasdiqlangan') : ico('alert', 14) + ' ' + t('Tasdiqlanmagan')) : ''}</div>
     ${(adminContacts.email && !adminContacts.verified) ? `<button type="button" class="btn btn-ghost btn-block" data-act="resend-verify-existing" style="margin-top:6px">${ico('mail', 14)} ${t('Kod yuborish')}</button>` : ''}
     <label class="field-label" for="tc-phone" style="margin-top:6px">${t('Telefon raqam')}</label>
@@ -6550,7 +6565,7 @@ function openAddGroup() {
     </div>
 
     <label class="field-label" for="f-gname">Guruh nomi</label>
-    <input class="input" id="f-gname" placeholder="Masalan: IELTS Band 7.0" />
+    <input class="input" id="f-gname" placeholder="${t('Masalan: IELTS Band 7.0')}" />
 
     <div class="field-label">Dars kunlari</div>
     <div class="day-grid" id="f-days">
@@ -6579,7 +6594,7 @@ function openAddGroup() {
 
     <div id="f-gfee-wrap">
       <label class="field-label" for="f-gfee">Oylik to'lov summasi (so'mda)</label>
-      <input class="input" id="f-gfee" type="number" min="0" step="1000" inputmode="numeric" placeholder="Masalan: 300000" />
+      <input class="input" id="f-gfee" type="number" min="0" step="1000" inputmode="numeric" placeholder="${t('Masalan: 300000')}" />
     </div>
 
     <button type="button" class="btn btn-primary btn-block" data-act="save-group">Saqlash</button>
@@ -6628,7 +6643,7 @@ function openAddStudent() {
     </div>
 
     <label class="field-label" for="f-sname">Ism familiya</label>
-    <input class="input" id="f-sname" placeholder="Masalan: Aziz Rahimov" />
+    <input class="input" id="f-sname" placeholder="${t('Masalan: Aziz Rahimov')}" />
 
     <label class="field-label" for="f-sclass">Maktab sinfi</label>
     <select class="input" id="f-sclass">
@@ -6644,11 +6659,11 @@ function openAddStudent() {
 
     <div class="field-label">Kirish ma'lumotlari</div>
     <label class="field-label" for="f-slogin">Login</label>
-    <input class="input" id="f-slogin" autocapitalize="none" autocorrect="off" placeholder="Masalan: jasur09" />
+    <input class="input" id="f-slogin" autocapitalize="none" autocorrect="off" placeholder="${t('Masalan: jasur09')}" />
 
     <label class="field-label" for="f-spass">Dastlabki parol</label>
     <div class="pw-wrap">
-      <input class="input" id="f-spass" type="password" inputmode="numeric" placeholder="Masalan: 1234" />
+      <input class="input" id="f-spass" type="password" inputmode="numeric" placeholder="${t('Masalan: 1234')}" />
       <button type="button" class="pw-toggle" data-act="toggle-pw" data-target="f-spass" aria-label="Parolni ko'rsatish">${ico('eye', 18)}</button>
     </div>
 
@@ -6739,7 +6754,7 @@ function openEditGroup(gid) {
 
     <div id="f-gfee-wrap">
       <label class="field-label" for="f-gfee">Oylik to'lov summasi (so'mda)</label>
-      <input class="input" id="f-gfee" type="number" min="0" step="1000" inputmode="numeric" value="${g && g.monthlyFee ? String(g.monthlyFee) : ''}" placeholder="Masalan: 300000" />
+      <input class="input" id="f-gfee" type="number" min="0" step="1000" inputmode="numeric" value="${g && g.monthlyFee ? String(g.monthlyFee) : ''}" placeholder="${t('Masalan: 300000')}" />
     </div>
 
     <div class="modal-actions">
@@ -6839,7 +6854,7 @@ function openResetPwd(sid) {
       <input class="input" id="rp-login" autocapitalize="none" value="${esc(suggestLogin(st.fullName))}" />`}
     <label class="field-label" for="rp-pass">Yangi parol</label>
     <div class="pw-wrap">
-      <input class="input" id="rp-pass" type="password" inputmode="numeric" placeholder="Masalan: 1234" />
+      <input class="input" id="rp-pass" type="password" inputmode="numeric" placeholder="${t('Masalan: 1234')}" />
       <button type="button" class="pw-toggle" data-act="toggle-pw" data-target="rp-pass" aria-label="Parolni ko'rsatish">${ico('eye', 18)}</button>
     </div>
     <button type="button" class="btn btn-primary btn-block" data-act="save-reset" data-sid="${sid}">Saqlash</button>
@@ -7773,7 +7788,7 @@ function renderGradeEditor() {
     </div>
 
     <label class="field-label" for="grade-note">Izoh (ixtiyoriy)</label>
-    <input class="input" id="grade-note" maxlength="60" placeholder="Masalan: A'lo faollik" value="${esc(e.note || '')}" />
+    <input class="input" id="grade-note" maxlength="60" placeholder="${t("Masalan: A'lo faollik")}" value="${esc(e.note || '')}" />
 
     <div class="row g8" style="margin-top:14px">
       <button type="button" class="btn btn-ghost" style="flex:1" data-act="grade-clear">O'chirish</button>
@@ -10127,7 +10142,7 @@ function openChat(sid) {
     ${chatHint()}
     <div class="chat-list" id="chat-list">${chatListHTML(sid, 'teacher')}</div>
     <div class="chat-input-row">
-      <input class="input" id="chat-input" placeholder="Xabar yozing..." autocomplete="off" />
+      <input class="input" id="chat-input" placeholder="${t('Xabar yozing...')}" autocomplete="off" />
       <button type="button" class="btn btn-primary" data-act="send-chat">Yuborish</button>
     </div>`);
   updateChatView();

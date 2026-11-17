@@ -267,7 +267,7 @@ function i18nLeftovers(scope) {
   if (!scope) return [];
   const SKIP = '.s-name, .login-val, .profile-name, .brand, .avatar, .chip-btn, ' +
     '.chip-class, .gc-name, .group-name, .msg-text, .hw-file-name';
-  const UZ = /(yo'q|uchun|kerak|mavjud|qo'sh|bo'l|o'quvchi|o'qituvchi|guruh|davomat|baho|vazifa|topshiriq|to'lov|qarz|hafta|oylik|belgilan|eslatma|saqlash|bekor|yopish|kirish|parol|jami|keldi|kelmadi|sababli|noyabr|yanvar|fevral|aprel|iyun|iyul|avgust|sentabr|oktabr|dekabr|sinf|karta|egasi|chek|diqqat|tushunarli|nusxa|kiring|ovozli|krujok|kutilmoqda|qatnash|qoldiril|mening|hozircha|barchasini|darsdagi|javob|tanlan|tanlash|yuborish|ko'rdim|baholangan)/i;
+  const UZ = /(yo'q|uchun|kerak|mavjud|qo'sh|bo'l|o'quvchi|o'qituvchi|guruh|davomat|baho|vazifa|topshiriq|to'lov|qarz|hafta|oylik|belgilan|eslatma|saqlash|bekor|yopish|kirish|parol|jami|keldi|kelmadi|sababli|noyabr|yanvar|fevral|aprel|iyun|iyul|avgust|sentabr|oktabr|dekabr|sinf|karta|egasi|chek|diqqat|tushunarli|nusxa|kiring|kiriting|ismini|yozing|masalan|ovozli|krujok|kutilmoqda|qatnash|qoldiril|mening|hozircha|barchasini|darsdagi|javob|tanlan|tanlash|yuborish|ko'rdim|baholangan)/i;
   const add = (v) => {
     const s = String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
     if (!s || !UZ.test(s)) return;
@@ -3497,9 +3497,14 @@ await (async () => {
   check(/Home/.test(enNav) && /Students/.test(enNav) && /Submissions/.test(enNav) && /Payments/.test(enNav),
     'i18n: navigatsiya yorliqlari inglizchada');
   forceNav('students');
+  check(q('#s-search').placeholder === 'Enter student name...' &&
+    !/ismini|kiriting/i.test(q('#s-search').placeholder),
+    'i18n EN: Students qidiruv placeholderi to‘liq inglizchada');
   clickAct('open-add-student');
   check(/Add student/i.test(q('#modal-sheet').textContent),
     'i18n: ochiq modal ham darhol inglizchaga o‘tadi');
+  check(q('#f-sname').placeholder === 'For example: Aziz Rahimov',
+    'i18n EN: o‘quvchi qo‘shish placeholderi ham to‘liq inglizchada');
   click('[data-act="close-modal"]');
   forceNav('submissions');
   check(/Submitted Homework/i.test(text()), 'i18n: topshiriqlar bo‘limi sarlavhasi inglizchada');
