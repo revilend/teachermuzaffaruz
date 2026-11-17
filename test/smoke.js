@@ -3485,6 +3485,58 @@ await (async () => {
         JSON.parse(tsVerifyCalls[tsVerifyCalls.length - 1].opts.body || '{}').token === 'ts-token-net',
     'Turnstile: fail-open holatida ham token verify URL’ga yuboriladi');
 
+  /* 5) Tiklash ekrani: "ok:false" — bloklaydi + vidjet reset */
+  logout();
+  click('[data-act="auth-login-open"]');
+  await new Promise(r => setTimeout(r, 120));
+  clickAct('open-forgot');
+  await new Promise(r => setTimeout(r, 150));
+  const recRender = tsCalls.render.filter(x => x.host && x.host.id === 'recover-turnstile-box').pop() || {};
+  check(!!recRender.host && recRender.opts && recRender.opts.sitekey === '0x4AAAAAAGDZyGmTRBp6DcVs',
+    'Turnstile: tiklash ekranida ham vidjet sayt kaliti bilan joylashtiriladi');
+  tsVerifyMode = 'false';
+  const recResets0 = tsCalls.reset;
+  const recCalls0 = tsVerifyCalls.length;
+  if (recRender.opts && recRender.opts.callback) recRender.opts.callback('ts-token-rec');
+  setVal('#fp-contact', 'm_amirov');
+  await new Promise(r => setTimeout(r, 60));
+  clickAct('forgot-send');
+  await new Promise(r => setTimeout(r, 300));
+  check(/Tekshiruv tasdiqlanmadi/.test((q('#fp-error') || {}).textContent || '') &&
+        tsCalls.reset > recResets0 && tsVerifyCalls.length > recCalls0,
+    'Turnstile (tiklash): ok:false — so‘rov bloklanadi va vidjet reset qilinadi');
+  check(q('#fp-step2').hidden === true,
+    'Turnstile (tiklash): ok:false — kod yuborilmaydi (2-qadam yopiq)');
+
+  /* 6) Tiklash ekrani: 403 — bloklaydi, sabab + vidjet reset */
+  tsVerifyMode = '403';
+  const recResets1 = tsCalls.reset;
+  const recCalls1 = tsVerifyCalls.length;
+  if (recRender.opts && recRender.opts.callback) recRender.opts.callback('ts-token-rec403');
+  setVal('#fp-contact', 'm_amirov');
+  await new Promise(r => setTimeout(r, 60));
+  clickAct('forgot-send');
+  await new Promise(r => setTimeout(r, 300));
+  const recErr403 = (q('#fp-error') || {}).textContent || '';
+  check(/Tekshiruv tasdiqlanmadi/.test(recErr403) && /invalid-input-response/.test(recErr403) &&
+        tsCalls.reset > recResets1 && tsVerifyCalls.length > recCalls1,
+    'Turnstile (tiklash): server 403 — so‘rov bloklanadi, sabab ko‘rsatiladi va vidjet reset qilinadi');
+  check(q('#fp-step2').hidden === true,
+    'Turnstile (tiklash): 403 — kod yuborilmaydi (2-qadam yopiq)');
+
+  /* 7) Tiklash ekrani: "Failed to fetch" — fail-open, kod yuboriladi */
+  tsVerifyMode = 'network';
+  if (recRender.opts && recRender.opts.callback) recRender.opts.callback('ts-token-recnet');
+  setVal('#fp-contact', 'm_amirov');
+  await new Promise(r => setTimeout(r, 60));
+  const recCalls2 = tsVerifyCalls.length;
+  clickAct('forgot-send');
+  check(await until(() => q('#fp-step2') && q('#fp-step2').hidden === false, 4000),
+    'Turnstile (tiklash): “Failed to fetch” bo‘lsa so‘rov bloklanmaydi (fail-open), kod yuboriladi');
+  check(tsVerifyCalls.length > recCalls2 &&
+        JSON.parse(tsVerifyCalls[tsVerifyCalls.length - 1].opts.body || '{}').token === 'ts-token-recnet',
+    'Turnstile (tiklash): fail-open holatida ham token verify URL’ga yuboriladi');
+
   win.turnstile = prevTurnstile;
   win.fetch = prevFetchTs;
 
