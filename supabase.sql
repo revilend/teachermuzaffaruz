@@ -56,6 +56,10 @@ create index if not exists speaking_submissions_student_idx
 alter table public.speaking_submissions add column if not exists student_id bigint references public.students (id) on delete cascade;
 alter table public.speaking_submissions add column if not exists score smallint check (score between 1 and 10);
 alter table public.speaking_submissions add column if not exists feedback text;
+alter table public.speaking_submissions add column if not exists media_url text;
+alter table public.speaking_submissions add column if not exists duration_sec integer;
+alter table public.speaking_submissions add column if not exists look_away_count integer;
+alter table public.speaking_submissions add column if not exists eye_contact_percent integer;
 
 -- 4) Uyga vazifalar (homework) — ustoz qo'shadi, bot guruhga xabar qiladi
 create table if not exists public.homework (

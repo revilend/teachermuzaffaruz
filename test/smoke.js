@@ -330,6 +330,10 @@ async function loginAs(l, p) {
     if (openBtn) click(openBtn);
     await new Promise(r => setTimeout(r, 60));
   }
+  /* forma asinxron render bo'lishi mumkin — paydo bo'lguncha kutamiz */
+  for (let w = 0; w < 40 && !q('#login-input'); w++) {
+    await new Promise(r => setTimeout(r, 50));
+  }
   /* bulut rejimidagi kechikkan async yangilanishlar formani tozalab
      yubormasligi uchun: kutamiz va qiymatlar barqaror bo'lgach bosamiz */
   for (let i = 0; i < 8; i++) {
@@ -905,6 +909,9 @@ check(text().includes('Tizimga kirish') && !!q('[data-act="auth-login-open"]'),
 click('[data-act="auth-login-open"]');
 check(!!q('#login-input'), 'logout: "Kirish" oynasi ochildi');
 await loginAs('jasur', '1234');
+for (let i = 0; i < 30 && !(q('#login-error') && q('#login-error').classList.contains('show')); i++) {
+  await new Promise(r => setTimeout(r, 50));
+}
 check(q('#login-error').classList.contains('show'), 'student: noto\'g\'ri parol rad etildi');
 await loginAs('jasur', '123');
 check(text().includes('Jasur Karimov'), 'student: kabinet ochildi');
@@ -1112,8 +1119,8 @@ check(qa('.debt-num').filter(d => d.textContent.trim() === '0 ta').length >= 1, 
 click('[data-act="nav"][data-screen="speaking"]');
 check(text().includes('Speaking qarzi (o\'quvchilar)'), 'speaking: qarz ro\'yxati ekranda');
 check(qa('[data-act="debt-plus"]').length === nStud, 'speaking: ' + nStud + ' ta [+] tugma');
-check(text().includes('Telegram topshiriqlari'), 'speaking: Telegram inbox bo\'limi bor');
-check(text().includes("Hozircha Telegram orqali topshirik yo'q"), 'speaking: inbox holati ko\'rinadi');
+check(text().includes('Speaking topshiriqlari'), 'speaking: topshiriqlar inbox bo\'limi bor');
+check(text().includes("Hozircha topshiriq yo'q"), 'speaking: inbox holati ko\'rinadi');
 
 /* --- 4. Telegram topshirik → baholash → qarz -1 --- */
 const studentsRaw = JSON.parse(win.localStorage.getItem('et_students'));
@@ -1121,13 +1128,18 @@ const jasurSt = studentsRaw.filter(x => x.id === 's3')[0];
 jasurSt.speakingDebt = 2;
 win.localStorage.setItem('et_students', JSON.stringify(studentsRaw));
 win.localStorage.setItem('et_tg_subs', JSON.stringify([
-  { id: 't1', dbId: 101, sid: 's3', mediaType: 'voice', status: 'kutilmoqda', score: null, feedback: '', createdAt: TODAY + 'T10:00:00.000Z' }
+  { id: 't1', dbId: 101, sid: 's3', mediaType: 'video', status: 'kutilmoqda', score: null, feedback: '',
+    mediaUrl: 'https://pub-836df3817ab64cee9075b55d51fe6061.r2.dev/speaking/demo.webm',
+    lookAwayCount: 2, eyeContactPercent: 87, createdAt: TODAY + 'T10:00:00.000Z' }
 ]));
 forceNav('speaking');
 check(qa('.audio-item').length >= 1, 'inbox: Telegram topshirik paydo bo\'ldi');
 check(text().includes('Jasur Karimov'), 'inbox: o\'quvchi ismi ko\'rinadi');
-check(text().includes('Ovozli xabar') && !!q('.audio-item__meta svg'),
-  'inbox: media turi (voice) SVG ikonka bilan ko\'rinadi');
+check(text().includes('Video') && !!q('.audio-item__meta svg'),
+  'inbox: media turi (video) SVG ikonka bilan ko\'rinadi');
+check(text().includes('Kameraga qarash: 87%') && text().includes('Chetga qarash: 2'),
+  'inbox: ko‘z kontakti foizi va chetga qarashlar ko‘rinadi');
+check(!!q('.speak-watch'), 'inbox: yozilgan videoni ko‘rish havolasi bor');
 check(qa('[data-act="tg-grade"]').length === 10, 'inbox: 10 ta ball tugmasi');
 check(q('[data-act="tg-feedback"]'), 'inbox: izoh maydoni mavjud');
 check(!q('[data-act="rec-start"]') && !q('#recorder'), 'recorder: brauzer yozgich olib tashlangan');
@@ -1159,16 +1171,54 @@ check(jasurDebtNow > 0 ? !!q('.speak-debt-banner') : !q('.speak-debt-banner'),
 openStudentView('speaking');
 check(!!q('[data-act="speak-cta"]') && q('[data-act="speak-cta"]').textContent.includes('Speaking topshirish'),
   "student: Speaking topshirish tugmasi");
-check(text().includes('Telegram orqali'), "student: 'Telegram orqali topshirish' yo'riqnomasi");
+check(!text().includes('Telegram orqali') && !text().includes('ovozli xabar'),
+  "student: ovozli xabar / Telegram topshirish matni olib tashlangan");
+check(!q('input[type="file"]'), "student: fayl yuklash (input file) umuman yo'q");
 check(!q('#recorder') && !q('[data-act="rec-start"]') && !q('[data-act="rec-send"]'),
-  "student: brauzer recorder butunlay olib tashlangan");
+  "student: eski recorder qoldiqlari yo'q");
 check(text().includes('Baho: 9/10') && !!q('.audio-item__meta svg'),
-  'student: baholangan Telegram topshirigi SVG check bilan ko\'rinadi');
+  'student: baholangan topshiriq SVG belgisi bilan ko\'rinadi');
 clickAct('speak-cta');
-check(q('#modal-overlay').hidden === false && q('#modal-sheet').textContent.includes('Telegram'),
-  "student: CTA → Telegram yo'riqnomasi modali");
-click('[data-act="close-modal"]');
+check(!!q('#speak-rec') && !!q('#speak-rec video.speak-rec-video'),
+  'speaking: jonli krujok video yozgich ochildi');
+check(!!q('.speak-rec-ring') && !!q('#speak-rec-timer') && !!q('#speak-rec-warn'),
+  "speaking: yashil halqa + taymer + 'Kameraga qarang' ogohlantirishi mavjud");
+check(q('#speak-rec-preview').hidden === true,
+  'speaking: ko‘rish/yuborish/bekor tugmalari faqat yozuvdan keyin');
+const speakCssSrc = fs.readFileSync(path.join(root, 'css', 'styles.css'), 'utf8');
+check(/\.speak-rec\s*\{[^}]*position:\s*fixed/.test(speakCssSrc) &&
+      /\.speak-rec\s*\{[^}]*inset:\s*0/.test(speakCssSrc) &&
+      /\.speak-rec\s*\{[^}]*backdrop-filter:\s*blur\(14px\)/.test(speakCssSrc) &&
+      /\.speak-rec\s*\{[^}]*z-index:\s*9999/.test(speakCssSrc),
+  'speaking: blur(14px) fon + z-index 9999 butun ekranni qoplaydi');
+check(/\.speak-rec-video\s*\{[^}]*border-radius:\s*50%/.test(speakCssSrc) &&
+      /\.speak-rec-video\s*\{[^}]*object-fit:\s*cover/.test(speakCssSrc) &&
+      /\.speak-rec-video\s*\{[^}]*scaleX\(-1\)/.test(speakCssSrc),
+  'speaking: dumaloq (50%) video + mirrorlangan old kamera');
+check(/\.speak-rec-btn\.watch\s*\{[^}]*#2563eb/.test(speakCssSrc) &&
+      /\.speak-rec-btn\.submit\s*\{[^}]*#16a34a/.test(speakCssSrc) &&
+      /\.speak-rec-btn\.cancel\s*\{[^}]*#dc2626/.test(speakCssSrc),
+  'speaking: ko‘rish ko‘k, yuborish yashil, bekor qilish qizil');
+click('[data-act="speak-rec-close"]');
+check(!q('#speak-rec'), 'speaking: yopilganda recorder tozalanadi');
 closeStudentView();
+
+/* Ruxsat berilmagan o'quvchi: recorder umuman ko'rinmaydi */
+{
+  const noVoiceRow = (cloudStub.db.students || []).filter(r => r.login === 'malika')[0];
+  if (noVoiceRow) noVoiceRow.voice_allowed = false;
+  logout();
+  await loginAs('malika', '123');
+  openStudentView('speaking');
+  check(!!q('.speak-locked') && !q('[data-act="speak-cta"]'),
+    "speaking: ustoz ruxsati yo'q → recorder yashirilgan");
+  check(text().includes('Ustoz ruxsati kerak'),
+    "speaking: 'Ustoz ruxsati kerak' ogohlantirishi ko'rinadi");
+  if (noVoiceRow) noVoiceRow.voice_allowed = true;
+  closeStudentView();
+  logout();
+  await loginAs('jasur', '4321');
+}
 check(text().includes('Uyga vazifalar'), "student: 'Uyga vazifalar' kartasi portalda");
 
 /* ================= 14. CHAT (Ustoz ↔ O'quvchi) ================= */
@@ -1613,10 +1663,15 @@ await (async () => {
   click('[data-act="nav"][data-screen="students"]');
   const swEl = q('[data-act="voice-toggle"]');
   check(!!swEl, "voice: o'quvchi kartasida ruxsat kaliti bor");
-  check(!!swEl && swEl.classList.contains('on'), "voice: standart holat ON (ruxsat berilgan)");
+  check(!!swEl && !swEl.classList.contains('on') && swEl.getAttribute('aria-checked') === 'false',
+    "voice: standart holat OFF (ruxsat faqat ustoz bergach)");
   click(swEl);
   const swEl2 = q('[data-act="voice-toggle"]');
-  check(!!swEl2 && !swEl2.classList.contains('on'), "voice: bosildi → OFF (cheklandi)");
+  check(!!swEl2 && swEl2.classList.contains('on') && swEl2.getAttribute('aria-checked') === 'true',
+    "voice: bosildi → ON (ruxsat berildi)");
+  click(swEl2);
+  const swEl3 = q('[data-act="voice-toggle"]');
+  check(!!swEl3 && !swEl3.classList.contains('on'), "voice: qayta bosildi → OFF (cheklandi)");
   const stV = JSON.parse(win.localStorage.getItem('et_students')).filter(x => x.id === 's77')[0];
   check(!!stV && stV.voiceAllowed === false, "voice: voiceAllowed=false lokalda saqlandi");
   check(q('#toast').textContent.includes('cheklandi'), "voice: toast xabari");
@@ -3283,8 +3338,8 @@ await (async () => {
   check(/Set/.test(payEn), 'i18n EN: "Belgilash" → "Set"');
   forceNav('speaking');
   const spEn = text();
-  check(/Telegram submissions \(Inbox\)/.test(spEn), 'i18n EN: Telegram topshiriqlari (Inbox)');
-  check(/No Telegram submissions yet/.test(spEn), 'i18n EN: Telegram bo\'sh holati');
+  check(/Speaking submissions \(Inbox\)/.test(spEn), 'i18n EN: Speaking topshiriqlari (Inbox)');
+  check(/No submissions yet/.test(spEn), 'i18n EN: bo\'sh topshiriq holati');
   forceNav('submissions');
   check(/No submitted homework yet/.test(text()), 'i18n EN: yuklangan topshiriqlar bo\'sh holati');
   check(/November 2026/.test(payEn), 'i18n EN: oy nomi inglizcha (November 2026)');

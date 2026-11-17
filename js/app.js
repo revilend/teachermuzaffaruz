@@ -175,6 +175,7 @@ const state = {
   chatSid: null,
   classHint: false,
   loginTimer: null,
+  loginError: '',
   hwNewFiles: [],
   hwAttachments: [],
   payMonth: '',
@@ -462,7 +463,7 @@ const CloudSync = (function () {
       fee_period: s.feePeriod || null,
       last_payment_info: s.lastPaymentInfo || null,
       last_paid_month: s.lastPaidMonth || null,
-      voice_allowed: s.voiceAllowed !== false,
+      voice_allowed: s.voiceAllowed === true,
       homework_upload_allowed: s.homeworkUploadAllowed === true
     };
     /* Kontaktlar ham faqat mavjud bo'lsa yoziladi — eski qiymat o'chmasin */
@@ -606,10 +607,42 @@ const CloudSync = (function () {
         status: r.status || 'kutilmoqda',
         score: r.score == null ? null : Number(r.score),
         feedback: r.feedback || '',
-        createdAt: r.created_at || ''
+        createdAt: r.created_at || '',
+        mediaUrl: r.media_url || '',
+        durationSec: r.duration_sec == null ? null : Number(r.duration_sec),
+        lookAwayCount: r.look_away_count == null ? null : Number(r.look_away_count),
+        eyeContactPercent: r.eye_contact_percent == null ? null : Number(r.eye_contact_percent)
       };
     }).filter(function (x) { return x.sid !== 'snull'; });
     store.set(K.tgsubs, list);
+  }
+
+  /* Brauzerda yozilgan krujok video → speaking_submissions (R2 havolasi bilan) */
+  async function submitSpeakingVideo(opts) {
+    const p = opts || {};
+    if (!ready() || !hasTg || p.studentDbId == null) return null;
+    const base = {
+      student_id: p.studentDbId,
+      media_type: 'video',
+      telegram_file_id: String(p.mediaUrl || 'web'),
+      status: 'kutilmoqda'
+    };
+    const extra = {
+      media_url: p.mediaUrl || null,
+      duration_sec: p.durationSec == null ? null : Number(p.durationSec),
+      look_away_count: p.lookAwayCount == null ? null : Number(p.lookAwayCount),
+      eye_contact_percent: p.eyeContactPercent == null ? null : Number(p.eyeContactPercent)
+    };
+    let res = await client.from('speaking_submissions').insert(Object.assign({}, base, extra)).select();
+    if (res.error && res.error.code === 'PGRST204') {
+      /* Yangi ustunlar hali qo'shilmagan bo'lsa — minimal maydonlar bilan */
+      res = await client.from('speaking_submissions').insert(base).select();
+    }
+    if (res.error) {
+      if (res.error.code === 'PGRST205') hasTg = false;
+      throw res.error;
+    }
+    return res.data && res.data[0] ? res.data[0] : null;
   }
 
   async function pushSpeakingGrade(localId) {
@@ -771,7 +804,7 @@ const CloudSync = (function () {
           paymentDebt: Number(r.payment_debt) || 0,
           feePeriod: r.fee_period || '',
           telegramChatId: r.telegram_chat_id == null ? null : Number(r.telegram_chat_id),
-          voiceAllowed: r.voice_allowed !== false,
+          voiceAllowed: r.voice_allowed === true,
           homeworkUploadAllowed: r.homework_upload_allowed === true,
           lastDevice: r.last_device || '',
           lastSeen: r.last_seen || null,
@@ -895,7 +928,7 @@ const CloudSync = (function () {
       paymentDebt: Number(row.payment_debt) || 0,
       feePeriod: row.fee_period || '',
       telegramChatId: row.telegram_chat_id == null ? null : Number(row.telegram_chat_id),
-      voiceAllowed: row.voice_allowed !== false,
+      voiceAllowed: row.voice_allowed === true,
       homeworkUploadAllowed: row.homework_upload_allowed === true,
       lastDevice: row.last_device || '',
       lastSeen: row.last_seen || null,
@@ -2086,6 +2119,7 @@ const CloudSync = (function () {
     pushHomework: pushHomework,
     pullSpeaking: pullSpeaking,
     pushSpeakingGrade: pushSpeakingGrade,
+    submitSpeakingVideo: submitSpeakingVideo,
     pullSlots: pullSlots,
     pushSlot: pushSlot,
     deleteSlot: deleteSlot,
@@ -2501,6 +2535,7 @@ function forcedLogout() {
   state.attDraft = null;
   state.editor = null;
   state.forcedOut = true;
+  state.loginError = '';
   state.screen = 'login';
   closeModal();
   state.authStep = 'login';
@@ -2602,6 +2637,7 @@ function startSession(userObj) {
   Notif.afterLogin();
   /* Xavfsizlik: sessiya + oxirgi qurilma/vaqt yoziladi (user_sessions / students) */
   state.forcedOut = false;
+  state.loginError = '';
   Sessions.onLogin();
   /* Analitika: kirish (faqat rozilik berilgan bo'lsa) — hisob logini yuborilmaydi */
   const anon = linkedStudent();
@@ -2899,6 +2935,8 @@ const ICON = {
   eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.7-7 10-7 10 7 10 7-3.7 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>',
   eyeOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.7 5.1A10.7 10.7 0 0 1 12 5c6.3 0 10 7 10 7a18.3 18.3 0 0 1-2.6 3.5"/><path d="M6.6 6.6A17.4 17.4 0 0 0 2 12s3.7 7 10 7a10.4 10.4 0 0 0 5.4-1.5"/><path d="M9.9 9.9a3 3 0 1 0 4.2 4.2"/><path d="m3 3 18 18"/></svg>',
   message: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.4 8.9 8.9 0 0 1-4-.9L3 21l1.9-5A8.4 8.4 0 0 1 12.5 3 8.4 8.4 0 0 1 21 11.5Z"/></svg>',
+  stopRec: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>',
+  cameraCheck: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8.5 7 7l1.5-2h7L17 7l3 1.5v9A2.5 2.5 0 0 1 17.5 20h-11A2.5 2.5 0 0 1 4 17.5Z"/><circle cx="12" cy="12.5" r="3.2"/><path d="m9 4 1.6 2h2.8L15 4"/></svg>',
   video: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="m16 10.2 5.2-3.2v10L16 13.8Z"/></svg>',
   smartphone: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18.5h2"/></svg>',
   download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10.5 5 5 5-5"/><path d="M4 20h16"/></svg>',
@@ -3388,6 +3426,35 @@ const I18N_EN = {
   "Uyga vazifalar": "Homework",
   "Baholar": "Grades",
   "Speaking topshirish": "Submit Speaking",
+  "Ustoz ruxsati kerak": "Teacher permission required",
+  "Speaking topshirish uchun ustozdan ruxsat so'rang.": "Ask your teacher for permission to submit speaking tasks.",
+  "Videoni shu yerda yozib topshirasiz.": "Record your video right here.",
+  "Kamera va mikrofon ochilmoqda...": "Opening camera and microphone...",
+  "Kamera yoki mikrofonga ruxsat berilmadi.": "Camera or microphone permission was not granted.",
+  "Bu qurilmada video yozish qo'llab-quvvatlanmaydi.": "Video recording is not supported on this device.",
+  "Yuz aniqlanmoqda...": "Detecting face...",
+  "Yuz aniqlandi": "Face detected",
+  "Yuz topilmadi": "No face detected",
+  "Kameraga qarang": "Look at the camera",
+  "Yozishni boshlash": "Start recording",
+  "Yozishni to'xtatish": "Stop recording",
+  "Yozib olinmoqda...": "Recording...",
+  "Videoni ko'rish": "Watch Video",
+  "Yuborilmoqda...": "Submitting...",
+  "Speaking topshirildi": "Speaking submitted",
+  "Hozircha topshiriq yo'q": "No submissions yet",
+  "Speaking topshiriqlari (Inbox)": "Speaking submissions (Inbox)",
+  "Yuborishda xatolik": "Submission failed",
+  "Ko'z kontakti: {p}%": "Eye contact: {p}%",
+  "Tayyor — videoni ko'ring yoki yuboring.": "Ready — watch the video or submit.",
+  "Yuborilgan topshiriqlar": "Submitted work",
+  "Video": "Video",
+  "Audio": "Audio",
+  "Kameraga qarash": "Eye contact",
+  "Chetga qarash": "Look-aways",
+  "Ko'z nazorati mavjud emas — yozish mumkin": "Eye tracking unavailable — recording is allowed",
+  "Yozishni boshlab bo'lmadi": "Could not start recording",
+  "Yozuv bo'sh chiqdi — qayta urinib ko'ring": "The recording is empty — please try again",
   "Orqaga": "Back",
   "Speaking qarzingiz": "Your Speaking debt",
   "Speaking topshirib qarzni kamaytiring.": "Submit Speaking to reduce the debt.",
@@ -4075,7 +4142,7 @@ function loginFormScreen() {
           <input class="input" id="login-captcha" inputmode="numeric" autocomplete="off" placeholder="${t('Javob')}" />
         </div>
 
-        <div class="field-error${state.forcedOut ? ' show' : ''}" id="login-error">${state.forcedOut ? 'Siz ushbu qurilmadan chiqarildingiz!' : ''}</div>
+        <div class="field-error${state.forcedOut || state.loginError ? ' show' : ''}" id="login-error">${state.forcedOut ? 'Siz ushbu qurilmadan chiqarildingiz!' : esc(state.loginError || '')}</div>
         <button type="button" class="btn btn-primary btn-block" data-act="do-login">${t('Tizimga kirish')}</button>
         <button type="button" class="auth-link" data-act="open-forgot">${t('Login yoki parolni unutdingizmi?')}</button>
       </div>
@@ -5083,7 +5150,7 @@ function studentPortal() {
   const mySubs = myTg.map(sub => `
     <div class="audio-item">
       <div class="audio-item__meta">
-        ${sub.mediaType === 'voice' ? ico('mic', 14) + ' ' + t('Ovozli xabar') : ico('video', 14) + ' ' + t('Video')} ·
+        ${sub.mediaType === 'voice' ? ico('mic', 14) + ' ' + t('Audio') : ico('video', 14) + ' ' + t('Video')} ·
         ${sub.status === 'baholandi' || sub.status === 'graded'
           ? `${ico('checkCircle', 14)} ${t('Baho:')} ${sub.score}/10`
           : sub.status === 'rad_etildi'
@@ -5159,13 +5226,19 @@ function studentPortal() {
   </div>
   <div class="card">${gradeRows}</div>`;
 
+  const canSpeak = !!st && st.voiceAllowed === true;
   const speakingHTML = `
-  <button type="button" class="btn btn-primary btn-block speak-cta" data-act="speak-cta">${ico('mic', 20)} ${t('Speaking topshirish')}</button>
+  ${canSpeak ? `<button type="button" class="btn btn-primary btn-block speak-cta" data-act="speak-cta">${ico('video', 20)} ${t('Speaking topshirish')}</button>
+  <div class="speak-rec-hint">${ico('cameraCheck', 14)} ${t('Videoni shu yerda yozib topshirasiz.')}</div>` : `<div class="card speak-locked">
+    <div class="speak-locked-ico">${ICON.lock}</div>
+    <div class="speak-locked-body">
+      <div class="strong-label">${t('Ustoz ruxsati kerak')}</div>
+      <div class="muted small">${t("Speaking topshirish uchun ustozdan ruxsat so'rang.")}</div>
+    </div>
+  </div>`}
   <div class="card" style="margin-top:10px">${slotRows}</div>
   <div class="card" style="margin-top:9px">
-    <div class="strong-label" style="margin-bottom:5px">${t('Telegram orqali topshirish')}</div>
-    <div class="muted small">${ico('mic', 14)} ${t('Muzaffar Amirovga Telegram botga ovozli xabar (voice) yoki dumaloq video (krujok) yuboring — brauzerda yozish shart emas.')}</div>
-    <div class="hw-item small" style="margin-top:8px">1) ${t('Telegramda botga kiring')} → 2) ${ico('mic', 13)} ${t('ovozli xabar yuboring')} → 3) ${t('Muzaffar Amirov baholaydi')}</div>
+    <div class="strong-label" style="margin-bottom:5px">${t('Yuborilgan topshiriqlar')}</div>
     <div id="my-submissions" class="audio-list">${mySubs}</div>
   </div>`;
 
@@ -5713,8 +5786,8 @@ function studentCard(s) {
       </div>
       <div class="row between st-voice">
         <span class="lbl-strong">${ico('mic', 15)} ${t('Ovozli ruxsat')}</span>
-        <button type="button" class="switch${s.voiceAllowed !== false ? ' on' : ''}" data-act="voice-toggle" data-sid="${s.id}"
-                role="switch" aria-checked="${s.voiceAllowed !== false}" aria-label="${t('Ovozli ruxsat')}"></button>
+        <button type="button" class="switch${s.voiceAllowed === true ? ' on' : ''}" data-act="voice-toggle" data-sid="${s.id}"
+                role="switch" aria-checked="${s.voiceAllowed === true}" aria-label="${t('Ovozli ruxsat')}"></button>
       </div>
       <div class="row between st-voice st-hw-allow">
         <span class="lbl-strong">${ico('upload', 15)} ${t('Uyga vazifa yuklashga ruxsat')}</span>
@@ -7038,7 +7111,7 @@ function restoreLocal(data) {
       speakingDebt: Number(st.speaking_debt) || 0,
       paymentDebt: Number(st.payment_debt) || 0,
       feePeriod: st.fee_period || '',
-      voiceAllowed: st.voice_allowed !== false,
+      voiceAllowed: st.voice_allowed === true,
       homeworkUploadAllowed: st.homework_upload_allowed === true,
       telegramChatId: st.telegram_chat_id == null ? null : Number(st.telegram_chat_id),
       lastDevice: st.last_device || '',
@@ -7556,7 +7629,7 @@ function speakingScreen() {
 
   ${speakingLogHTML()}
 
-  <div class="section-title">Telegram topshiriqlari (Inbox)</div>
+  <div class="section-title">${t('Speaking topshiriqlari (Inbox)')}</div>
   <div class="card">
     ${renderTgInbox()}
   </div>
@@ -7587,30 +7660,456 @@ function speakingLogHTML() {
   </div>`;
 }
 
+/* ==================== SPEAKING: JONLI KRUJOK VIDEO YOZISH ==================== */
+/* Ovozli xabar / fayl yuklash YO'Q — faqat brauzerda jonli dumaloq video.
+   MediaPipe Face Landmarker CDN'dan faqat recorder ochilganda yuklanadi. */
+const SPEAK_MP_VERSION = '0.10.14';
+const SPEAK_MP_BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@' + SPEAK_MP_VERSION;
+const SPEAK_MP_MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+const SPEAK_GRACE_MS = 1200;
+const SPEAK_DETECT_MS = 100;
+let speakRec = null;
+let speakLandmarkerPromise = null;
+
+function speakSubmitLabel() { return getLang() === 'en' ? 'Submit' : 'Yuborish'; }
+
+function speakRecQ(sel) {
+  return speakRec && speakRec.root ? speakRec.root.querySelector(sel) : null;
+}
+function speakRecStatus(text, kind) {
+  const el = speakRecQ('#speak-rec-status');
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'speak-rec-status' + (kind ? ' is-' + kind : '');
+}
+function speakRecRing(state) {
+  const ring = speakRecQ('#speak-rec-ring');
+  if (!ring) return;
+  ring.classList.toggle('is-good', state === 'good');
+  ring.classList.toggle('is-away', state === 'away');
+}
+function speakRecWarn(show) {
+  const el = speakRecQ('#speak-rec-warn');
+  if (el) el.hidden = !show;
+}
+function speakRecTimer(ms) {
+  const el = speakRecQ('#speak-rec-timer');
+  if (!el) return;
+  const total = Math.max(0, Math.round(ms / 1000));
+  el.textContent = String(Math.floor(total / 60)).padStart(2, '0') + ':' + String(total % 60).padStart(2, '0');
+}
+
+function speakRecMarkup() {
+  const closeIco = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+  return `
+  <div class="speak-rec" id="speak-rec" role="dialog" aria-modal="true" aria-label="${esc(t('Speaking topshirish'))}">
+    <button type="button" class="speak-rec-close" data-act="speak-rec-close" aria-label="${esc(t('Yopish'))}">${closeIco}</button>
+    <div class="speak-rec-head">
+      <div class="speak-rec-title">${t('Speaking topshirish')}</div>
+      <div class="speak-rec-status" id="speak-rec-status">${t('Kamera va mikrofon ochilmoqda...')}</div>
+    </div>
+    <div class="speak-rec-stage">
+      <div class="speak-rec-ring" id="speak-rec-ring"></div>
+      <video id="speak-rec-video" class="speak-rec-video" autoplay playsinline muted></video>
+      <div class="speak-rec-timer" id="speak-rec-timer">00:00</div>
+    </div>
+    <div class="speak-rec-eye" id="speak-rec-eye"><span class="speak-rec-dot"></span><span id="speak-rec-eye-text">${t('Yuz aniqlanmoqda...')}</span></div>
+    <div class="speak-rec-warn" id="speak-rec-warn" hidden>${ICON.alert}<span>${t('Kameraga qarang')}</span></div>
+    <div class="speak-rec-actions" id="speak-rec-actions">
+      <button type="button" class="speak-rec-btn rec" data-act="speak-rec-start" disabled>${ICON.mic} ${t('Yozishni boshlash')}</button>
+      <button type="button" class="speak-rec-btn stop" data-act="speak-rec-stop" hidden>${ICON.stopRec} ${t("Yozishni to'xtatish")}</button>
+    </div>
+    <div class="speak-rec-preview-actions" id="speak-rec-preview" hidden>
+      <button type="button" class="speak-rec-btn watch" data-act="speak-rec-watch">${ICON.video} ${t("Videoni ko'rish")}</button>
+      <button type="button" class="speak-rec-btn submit" data-act="speak-rec-submit">${ICON.upload} ${speakSubmitLabel()}</button>
+      <button type="button" class="speak-rec-btn cancel" data-act="speak-rec-cancel">${ICON.trash} ${t('Bekor qilish')}</button>
+    </div>
+  </div>`;
+}
+
+function openSpeakingRecorder() {
+  const st = linkedStudent();
+  if (!st) { toast("Avval tizimga kiring", 'error'); return; }
+  if (st.voiceAllowed !== true) { toast(t('Ustoz ruxsati kerak'), 'error'); return; }
+  closeSpeakRecorder(true);
+  const wrap = document.createElement('div');
+  wrap.innerHTML = speakRecMarkup();
+  document.body.appendChild(wrap.firstElementChild);
+  const root = document.getElementById('speak-rec');
+  speakRec = {
+    root: root, video: root.querySelector('#speak-rec-video'),
+    stream: null, recorder: null, chunks: [], blob: null, objectUrl: '', mime: '',
+    mode: 'idle', looking: false, away: false, lastGoodAt: Date.now(),
+    lookAwayCount: 0, eyeSamples: 0, eyeGood: 0, startedAt: 0, endedAt: 0,
+    timerId: null, detectId: null, landmarker: null
+  };
+  document.body.classList.add('speak-rec-open');
+  analyticsCall('capture', 'speaking_recorder_opened', { allowed: true });
+  startSpeakCamera();
+}
+
+async function startSpeakCamera() {
+  if (!speakRec) return;
+  const unsupported = !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia ||
+    typeof MediaRecorder === 'undefined';
+  if (unsupported) {
+    speakRec.mode = 'error';
+    speakRecRing('away');
+    speakRecStatus(t("Bu qurilmada video yozish qo'llab-quvvatlanmaydi."), 'error');
+    return;
+  }
+  try {
+    speakRec.stream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: { facingMode: 'user', width: { ideal: 720 }, height: { ideal: 720 } }
+    });
+  } catch (e) {
+    if (!speakRec) return;
+    speakRec.mode = 'error';
+    speakRecRing('away');
+    speakRecStatus(t('Kamera yoki mikrofonga ruxsat berilmadi.'), 'error');
+    return;
+  }
+  if (!speakRec) return;
+  speakRec.video.srcObject = speakRec.stream;
+  speakRec.video.muted = true;
+  try { await speakRec.video.play(); } catch (e) { /* autoplay */ }
+  speakRec.mode = 'ready';
+  speakRecStatus(t('Yuz aniqlanmoqda...'));
+  speakRec.landmarker = await loadSpeakLandmarker();
+  if (!speakRec) return;
+  if (!speakRec.landmarker) {
+    /* Face Landmarker yuklanmasa — yozishni bloklamaymiz, faqat ogohlantiramiz */
+    speakRec.looking = true;
+    speakRecRing('good');
+    speakRecStatus(t("Ko'z nazorati mavjud emas — yozish mumkin"), 'warn');
+    const btn = speakRecQ('[data-act="speak-rec-start"]');
+    if (btn) btn.disabled = false;
+    return;
+  }
+  startSpeakDetection();
+}
+
+function loadSpeakLandmarker() {
+  if (speakLandmarkerPromise) return speakLandmarkerPromise;
+  speakLandmarkerPromise = (async function () {
+    const vision = await import(SPEAK_MP_BASE + '/vision_bundle.mjs');
+    const fileset = await vision.FilesetResolver.forVisionTasks(SPEAK_MP_BASE + '/wasm');
+    const opts = {
+      baseOptions: { modelAssetPath: SPEAK_MP_MODEL, delegate: 'GPU' },
+      runningMode: 'VIDEO',
+      numFaces: 1,
+      outputFaceBlendshapes: false,
+      outputFacialTransformationMatrixes: false
+    };
+    try {
+      return await vision.FaceLandmarker.createFromOptions(fileset, opts);
+    } catch (e) {
+      opts.baseOptions.delegate = 'CPU';
+      return await vision.FaceLandmarker.createFromOptions(fileset, opts);
+    }
+  })().catch(function (e) {
+    console.warn('[speak] FaceLandmarker:', (e && e.message) || e);
+    return null;
+  });
+  return speakLandmarkerPromise;
+}
+
+function startSpeakDetection() {
+  if (!speakRec) return;
+  clearInterval(speakRec.detectId);
+  speakRec.detectId = setInterval(runSpeakDetection, SPEAK_DETECT_MS);
+}
+
+/* Bosh yo'nalishi (yaw/pitch) + iris markazi bo'yicha kameraga qarash tekshiruvi */
+function speakFaceLooking(lm) {
+  function pt(i) { return lm[i] || null; }
+  const lEye = pt(33), rEye = pt(263), nose = pt(1), chin = pt(152), forehead = pt(10);
+  if (!lEye || !rEye || !nose || !chin || !forehead) return false;
+  const faceW = Math.abs(rEye.x - lEye.x);
+  if (faceW < 0.02) return false;
+  const yaw = (nose.x - (lEye.x + rEye.x) / 2) / faceW;
+  if (Math.abs(yaw) > 0.18) return false;
+  const eyeMidY = (lEye.y + rEye.y) / 2;
+  const faceH = Math.abs(chin.y - forehead.y);
+  if (faceH < 0.02) return false;
+  const pitch = (nose.y - eyeMidY) / faceH;
+  if (pitch < 0.08 || pitch > 0.55) return false;
+  if (lm.length >= 478) {
+    const sets = [[33, 133, [468, 469, 470, 471, 472]], [263, 362, [473, 474, 475, 476, 477]]];
+    for (let k = 0; k < sets.length; k++) {
+      const a = pt(sets[k][0]), b = pt(sets[k][1]);
+      if (!a || !b) continue;
+      const iris = sets[k][2].map(pt).filter(Boolean);
+      if (!iris.length) continue;
+      const ix = iris.reduce(function (s, p) { return s + p.x; }, 0) / iris.length;
+      const w = Math.abs(b.x - a.x);
+      if (w < 0.005) continue;
+      if (Math.abs(ix - (a.x + b.x) / 2) / w > 0.24) return false;
+    }
+  }
+  return true;
+}
+
+function runSpeakDetection() {
+  if (!speakRec || !speakRec.landmarker) return;
+  if (speakRec.mode !== 'ready' && speakRec.mode !== 'recording') return;
+  const video = speakRec.video;
+  if (!video || video.readyState < 2 || !video.videoWidth) return;
+  let res = null;
+  try { res = speakRec.landmarker.detectForVideo(video, performance.now()); } catch (e) { return; }
+  const lm = res && res.faceLandmarks && res.faceLandmarks[0];
+  const looking = !!(lm && speakFaceLooking(lm));
+  const now = Date.now();
+  /* Yozish paytida 1.2 s gacha pirpirashga ruxsat */
+  const awayNow = speakRec.mode === 'recording'
+    ? (!looking && now - speakRec.lastGoodAt > SPEAK_GRACE_MS)
+    : !looking;
+  if (looking) {
+    speakRec.lastGoodAt = now;
+    speakRec.away = false;
+  } else if (awayNow && !speakRec.away) {
+    speakRec.away = true;
+    if (speakRec.mode === 'recording') speakRec.lookAwayCount++;
+  }
+  if (speakRec.mode === 'recording') {
+    speakRec.eyeSamples++;
+    if (looking) speakRec.eyeGood++;
+  }
+  speakRec.looking = looking;
+  speakRecRing(awayNow ? 'away' : 'good');
+  speakRecWarn(awayNow);
+  const eye = speakRecQ('#speak-rec-eye');
+  if (eye) eye.classList.toggle('is-away', awayNow);
+  const eyeText = speakRecQ('#speak-rec-eye-text');
+  if (eyeText) {
+    if (speakRec.mode === 'recording') {
+      const pct = speakRec.eyeSamples ? Math.round(speakRec.eyeGood / speakRec.eyeSamples * 100) : 0;
+      eyeText.textContent = t("Ko'z kontakti: {p}%").replace('{p}', String(pct));
+    } else {
+      eyeText.textContent = awayNow ? t('Yuz topilmadi') : t('Yuz aniqlandi');
+    }
+  }
+  const startBtn = speakRecQ('[data-act="speak-rec-start"]');
+  if (startBtn && speakRec.mode === 'ready') startBtn.disabled = !looking;
+}
+
+function speakPickMime() {
+  if (typeof MediaRecorder === 'undefined' || !MediaRecorder.isTypeSupported) return '';
+  const list = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'];
+  for (let i = 0; i < list.length; i++) if (MediaRecorder.isTypeSupported(list[i])) return list[i];
+  return '';
+}
+
+function startSpeakRecording() {
+  if (!speakRec || speakRec.mode !== 'ready' || !speakRec.stream) return;
+  if (speakRec.landmarker && !speakRec.looking) { toast(t('Kameraga qarang'), 'error'); return; }
+  const mime = speakPickMime();
+  try {
+    speakRec.recorder = mime ? new MediaRecorder(speakRec.stream, { mimeType: mime })
+      : new MediaRecorder(speakRec.stream);
+  } catch (e) {
+    speakRecStatus(t("Yozishni boshlab bo'lmadi"), 'error');
+    return;
+  }
+  speakRec.mime = speakRec.recorder.mimeType || mime || 'video/webm';
+  speakRec.chunks = [];
+  speakRec.recorder.ondataavailable = function (ev) {
+    if (ev.data && ev.data.size) speakRec.chunks.push(ev.data);
+  };
+  speakRec.recorder.onstop = finishSpeakRecording;
+  try { speakRec.recorder.start(250); } catch (e) {
+    speakRecStatus(t("Yozishni boshlab bo'lmadi"), 'error');
+    return;
+  }
+  speakRec.mode = 'recording';
+  speakRec.startedAt = Date.now();
+  speakRec.endedAt = 0;
+  speakRec.lookAwayCount = 0;
+  speakRec.eyeSamples = 0;
+  speakRec.eyeGood = 0;
+  speakRec.lastGoodAt = Date.now();
+  speakRec.away = false;
+  speakRecTimer(0);
+  clearInterval(speakRec.timerId);
+  speakRec.timerId = setInterval(function () {
+    if (!speakRec || speakRec.mode !== 'recording') return;
+    speakRecTimer(Date.now() - speakRec.startedAt);
+  }, 250);
+  const startBtn = speakRecQ('[data-act="speak-rec-start"]');
+  const stopBtn = speakRecQ('[data-act="speak-rec-stop"]');
+  if (startBtn) startBtn.hidden = true;
+  if (stopBtn) stopBtn.hidden = false;
+  speakRecWarn(false);
+  speakRecRing('good');
+  speakRecStatus(t('Yozib olinmoqda...'), 'rec');
+}
+
+function stopSpeakRecording() {
+  if (!speakRec || speakRec.mode !== 'recording' || !speakRec.recorder) return;
+  speakRec.mode = 'finishing';
+  speakRec.endedAt = Date.now();
+  clearInterval(speakRec.timerId);
+  speakRecTimer(speakRec.endedAt - speakRec.startedAt);
+  try { speakRec.recorder.stop(); } catch (e) { finishSpeakRecording(); }
+}
+
+function finishSpeakRecording() {
+  if (!speakRec) return;
+  clearInterval(speakRec.timerId);
+  clearInterval(speakRec.detectId);
+  const type = speakRec.mime || 'video/webm';
+  const blob = new Blob(speakRec.chunks, { type: type });
+  if (!blob.size) {
+    speakRec.mode = 'ready';
+    speakRecRing('away');
+    speakRecStatus(t("Yozuv bo'sh chiqdi — qayta urinib ko'ring"), 'error');
+    const startBtn = speakRecQ('[data-act="speak-rec-start"]');
+    const stopBtn = speakRecQ('[data-act="speak-rec-stop"]');
+    if (startBtn) { startBtn.hidden = false; startBtn.disabled = !speakRec.looking; }
+    if (stopBtn) stopBtn.hidden = true;
+    startSpeakDetection();
+    return;
+  }
+  speakRec.blob = blob;
+  speakRec.endedAt = speakRec.endedAt || Date.now();
+  if (speakRec.objectUrl) URL.revokeObjectURL(speakRec.objectUrl);
+  speakRec.objectUrl = URL.createObjectURL(blob);
+  if (speakRec.stream) speakRec.stream.getTracks().forEach(function (tr) { tr.stop(); });
+  speakRec.stream = null;
+  const video = speakRec.video;
+  if (video) {
+    video.srcObject = null;
+    video.muted = false;
+    video.loop = true;
+    video.src = speakRec.objectUrl;
+    try { video.pause(); } catch (e) { /* preview */ }
+  }
+  speakRec.mode = 'preview';
+  speakRecRing('good');
+  speakRecWarn(false);
+  const eye = speakRecQ('#speak-rec-eye');
+  if (eye) eye.classList.remove('is-away');
+  const eyeText = speakRecQ('#speak-rec-eye-text');
+  if (eyeText) {
+    const pct = speakRec.eyeSamples ? Math.round(speakRec.eyeGood / speakRec.eyeSamples * 100) : 0;
+    eyeText.textContent = t("Ko'z kontakti: {p}%").replace('{p}', String(pct));
+  }
+  const stopBtn = speakRecQ('[data-act="speak-rec-stop"]');
+  if (stopBtn) stopBtn.hidden = true;
+  const actions = speakRecQ('#speak-rec-actions');
+  if (actions) actions.hidden = true;
+  const preview = speakRecQ('#speak-rec-preview');
+  if (preview) preview.hidden = false;
+  speakRecStatus(t("Tayyor — videoni ko'ring yoki yuboring."));
+}
+
+function watchSpeakRecording() {
+  if (!speakRec || !speakRec.blob || !speakRec.video) return;
+  const v = speakRec.video;
+  v.muted = false;
+  try { v.currentTime = 0; } catch (e) { /* metadata */ }
+  const p = v.play();
+  if (p && p.catch) p.catch(function () {});
+}
+
+async function submitSpeakRecording() {
+  if (!speakRec || !speakRec.blob || speakRec.mode !== 'preview') return;
+  const st = linkedStudent();
+  if (!st) return;
+  if (st.voiceAllowed !== true) { toast(t('Ustoz ruxsati kerak'), 'error'); return; }
+  const btn = speakRecQ('[data-act="speak-rec-submit"]');
+  if (btn) btn.disabled = true;
+  speakRec.mode = 'submitting';
+  speakRecStatus(t('Yuborilmoqda...'), 'rec');
+  const eyePercent = speakRec.eyeSamples ? Math.round(speakRec.eyeGood / speakRec.eyeSamples * 100) : 0;
+  const metrics = {
+    lookAwayCount: speakRec.lookAwayCount,
+    eyeContactPercent: eyePercent,
+    durationSec: Math.max(1, Math.round(((speakRec.endedAt || Date.now()) - speakRec.startedAt) / 1000))
+  };
+  try {
+    const ext = /mp4/.test(speakRec.mime || '') ? 'mp4' : 'webm';
+    const file = new File([speakRec.blob], 'speaking_' + Date.now() + '.' + ext,
+      { type: speakRec.mime || 'video/webm' });
+    const up = await uploadFileToR2(file, 'speaking/' + (st.dbId != null ? st.dbId : st.id));
+    const saved = await CloudSync.submitSpeakingVideo({
+      studentDbId: st.dbId,
+      mediaUrl: up.url,
+      durationSec: metrics.durationSec,
+      lookAwayCount: metrics.lookAwayCount,
+      eyeContactPercent: metrics.eyeContactPercent
+    });
+    const subs = getTgSubs();
+    subs.push({
+      id: saved && saved.id != null ? 't' + saved.id : 'tlocal' + Date.now(),
+      dbId: saved && saved.id != null ? saved.id : null,
+      sid: st.id, mediaType: 'video', mediaUrl: up.url, status: 'kutilmoqda',
+      score: null, feedback: '', createdAt: new Date().toISOString(),
+      lookAwayCount: metrics.lookAwayCount, eyeContactPercent: metrics.eyeContactPercent
+    });
+    store.set(K.tgsubs, subs);
+    closeSpeakRecorder();
+    toast(t('Speaking topshirildi'));
+    analyticsCall('capture', 'speaking_video_submitted', metrics);
+    render();
+  } catch (e) {
+    if (!speakRec) return;
+    speakRec.mode = 'preview';
+    if (btn) btn.disabled = false;
+    speakRecStatus(t('Yuborishda xatolik') + ': ' + ((e && e.message) || ''), 'error');
+  }
+}
+
+function closeSpeakRecorder() {
+  if (!speakRec) return;
+  const rec = speakRec;
+  speakRec = null;
+  clearInterval(rec.timerId);
+  clearInterval(rec.detectId);
+  if (rec.recorder && rec.recorder.state && rec.recorder.state !== 'inactive') {
+    try { rec.recorder.stop(); } catch (e) { /* allaqachon to'xtagan */ }
+  }
+  if (rec.stream) rec.stream.getTracks().forEach(function (tr) { try { tr.stop(); } catch (e) {} });
+  if (rec.objectUrl) { try { URL.revokeObjectURL(rec.objectUrl); } catch (e) {} }
+  if (rec.video) {
+    try { rec.video.pause(); } catch (e) { /* detached */ }
+    rec.video.srcObject = null;
+    rec.video.removeAttribute('src');
+  }
+  if (rec.root && rec.root.parentNode) rec.root.parentNode.removeChild(rec.root);
+  document.body.classList.remove('speak-rec-open');
+}
+
 /* ---- Telegram topshiriklari (ustoz uchun inbox) ---- */
 function renderTgInbox() {
   /* Baholangan yoki bekor qilingan topshirik kartalari INBOXdan chiqadi (silliq ravishda) */
-  const subs = getTgSubs().filter(function (t) {
-    return t.status !== 'baholandi' && t.status !== 'graded' && t.status !== 'rad_etildi';
+  const subs = getTgSubs().filter(function (x) {
+    return x.status !== 'baholandi' && x.status !== 'graded' && x.status !== 'rad_etildi';
   }).slice().reverse(); /* yangisi yuqorida */
-  if (!subs.length) return emptyState("Hozircha Telegram orqali topshirik yo'q");
+  if (!subs.length) return emptyState(t("Hozircha topshiriq yo'q"));
   const byId = {};
   getStudents().forEach(s => { byId[s.id] = s; });
-  return subs.map(t => {
-    const st = byId[t.sid];
-    const day = t.createdAt ? String(t.createdAt).slice(0, 10) : '';
+  return subs.map(function (sub) {
+    const st = byId[sub.sid];
+    const day = sub.createdAt ? String(sub.createdAt).slice(0, 10) : '';
     return `
-    <div class="audio-item" data-tgcard="${esc(t.id)}">
+    <div class="audio-item" data-tgcard="${esc(sub.id)}">
       <div class="audio-item__meta">
         <strong>${st ? esc(st.fullName) : '—'}</strong> ${st ? `<span class="chip-class">${esc(st.schoolClass)}</span>` : ''} ·
-        ${t.mediaType === 'voice' ? ico('mic', 14) + ' Ovozli xabar' : ico('video', 14) + ' Video'}${day ? ' · ' + fmtDMY(day) : ''} ·
-        ${ico('clock', 14)} Kutilmoqda
+        ${sub.mediaType === 'voice' ? ico('mic', 14) + ' ' + t('Audio') : ico('video', 14) + ' ' + t('Video')}${day ? ' · ' + fmtDMY(day) : ''} ·
+        ${ico('clock', 14)} ${t('Kutilmoqda')}
       </div>
+      ${sub.eyeContactPercent != null || sub.lookAwayCount != null || sub.mediaUrl ? `<div class="speak-metrics">
+        ${sub.mediaUrl ? `<a class="btn btn-xs ghost speak-watch" href="${esc(sub.mediaUrl)}" target="_blank" rel="noopener">${ico('video', 13)} ${t("Videoni ko'rish")}</a>` : ''}
+        ${sub.eyeContactPercent != null ? `<span class="speak-metric">${ico('eye', 13)} ${t('Kameraga qarash')}: ${sub.eyeContactPercent}%</span>` : ''}
+        ${sub.lookAwayCount != null ? `<span class="speak-metric">${ico('alert', 13)} ${t('Chetga qarash')}: ${sub.lookAwayCount}</span>` : ''}
+      </div>` : ''}
       <div class="grade-row">
         ${[1,2,3,4,5,6,7,8,9,10].map(n => `
-          <button type="button" class="btn btn-xs ${t.score === n ? 'btn-primary' : 'ghost'}" data-act="tg-grade" data-tid="${t.id}" data-score="${n}">${n}</button>`).join('')}
-        <input class="input" style="flex:1;min-width:140px" placeholder="Izoh (ixtiyoriy)" value="${esc(t.feedback || '')}" data-act="tg-feedback" data-tid="${t.id}" />
-        <button type="button" class="btn btn-xs danger" data-act="tg-reject" data-tid="${t.id}">Bekor qilish</button>
+          <button type="button" class="btn btn-xs ${sub.score === n ? 'btn-primary' : 'ghost'}" data-act="tg-grade" data-tid="${sub.id}" data-score="${n}">${n}</button>`).join('')}
+        <input class="input" style="flex:1;min-width:140px" placeholder="${t('Izoh (ixtiyoriy)')}" value="${esc(sub.feedback || '')}" data-act="tg-feedback" data-tid="${sub.id}" />
+        <button type="button" class="btn btn-xs danger" data-act="tg-reject" data-tid="${sub.id}">${t('Bekor qilish')}</button>
       </div>
     </div>`;
   }).join('');
@@ -7790,12 +8289,14 @@ function syncLoginLock() {
       if (errEl && String(errEl.textContent).indexOf('Xavfsizlik:') === 0) {
         errEl.textContent = '';
         errEl.classList.remove('show');
+        if (String(state.loginError || '').indexOf('Xavfsizlik:') === 0) state.loginError = '';
       }
       if (state.loginTimer) { clearInterval(state.loginTimer); state.loginTimer = null; }
       return;
     }
     if (btnEl) btnEl.disabled = true;
     if (errEl) { errEl.textContent = loginLockText(r); errEl.classList.add('show'); }
+    state.loginError = loginLockText(r);
   };
   tick();
   if (loginLockRec() && loginLockRec().until) state.loginTimer = setInterval(tick, 1000);
@@ -7836,6 +8337,7 @@ async function doLogin() {
   const pass = (passEl && passEl.value) || '';
 
   const fail = msg => {
+    state.loginError = msg;
     if (err) { err.textContent = msg; err.classList.add('show'); }
   };
 
@@ -7891,6 +8393,7 @@ async function doLogin() {
   };
 
   const onSuccess = (userObj) => {
+    state.loginError = '';
     store.del(K.loginFails);
     startSession(userObj);
     toast('Xush kelibsiz!');
@@ -9218,7 +9721,7 @@ document.addEventListener('click', function (e) {
     'do-login': doLogin,
     'captcha-refresh': function () { refreshCaptcha(); },
     'open-forgot': openForgotPwd,
-    'auth-login-open': function () { setAuthStep('login'); },
+    'auth-login-open': function () { state.loginError = ''; setAuthStep('login'); },
     'auth-back': function () { setAuthStep(authStep() === 'recover' ? 'login' : 'landing'); },
     'recover-captcha-refresh': function () { refreshRecoverCaptcha(); },
     'forgot-send': function () { sendResetCode(); },
@@ -9348,26 +9851,19 @@ document.addEventListener('click', function (e) {
       btn.setAttribute('aria-label', show ? "Parolni yashirish" : "Parolni ko'rsatish");
     },
 
-    /* --- Portal: Speaking topshirish (CTA — Telegram ga yo'naltiradi) --- */
+    /* --- Portal: Speaking topshirish (jonli dumaloq video yozgich) --- */
     'speak-cta': function () {
       const stu = linkedStudent();
       analyticsCall('capture', 'speaking_intent_opened',
         { has_debt: !!(stu && Number(stu.speakingDebt) > 0) });
-      openModal(`
-        <div class="modal-head">
-          <h3>${ico('mic', 20)} ${t('Speaking topshirish')}</h3>
-          <button type="button" class="icon-btn" data-act="close-modal" aria-label="Yopish">✕</button>
-        </div>
-        <div class="confirm-body">
-          <div class="confirm-emoji tint-sky">${ICON.smartphone}</div>
-          <p class="confirm-text">${t('Ovozli topshirish uchun Telegram botga kiring va u yerga ovozli xabar (voice) yoki krujok (video note) yuboring.')}</p>
-          <p class="muted small" style="margin-top:9px">${t("Muzaffar Amirov baholagach, natijani shu kabinetda ko'rasiz.")}</p>
-        </div>
-        <div class="confirm-actions">
-          <button type="button" class="btn btn-primary" data-act="close-modal">${t('Tushunarli')}</button>
-        </div>
-      `);
+      openSpeakingRecorder();
     },
+    'speak-rec-close': function () { closeSpeakRecorder(); },
+    'speak-rec-start': function () { startSpeakRecording(); },
+    'speak-rec-stop': function () { stopSpeakRecording(); },
+    'speak-rec-watch': function () { watchSpeakRecording(); },
+    'speak-rec-submit': function () { submitSpeakRecording(); },
+    'speak-rec-cancel': function () { closeSpeakRecorder(); },
 
     /* --- O'chirish (tasdiq bilan) --- */
     'del-student': function () { openDeleteStudent(btn.getAttribute('data-sid')); },
@@ -9460,7 +9956,7 @@ document.addEventListener('click', function (e) {
       const list = getStudents();
       const st = list.filter(x => x.id === btn.getAttribute('data-sid'))[0];
       if (!st) return;
-      st.voiceAllowed = !(st.voiceAllowed !== false);
+      st.voiceAllowed = !(st.voiceAllowed === true);
       store.set(K.students, list);
       CloudSync.pushStudent(st.id);
       render();
