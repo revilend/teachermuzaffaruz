@@ -3518,7 +3518,6 @@ const I18N_EN = {
   "Bugun": "Today",
   "Keyingi hafta": "Next week",
   "Speaking qarzi": "Speaking debt",
-  "Speaking qarzi (o'quvchilar)": "Speaking debt (students)",
   "Speaking": "Speaking",
   "Maktab guruhi": "School group",
   "Repetitor guruhi": "Tutoring group",
@@ -7869,7 +7868,6 @@ function speakRowHTML(x) {
 function speakingScreen() {
   if (!isTeacher()) return blockedScreen("Bu bo'lim faqat Muzaffar Amirov uchun");
   ensureSpeakState();
-  const students = getStudents();
   const list = getSpeaking()
     .filter(x => x.date === state.speakDate)
     .sort((a, b) => a.start.localeCompare(b.start));
@@ -7890,19 +7888,6 @@ function speakingScreen() {
 
   <div class="card" style="padding-top:4px;padding-bottom:4px">
     ${list.length ? list.map(speakRowHTML).join('') : emptyState("Bu sanada slot yo'q — 'Slot' tugmasini bosing")}
-  </div>
-
-  <div class="section-title">Speaking qarzi (o'quvchilar)</div>
-  <div class="card">
-    ${students.map(st => `
-      <div class="row between" style="padding:8px 0;border-bottom:1px solid var(--card-border)">
-        <span class="s-name">${esc(st.fullName)} <span class="chip-class">${esc(st.schoolClass)}</span></span>
-        <div class="debt-controls">
-          <button type="button" class="btn btn-xs ghost" data-act="debt-minus" data-sid="${st.id}">−</button>
-          <span class="debt-num">${Number(st.speakingDebt) || 0} ta</span>
-          <button type="button" class="btn btn-xs ghost" data-act="debt-plus" data-sid="${st.id}">+</button>
-        </div>
-      </div>`).join('')}
   </div>
 
   ${speakingLogHTML()}

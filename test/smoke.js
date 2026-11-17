@@ -1136,10 +1136,12 @@ check(qa('.debt-num').filter(d => d.textContent.trim() === '1 ta').length >= 1, 
 click(qa('[data-act="debt-minus"]').filter(b => b.getAttribute('data-sid') === 's3')[0]);
 check(qa('.debt-num').filter(d => d.textContent.trim() === '0 ta').length >= 1, 'qarz: [-] bosildi → 0 ta');
 
-/* Speaking ekranida ham qarz nazorati */
+/* Speaking ekranda qarz ro'yxati yo'q, slot/submission qismlari saqlangan */
 click('[data-act="nav"][data-screen="speaking"]');
-check(text().includes('Speaking qarzi (o\'quvchilar)'), 'speaking: qarz ro\'yxati ekranda');
-check(qa('[data-act="debt-plus"]').length === nStud, 'speaking: ' + nStud + ' ta [+] tugma');
+check(!text().includes("Speaking qarzi (o'quvchilar)") && qa('[data-act="debt-plus"]').length === 0,
+  'speaking: o\'quvchilar qarz ro\'yxati olib tashlangan');
+check(!!q('#sp-date') && !!q('[data-act="open-slot"]'),
+  'speaking: sana selektori va + Slot tugmasi saqlangan');
 check(text().includes('Speaking topshiriqlari'), 'speaking: topshiriqlar inbox bo\'limi bor');
 check(text().includes("Hozircha topshiriq yo'q"), 'speaking: inbox holati ko\'rinadi');
 
@@ -2066,8 +2068,8 @@ await (async () => {
       .filter(x => x.dbId === S5_DB)[0];
     check(!!debtStu && debtStu.speakingDebt === 1,
       'realtime: speaking_debt lokal keshda jonli yangilandi → 1');
-    check(qa('.debt-num').filter(d => d.textContent.trim() === '1 ta').length >= 1,
-      "realtime: qarz badge ekranda '1 ta' bo'ldi (refreshsiz)");
+    check(!q('#screen .debt-num') && !q('#screen [data-act="debt-plus"]'),
+      'realtime: qarz lokal keshda yangilandi, Speaking sahifasida qarz ro\'yxati yo\'q');
 
     /* Kirganda ruxsat 'default' bo'lsa — so'rov rejalashtiriladi */
     FakeNotification.permission = 'default';
@@ -2181,8 +2183,8 @@ await (async () => {
     'speaking: birinchi sessiya jurnalga yozildi (8/10)');
   let debtS = JSON.parse(win.localStorage.getItem('et_students') || '[]').filter(x => x.id === 's77')[0];
   check(!!debtS && debtS.speakingDebt === 1, 'speaking: baholash qarzni −1 qildi (2 → 1), Supabase pushDebt');
-  check(qa('.debt-num').filter(d => d.textContent.trim() === '1 ta').length >= 1,
-    "speaking: ekrandagi qarz hisoblagichi darhol yangilandi (1 ta)");
+  check(!q('#screen .debt-num') && !q('#screen [data-act="debt-plus"]'),
+    'speaking: qarz hisoblagichi Speaking sahifasidan olib tashlangan');
   check(JSON.parse(win.localStorage.getItem('et_speak_log') || '[]').length >= 1,
     'speaking: sessiya et_speak_log jurnaliga yozildi');
 
