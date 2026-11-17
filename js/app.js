@@ -721,7 +721,53 @@ const CloudSync = (function () {
       if (res.error.code === 'PGRST205') hasTg = false;
       throw res.error;
     }
-    return res.data && res.data[0] ? res.data[0] : null;
+    const saved = res.data && res.data[0] ? res.data[0] : null;
+    /* Sayt videosi uchun ustozga FAQAT matnli xabar. Video fayl yoki inline
+       baholash tugmalari botga yuborilmaydi — baholash faqat saytda. */
+    try {
+      await queueWebSpeakingNotice({
+        studentDbId: p.studentDbId,
+        studentName: p.studentName,
+        groupName: p.groupName
+      });
+    } catch (e) {
+      console.warn('[outbox] speaking:', (e && e.message) || e);
+    }
+    return saved;
+  }
+
+  async function queueWebSpeakingNotice(opts) {
+    const p = opts || {};
+    if (!ready()) return null;
+    let studentName = String(p.studentName || '').trim();
+    let groupName = String(p.groupName || '').trim();
+    if ((!studentName || !groupName) && p.studentDbId != null) {
+      const st = getStudents().filter(function (x) { return String(x.dbId) === String(p.studentDbId); })[0];
+      if (st) {
+        studentName = studentName || String(st.fullName || '').trim();
+        const g = groupById(st.groupId);
+        groupName = groupName || (g ? String(g.name || '').trim() : '');
+      }
+    }
+    const link = (function () {
+      try {
+        const loc = window.location || {};
+        if (loc.protocol !== 'http:' && loc.protocol !== 'https:') return '';
+        return String(loc.origin || '') + String(loc.pathname || '/');
+      } catch (e) { return ''; }
+    })();
+    const place = link ? `<a href="${esc(link)}">Speaking slotlari</a>` : '<b>Speaking slotlari</b>';
+    const when = new Date().toLocaleString(getLang() === 'en' ? 'en-GB' : 'uz-UZ');
+    return queueMessages([{
+      chat_id: 'ADMIN',
+      student_id: p.studentDbId == null ? null : p.studentDbId,
+      status: 'pending',
+      text: "<b>Yangi sayt speaking videosi</b>\n\n" +
+        "O'quvchi: <b>" + esc(studentName || '—') + "</b>\n" +
+        "Guruh: <b>" + esc(groupName || 'Guruh tayinlanmagan') + "</b>\n" +
+        'Vaqt: ' + esc(when) + "\n\n" +
+        'Video saytda saqlandi. Uni faqat ' + place + " bo'limida ko'ring va baholang."
+    }]);
   }
 
   /* Sayt videosini o'chirish: avval R2 fayli (DELETE ?path=), keyin Supabase qatori.
@@ -2270,6 +2316,7 @@ const CloudSync = (function () {
     pullSpeaking: pullSpeaking,
     pushSpeakingGrade: pushSpeakingGrade,
     submitSpeakingVideo: submitSpeakingVideo,
+    queueWebSpeakingNotice: queueWebSpeakingNotice,
     deleteSpeakingSubmission: deleteSpeakingSubmission,
     pullSlots: pullSlots,
     pushSlot: pushSlot,
@@ -5241,13 +5288,13 @@ function teacherHome() {
 
   <div class="section-title">Tez amallar</div>
   <div class="quick-grid">
-    <button type="button" class="card quick" data-act="nav" data-screen="submissions"><span class="quick-ico tint-rose">${ICON.clipboardCheck}</span><span>Bajarilgan topshiriqlar${navBadgeHTML('submissions')}</span></button>
-    <button type="button" class="card quick" data-act="nav" data-screen="payments"><span class="quick-ico tint-teal">${ICON.creditCard}</span><span>To'lovlar</span></button>
-    <button type="button" class="card quick" data-act="nav" data-screen="grades"><span class="quick-ico tint-indigo">${ICON.grades}</span><span>Baholar jurnali</span></button>
-    <button type="button" class="card quick" data-act="nav" data-screen="attendance"><span class="quick-ico tint-emerald">${ICON.cal}</span><span>Tezkor davomat</span></button>
-    <button type="button" class="card quick" data-act="nav" data-screen="speaking"><span class="quick-ico tint-sky">${ICON.mic}</span><span>Speaking slotlari${navBadgeHTML('speaking')}</span></button>
-    <button type="button" class="card quick" data-act="nav" data-screen="students"><span class="quick-ico tint-amber">${ICON.gradCap}</span><span>O'quvchilar</span></button>
     <button type="button" class="card quick" data-act="nav" data-screen="homework"><span class="quick-ico tint-blue">${ICON.bookOpen}</span><span>${t('Uyga vazifalar')}</span></button>
+    <button type="button" class="card quick" data-act="nav" data-screen="attendance"><span class="quick-ico tint-emerald">${ICON.cal}</span><span>Tezkor davomat</span></button>
+    <button type="button" class="card quick" data-act="nav" data-screen="submissions"><span class="quick-ico tint-rose">${ICON.clipboardCheck}</span><span>Bajarilgan topshiriqlar${navBadgeHTML('submissions')}</span></button>
+    <button type="button" class="card quick" data-act="nav" data-screen="speaking"><span class="quick-ico tint-sky">${ICON.mic}</span><span>Speaking slotlari${navBadgeHTML('speaking')}</span></button>
+    <button type="button" class="card quick" data-act="nav" data-screen="grades"><span class="quick-ico tint-indigo">${ICON.grades}</span><span>Baholar jurnali</span></button>
+    <button type="button" class="card quick" data-act="nav" data-screen="payments"><span class="quick-ico tint-teal">${ICON.creditCard}</span><span>To'lovlar</span></button>
+    <button type="button" class="card quick" data-act="nav" data-screen="students"><span class="quick-ico tint-amber">${ICON.gradCap}</span><span>O'quvchilar</span></button>
     <button type="button" class="card quick" data-act="nav" data-screen="groups"><span class="quick-ico tint-purple">${ICON.groups}</span><span>Guruhlar</span></button>
     <button type="button" class="card quick" data-act="open-add-student"><span class="quick-ico tint-slate">${ICON.userPlus}</span><span>O'quvchi qo'shish</span></button>
   </div>
@@ -8525,8 +8572,11 @@ async function submitSpeakRecording() {
     const file = new File([speakRec.blob], 'speaking_' + Date.now() + '.' + ext,
       { type: speakRec.mime || 'video/webm' });
     const up = await uploadFileToR2(file, 'speaking/' + (st.dbId != null ? st.dbId : st.id));
+    const g = groupById(st.groupId);
     const saved = await CloudSync.submitSpeakingVideo({
       studentDbId: st.dbId,
+      studentName: st.fullName,
+      groupName: g ? g.name : '',
       mediaUrl: up.url,
       durationSec: metrics.durationSec,
       lookAwayCount: metrics.lookAwayCount,
@@ -8543,7 +8593,6 @@ async function submitSpeakRecording() {
       lookAwayCount: metrics.lookAwayCount, eyeContactPercent: metrics.eyeContactPercent
     });
     store.set(K.tgsubs, subs);
-    queueTeacherSpeakingNotice(st);
     closeSpeakRecorder();
     toast(t('Speaking topshirildi'));
     analyticsCall('capture', 'speaking_video_submitted', metrics);
@@ -8553,30 +8602,6 @@ async function submitSpeakRecording() {
     speakRec.mode = 'preview';
     if (btn) btn.disabled = false;
     speakRecStatus(t('Yuborishda xatolik') + ': ' + ((e && e.message) || ''), 'error');
-  }
-}
-
-/* Ustozga Telegram xabari: faqat teacher_telegram_id yoki window.TEACHER_TELEGRAM_ID sozlangan bo'lsa */
-async function queueTeacherSpeakingNotice(st) {
-  if (!st) return;
-  try {
-    let chat = String(window.TEACHER_TELEGRAM_ID || '').trim();
-    if (!chat) chat = String((await CloudSync.getSetting('teacher_telegram_id')) || '').trim();
-    if (!chat) return;
-    const g = groupById(st.groupId);
-    const gname = g ? g.name : 'Guruh tayinlanmagan';
-    const when = new Date().toLocaleString(getLang() === 'en' ? 'en-GB' : 'uz-UZ');
-    await CloudSync.queueMessages([{
-      chat_id: chat,
-      student_id: st.dbId == null ? null : st.dbId,
-      text: "<b>Yangi sayt speaking videosi</b>\n\n" +
-        "O'quvchi: <b>" + esc(st.fullName) + "</b>\n" +
-        "Guruh: <b>" + esc(gname) + "</b>\n" +
-        'Vaqt: ' + esc(when) + "\n\n" +
-        "Videoni saytdagi Speaking slotlari bo'limida ko'ring va baholang."
-    }]);
-  } catch (e) {
-    console.warn('[outbox] speaking:', (e && e.message) || e);
   }
 }
 

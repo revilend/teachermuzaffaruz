@@ -266,9 +266,9 @@ async def on_cleanup_answer(call: types.CallbackQuery):
 
 # ---------------- Ustoz: 🎙 Yangi Speakinglar ----------------
 def is_web_submission(row: dict) -> bool:
-    """Sayt orqali yozilgan video: telegram_file_id o'rnida R2 havolasi saqlanadi."""
+    """Sayt orqali yozilgan speaking: telegram_file_id R2 havolasi yoki 'web' bo'ladi."""
     fid = str((row or {}).get("telegram_file_id") or "").strip().lower()
-    return fid.startswith("http://") or fid.startswith("https://")
+    return fid == "web" or fid.startswith("http://") or fid.startswith("https://")
 
 
 @dp.message(F.text == ADMIN_MENU["speak"])
@@ -811,6 +811,10 @@ def speaking_caption(student: dict, media_type: str) -> str:
 
 async def _send_media_to_teacher(file_id: str, media_type: str, student: dict, sub_id=None):
     """Mediafaylni ustozga yuboradi (baho tugmalari bilan)."""
+    # Sayt videolari botga media sifatida yuborilmaydi — faqat saytda baholanadi.
+    if is_web_submission({"telegram_file_id": file_id}):
+        logging.warning("web speaking media botga yuborilmadi")
+        return
     caption = speaking_caption(student, media_type)
     kb = grade_keyboard(sub_id) if sub_id is not None else InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📝 Saytda ochish", web_app=WebAppInfo(url=config.WEBAPP_URL))],
@@ -900,7 +904,7 @@ async def on_grade_tap(call: types.CallbackQuery):
 
     try:
         subs = supabase.table("speaking_submissions").select(
-            "id, student_id, status, media_type, created_at"
+            "id, student_id, status, media_type, telegram_file_id, created_at"
         ).eq("id", sub_id).limit(1).execute().data
     except Exception as e:
         logging.error(f"grade load sub: {e}")
@@ -910,6 +914,9 @@ async def on_grade_tap(call: types.CallbackQuery):
         await call.answer("Topshirik topilmadi", show_alert=True)
         return
     sub = subs[0]
+    if is_web_submission(sub):
+        await call.answer("Sayt videosi faqat saytda baholanadi", show_alert=True)
+        return
     if sub.get("status") == "baholandi":
         await call.answer(f"Bu topshirik allaqachon baholangan ({sub.get('score')}/10)", show_alert=True)
         return
@@ -1011,7 +1018,7 @@ async def on_reject_tap(call: types.CallbackQuery):
 
     try:
         subs = supabase.table("speaking_submissions").select(
-            "id, student_id, status, media_type, created_at"
+            "id, student_id, status, media_type, telegram_file_id, created_at"
         ).eq("id", sub_id).limit(1).execute().data
     except Exception as e:
         logging.error(f"reject load sub: {e}")
@@ -1021,6 +1028,9 @@ async def on_reject_tap(call: types.CallbackQuery):
         await call.answer("Topshirik topilmadi", show_alert=True)
         return
     sub = subs[0]
+    if is_web_submission(sub):
+        await call.answer("Sayt videosi faqat saytda baholanadi", show_alert=True)
+        return
     if sub.get("status") == "rad_etildi":
         await call.answer("Bu topshirik allaqachon bekor qilingan", show_alert=True)
         return

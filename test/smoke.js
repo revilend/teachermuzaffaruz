@@ -421,6 +421,33 @@ check(qa('.quick-grid .quick-ico svg').length === 9, "icon: har bir badge ichida
 check(['tint-indigo', 'tint-emerald', 'tint-sky', 'tint-amber', 'tint-purple', 'tint-slate', 'tint-rose', 'tint-teal']
   .every(t => qa('.quick-ico.' + t).length === 1),
   'icon: indigo/emerald/sky/amber/purple/slate/rose/teal tints har biri bittadan');
+const quickOrder = qa('.quick-grid .quick[data-screen]').map(b => b.getAttribute('data-screen'));
+check(JSON.stringify(quickOrder.slice(0, 5)) ===
+  JSON.stringify(['homework', 'attendance', 'submissions', 'speaking', 'grades']),
+  'home: tez amallar tartibi — uyga vazifa, davomat, topshiriqlar, speaking, baholar');
+check(quickOrder.length === 8 && qa('.quick-grid .quick').length === 9,
+  'home: qolgan tez amallar beshtalikdan keyin saqlangan (9 ta karta)');
+
+/* Sayt speaking videosi → ustozga FAQAT matnli Telegram xabari (video/baho tugmalarisiz) */
+const outboxBeforeWebNotice = (cloudStub.db.telegram_outbox || []).length;
+await win.__cloud.queueWebSpeakingNotice({ studentDbId: 5 });
+const webNotice = (cloudStub.db.telegram_outbox || []).slice(outboxBeforeWebNotice)
+  .filter(r => /Yangi sayt speaking videosi/.test(String(r.text || '')))[0] || {};
+const webNoticeText = String(webNotice.text || '');
+check(String(webNotice.chat_id || '') === 'ADMIN' &&
+  /O'quvchi: <b>Malika Yusupova<\/b>/.test(webNoticeText) &&
+  /Guruh: <b>IELTS Band 7\.0<\/b>/.test(webNoticeText),
+  'web speaking: telegram_outbox ADMIN ga o‘quvchi va guruh nomi bilan yozildi');
+check(/Video saytda saqlandi/.test(webNoticeText) &&
+  /<a href="http:\/\/localhost:3000\/">Speaking slotlari<\/a>/.test(webNoticeText) &&
+  /ko'ring va baholang/.test(webNoticeText),
+  'web speaking: faqat saytdagi Speaking slotlarida ko‘rish/baholash havolasi bor');
+check(!('media_url' in webNotice) && !('reply_markup' in webNotice) &&
+  !/\.(webm|mp4)\b/i.test(webNoticeText),
+  'web speaking: outboxda video fayl yoki inline baholash tugmalari YO‘Q');
+if (webNotice.id != null) {
+  cloudStub.db.telegram_outbox = (cloudStub.db.telegram_outbox || []).filter(r => r.id !== webNotice.id);
+}
 check(!!q('[data-act="open-hw"] svg') && !!q('.stat-ico svg'), 'icon: vazifa tugmasi va status kartalari SVG ikonka');
 check(!/[\u{1F300}-\u{1FAFF}]/u.test(q('#screen').textContent.replace(/[🟢🔴💵📢]/gu, '')),
   "icon: dashboardda cartoon emoji qolmagan (to'lov belgilari mustasno)");
