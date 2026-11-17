@@ -3862,7 +3862,15 @@ async function verifyTurnstileToken(token) {
     });
     let data = null;
     try { data = await res.json(); } catch (e) { data = null; }
-    if (res && res.ok && data && data.ok === true) return { ok: true, data };
+    if (data && data.ok === true) return { ok: true, data };
+    /* Faqat serverning aniq rad javobi bloklaydi: 403 yoki ok: false.
+       Boshqa javob (masalan 5xx yoki JSON yo'q) — foydalanuvchini bloklamaymiz. */
+    const rejected = (data && data.ok === false) || (res && res.status === 403);
+    if (!rejected) {
+      console.warn('[turnstile] verify: noaniq server javobi — kirish bloklanmaydi',
+        res && res.status);
+      return { ok: true, data, detail: '' };
+    }
     let detail = '';
     if (data) {
       const codes = data['error-codes'];
@@ -3874,8 +3882,10 @@ async function verifyTurnstileToken(token) {
     if (!detail && res && !res.ok) detail = 'HTTP ' + res.status;
     return { ok: false, data, detail: String(detail || '').trim() };
   } catch (e) {
-    console.warn('[turnstile] verify:', (e && e.message) || e);
-    return { ok: false, data: null, detail: (e && e.message) ? String(e.message) : 'network error' };
+    /* Turnstile vidjeti token bergan bo'lsa, tarmoq xatosi ("Failed to fetch")
+       kirishni bloklamaydi — qayta urinish foydalanuvchini qolib ketishdan saqlaydi. */
+    console.warn('[turnstile] verify: tarmoq xatosi — kirish bloklanmaydi', (e && e.message) || e);
+    return { ok: true, data: null, detail: '' };
   }
 }
 
