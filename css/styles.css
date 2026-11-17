@@ -2716,3 +2716,40 @@ html[data-theme="dark"] .speak-status.is-done { background: rgba(16, 185, 129, .
 .speak-archived:last-child { border-bottom: 0; }
 .speak-archived .audio-item__meta { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
 .nav-badge-speak { background: #0ea5e9; }
+
+/* Qat'iy ko'z nazorati: 1/3–2/3 qizil ogohlantirish, 3/3 da bekor qilingan yozuv */
+.speak-rec-ring.is-bad {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 5px rgba(239, 68, 68, .22), 0 0 30px rgba(239, 68, 68, .7);
+}
+.speak-rec-warn.is-bad {
+  color: #fca5a5;
+  background: rgba(127, 29, 29, .62);
+  border: 1px solid rgba(248, 113, 113, .5);
+  border-radius: 10px;
+  padding: 7px 11px;
+}
+.speak-rec-invalid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: 360px;
+  padding: 14px;
+  border: 1px solid rgba(248, 113, 113, .45);
+  border-radius: 16px;
+  background: rgba(127, 29, 29, .45);
+  color: #fee2e2;
+}
+.speak-rec-invalid[hidden] { display: none; }
+.speak-rec-invalid-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  text-align: left;
+  font-size: 12.5px;
+  line-height: 1.45;
+  font-weight: 600;
+}
+.speak-rec-invalid-note svg { width: 17px; height: 17px; flex: none; margin-top: 1px; color: #fca5a5; }
+.speak-rec-invalid .speak-rec-btn.retake { background: #dc2626; }

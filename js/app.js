@@ -3512,6 +3512,9 @@ const I18N_EN = {
   "Baholangan sayt videolari": "Graded website videos",
   "Video baholashdan keyin ham saqlanadi.": "The video is kept after grading.",
   "Yangi sayt speaking videosi": "New website speaking video",
+  "Kameraga qarang! Ogohlantirish: {n}/3": "Look at the camera! Warning: {n}/3",
+  "Ko'zingiz 3 marta kameradan chetga qaradi. Yozuv to'xtatildi, videoni qaytadan oling.": "Your eyes looked away from the camera 3 times. Recording stopped — please record a new video.",
+  "Qayta olish": "Retake",
   "Sayt videolari": "Website videos",
   "Guruhlar bo'yicha": "By group",
   "Sayt videolari guruhlar bo'yicha shu yerda; bot topshiriqlari botda ko'rinadi. \"Baholash\" orqali 1–10 ball qo'yiladi, video saqlanadi, ball baholar jurnaliga tushadi va Speaking qarzi 1 ga kamayadi. Video faqat \"O'chirish\" tasdiqlanganda R2 va bazadan o'chadi.": "Website videos appear here grouped by group; bot submissions stay in the bot. Grade 1–10, the video is kept, the score goes to the gradebook and the Speaking debt drops by one. A video is removed from R2 and the database only after the teacher confirms Delete.",
@@ -7785,8 +7788,14 @@ function speakingLogHTML() {
 const SPEAK_MP_VERSION = '0.10.14';
 const SPEAK_MP_BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@' + SPEAK_MP_VERSION;
 const SPEAK_MP_MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
-const SPEAK_GRACE_MS = 1200;
 const SPEAK_DETECT_MS = 100;
+/* Qat'iy ko'z nazorati: 1.0 s uzluksiz chetga qarash = 1 ogohlantirish, 3 tasida yozuv bekor qilinadi */
+const SPEAK_AWAY_MS = 1000;
+const SPEAK_AWAY_COOLDOWN_MS = 300;
+const SPEAK_MAX_WARNINGS = 3;
+const SPEAK_BLINK_MS = 400;
+const SPEAK_BLINK_SCORE = 0.45;
+const SPEAK_GAZE_SCORE = 0.5;
 let speakRec = null;
 let speakLandmarkerPromise = null;
 
@@ -7806,10 +7815,26 @@ function speakRecRing(state) {
   if (!ring) return;
   ring.classList.toggle('is-good', state === 'good');
   ring.classList.toggle('is-away', state === 'away');
+  ring.classList.toggle('is-bad', state === 'bad');
 }
-function speakRecWarn(show) {
+function speakRecWarn(show, message, bad) {
   const el = speakRecQ('#speak-rec-warn');
-  if (el) el.hidden = !show;
+  const txt = speakRecQ('#speak-rec-warn-text');
+  if (el) {
+    el.hidden = !show;
+    el.classList.toggle('is-bad', !!bad);
+  }
+  if (txt && message) txt.textContent = message;
+}
+/* 1/3 yoki 2/3: qizil halqa + aniq matn. 3/3 da yozuv darhol bekor qilinadi. */
+function speakRecWarning(n) {
+  const msg = t('Kameraga qarang! Ogohlantirish: {n}/3').replace('{n}', String(n));
+  speakRec.warningUntil = Date.now() + 2200;
+  speakRecWarn(true, msg, true);
+  speakRecRing('bad');
+  if (n >= SPEAK_MAX_WARNINGS) {
+    speakRecStatus(t("Ko'zingiz 3 marta kameradan chetga qaradi. Yozuv to'xtatildi, videoni qaytadan oling."), 'error');
+  }
 }
 function speakRecTimer(ms) {
   const el = speakRecQ('#speak-rec-timer');
@@ -7833,7 +7858,7 @@ function speakRecMarkup() {
       <div class="speak-rec-timer" id="speak-rec-timer">00:00</div>
     </div>
     <div class="speak-rec-eye" id="speak-rec-eye"><span class="speak-rec-dot"></span><span id="speak-rec-eye-text">${t('Yuz aniqlanmoqda...')}</span></div>
-    <div class="speak-rec-warn" id="speak-rec-warn" hidden>${ICON.alert}<span>${t('Kameraga qarang')}</span></div>
+    <div class="speak-rec-warn" id="speak-rec-warn" hidden>${ICON.alert}<span id="speak-rec-warn-text">${t('Kameraga qarang')}</span></div>
     <div class="speak-rec-actions" id="speak-rec-actions">
       <button type="button" class="speak-rec-btn rec" data-act="speak-rec-start" disabled>${ICON.mic} ${t('Yozishni boshlash')}</button>
       <button type="button" class="speak-rec-btn stop" data-act="speak-rec-stop" hidden>${ICON.stopRec} ${t("Yozishni to'xtatish")}</button>
@@ -7843,6 +7868,10 @@ function speakRecMarkup() {
       <button type="button" class="speak-rec-btn retake" data-act="speak-rec-retake">${ICON.refresh} ${t('Qayta yozish')}</button>
       <button type="button" class="speak-rec-btn submit" data-act="speak-rec-submit">${ICON.upload} ${speakSubmitLabel()}</button>
       <button type="button" class="speak-rec-btn cancel" data-act="speak-rec-cancel">${ICON.trash} ${t('Bekor qilish')}</button>
+    </div>
+    <div class="speak-rec-invalid" id="speak-rec-invalid" hidden>
+      <div class="speak-rec-invalid-note">${ICON.alert}<span>${t("Ko'zingiz 3 marta kameradan chetga qaradi. Yozuv to'xtatildi, videoni qaytadan oling.")}</span></div>
+      <button type="button" class="speak-rec-btn retake" data-act="speak-rec-retake">${ICON.refresh} ${t('Qayta olish')}</button>
     </div>
   </div>`;
 }
@@ -7861,6 +7890,8 @@ function openSpeakingRecorder() {
     stream: null, recorder: null, chunks: [], blob: null, objectUrl: '', mime: '',
     mode: 'idle', looking: false, away: true, lastGoodAt: 0,
     lookAwayCount: 0, eyeSamples: 0, eyeGood: 0, startedAt: 0, endedAt: 0,
+    awaySince: 0, awayCooldownUntil: 0, strikeCounted: false, blinkStartedAt: 0,
+    warningUntil: 0, invalidated: false, lastSignals: null,
     timerId: null, detectId: null, landmarker: null
   };
   document.body.classList.add('speak-rec-open');
@@ -7922,7 +7953,7 @@ function loadSpeakLandmarker() {
       baseOptions: { modelAssetPath: SPEAK_MP_MODEL, delegate: 'GPU' },
       runningMode: 'VIDEO',
       numFaces: 1,
-      outputFaceBlendshapes: false,
+      outputFaceBlendshapes: true,
       outputFacialTransformationMatrixes: false
     };
     try {
@@ -7944,47 +7975,74 @@ function startSpeakDetection() {
   speakRec.detectId = setInterval(runSpeakDetection, SPEAK_DETECT_MS);
 }
 
-/* Bosh yo'nalishi (yaw/pitch) + iris markazi bo'yicha kameraga qarash tekshiruvi */
-function speakFaceLooking(lm) {
+/* MediaPipe blendshape natijalarini {nom: ball} ko'rinishiga keltiradi */
+function speakBlendMap(res) {
+  const out = {};
+  const cats = res && res.faceBlendshapes && res.faceBlendshapes[0] &&
+    res.faceBlendshapes[0].categories;
+  if (Array.isArray(cats)) {
+    cats.forEach(function (c) {
+      if (c && c.categoryName) out[c.categoryName] = Number(c.score) || 0;
+    });
+  }
+  return out;
+}
+
+/* Uch signal: bosh burilishi (yaw/pitch), iris-qovoq nisbati va eyeLook* blendshapes.
+   Blink ham aniqlanadi — qisqa pirpirash (<400 ms) chetga qarash hisoblanmaydi. */
+function speakFaceSignals(lm, blends) {
   function pt(i) { return lm[i] || null; }
+  const out = {
+    face: false, headOk: false, irisAway: false, gazeAway: false,
+    eyesClosed: false, yaw: 0, pitch: 0
+  };
+  if (!lm || !lm.length) return out;
   const lEye = pt(33), rEye = pt(263), nose = pt(1), chin = pt(152), forehead = pt(10);
-  if (!lEye || !rEye || !nose || !chin || !forehead) return false;
+  if (!lEye || !rEye || !nose || !chin || !forehead) return out;
   const faceW = Math.abs(rEye.x - lEye.x);
-  if (faceW < 0.02) return false;
-  const yaw = (nose.x - (lEye.x + rEye.x) / 2) / faceW;
-  if (Math.abs(yaw) > 0.18) return false;
-  const eyeMidY = (lEye.y + rEye.y) / 2;
   const faceH = Math.abs(chin.y - forehead.y);
-  if (faceH < 0.02) return false;
-  const pitch = (nose.y - eyeMidY) / faceH;
-  if (pitch < 0.08 || pitch > 0.55) return false;
+  if (faceW < 0.02 || faceH < 0.02) return out;
+  out.face = true;
+  out.yaw = (nose.x - (lEye.x + rEye.x) / 2) / faceW;
+  out.pitch = (nose.y - (lEye.y + rEye.y) / 2) / faceH;
+  out.headOk = Math.abs(out.yaw) <= 0.2 && out.pitch >= 0.05 && out.pitch <= 0.62;
+
+  const b = blends || {};
+  const blinkL = Number(b.eyeBlinkLeft) || 0;
+  const blinkR = Number(b.eyeBlinkRight) || 0;
+  let eyesClosedCount = 0;
+
   if (lm.length >= 478) {
-    /* Har ko'z: [tashqi burchak, ichki burchak, yuqori qovoq, pastki qovoq, iris nuqtalari] */
+    /* Har ko'z: tashqi burchak, ichki burchak, yuqori/pastki qovoq, iris nuqtalari */
     const eyes = [
       [33, 133, 159, 145, [468, 469, 470, 471, 472]],
       [263, 362, 386, 374, [473, 474, 475, 476, 477]]
     ];
     for (let k = 0; k < eyes.length; k++) {
-      const a = pt(eyes[k][0]), b = pt(eyes[k][1]);
+      const a = pt(eyes[k][0]), c = pt(eyes[k][1]);
       const up = pt(eyes[k][2]), low = pt(eyes[k][3]);
-      if (!a || !b || !up || !low) continue;
+      if (!a || !c || !up || !low) continue;
       const iris = eyes[k][4].map(pt).filter(Boolean);
       if (!iris.length) continue;
-      const w = Math.abs(b.x - a.x);
+      const w = Math.abs(c.x - a.x);
       if (w < 0.005) continue;
       const lidGap = low.y - up.y;
-      /* Ko'z yumuq / deyarli yumuq (pirpirash) — kameraga qaramayapti */
-      if (lidGap <= 0 || lidGap / w < 0.12) return false;
-      const ix = iris.reduce(function (s, p) { return s + p.x; }, 0) / iris.length;
-      const iy = iris.reduce(function (s, p) { return s + p.y; }, 0) / iris.length;
-      /* Ko'z qorachig'i burchaklar orasida markazda bo'lishi kerak (gorizontal) */
-      if (Math.abs(ix - (a.x + b.x) / 2) / w > 0.24) return false;
-      /* ...va qovoqlar orasida markazda (vertikal): pastga/tepaga qarash rad etiladi */
+      if (lidGap <= 0 || lidGap / w < 0.11) eyesClosedCount++;
+      /* Gorizontal iris markazi: burun tomonga/chetga siljishi */
+      const ix = iris.reduce(function (sum, q) { return sum + q.x; }, 0) / iris.length;
+      if (Math.abs(ix - (a.x + c.x) / 2) / w > 0.22) out.irisAway = true;
+      /* Vertikal iris markazi: tepaga/pastga qarash */
+      const iy = iris.reduce(function (sum, q) { return sum + q.y; }, 0) / iris.length;
       const vy = (iy - up.y) / lidGap;
-      if (vy < 0.3 || vy > 0.74) return false;
+      if (vy < 0.30 || vy > 0.72) out.irisAway = true;
     }
   }
-  return true;
+
+  out.eyesClosed = Math.max(blinkL, blinkR) > SPEAK_BLINK_SCORE || eyesClosedCount >= 2;
+  const gazeKeys = ['eyeLookInLeft', 'eyeLookOutLeft', 'eyeLookInRight', 'eyeLookOutRight',
+    'eyeLookUpLeft', 'eyeLookUpRight', 'eyeLookDownLeft', 'eyeLookDownRight'];
+  out.gazeAway = gazeKeys.some(function (k) { return (Number(b[k]) || 0) >= SPEAK_GAZE_SCORE; });
+  return out;
 }
 
 function runSpeakDetection() {
@@ -7995,25 +8053,68 @@ function runSpeakDetection() {
   let res = null;
   try { res = speakRec.landmarker.detectForVideo(video, performance.now()); } catch (e) { return; }
   const lm = res && res.faceLandmarks && res.faceLandmarks[0];
-  const looking = !!(lm && speakFaceLooking(lm));
   const now = Date.now();
-  /* Yozish paytida 1.2 s gacha pirpirash/tabiiy harakatga ruxsat;
-     yozishdan oldin tugma pirpirab turmasligi uchun qisqa (0.35 s) muhlat */
-  const grace = speakRec.mode === 'recording' ? SPEAK_GRACE_MS : 350;
-  if (looking) speakRec.lastGoodAt = now;
-  const awayNow = !looking && now - speakRec.lastGoodAt > grace;
-  if (awayNow && !speakRec.away && speakRec.mode === 'recording') speakRec.lookAwayCount++;
-  speakRec.away = awayNow;
-  speakRec.looking = looking;
-  if (speakRec.mode === 'recording') {
-    /* Muhlat ichidagi pirpirash ko'z kontakti foiziga zarar yetkazmaydi */
-    speakRec.eyeSamples++;
-    if (!awayNow) speakRec.eyeGood++;
+  const blends = speakBlendMap(res);
+  const sig = lm ? speakFaceSignals(lm, blends) : {
+    face: false, headOk: false, irisAway: true, gazeAway: true, eyesClosed: false
+  };
+  speakRec.lastSignals = sig;
+
+  const headAway = !sig.face || !sig.headOk;
+  const eyeAway = sig.irisAway || sig.gazeAway;
+
+  /* Qisqa blink (<400 ms) ko'z signallarini ishonchsiz qiladi, lekin yangi strike ochmaydi.
+     Agar chetga qarash epizodi allaqachon boshlangan bo'lsa — uning uzluksizligini saqlaymiz. */
+  if (sig.eyesClosed) {
+    if (!speakRec.blinkStartedAt) speakRec.blinkStartedAt = now;
+  } else {
+    speakRec.blinkStartedAt = 0;
   }
-  speakRecRing(awayNow ? 'away' : 'good');
-  speakRecWarn(awayNow);
+  const shortBlink = sig.eyesClosed && speakRec.blinkStartedAt &&
+    now - speakRec.blinkStartedAt < SPEAK_BLINK_MS;
+
+  let rawAway = headAway || (!shortBlink && (eyeAway || sig.eyesClosed));
+  if (shortBlink && !headAway && speakRec.awaySince) rawAway = true;
+  if (shortBlink && !headAway && !speakRec.awaySince) rawAway = false;
+
+  if (!rawAway) speakRec.lastGoodAt = now;
+  const awayNow = rawAway && (speakRec.mode === 'recording' || now - speakRec.lastGoodAt > 350);
+
+  if (speakRec.mode === 'recording') {
+    speakRec.eyeSamples++;
+    if (!rawAway) speakRec.eyeGood++;
+
+    if (rawAway) {
+      if (!speakRec.awaySince && now >= (speakRec.awayCooldownUntil || 0)) {
+        speakRec.awaySince = now;
+        speakRec.strikeCounted = false;
+      }
+      if (speakRec.awaySince && !speakRec.strikeCounted &&
+          now - speakRec.awaySince >= SPEAK_AWAY_MS) {
+        speakRec.strikeCounted = true;
+        speakRec.lookAwayCount++;
+        speakRecWarning(speakRec.lookAwayCount);
+        if (speakRec.lookAwayCount >= SPEAK_MAX_WARNINGS) {
+          stopSpeakRecording(true);
+          return;
+        }
+      }
+    } else {
+      if (speakRec.awaySince) speakRec.awayCooldownUntil = now + SPEAK_AWAY_COOLDOWN_MS;
+      speakRec.awaySince = 0;
+      speakRec.strikeCounted = false;
+    }
+  }
+
+  speakRec.away = rawAway;
+  speakRec.looking = !rawAway;
+  const warningActive = now < (speakRec.warningUntil || 0);
+  speakRecRing(warningActive ? 'bad' : awayNow ? 'away' : 'good');
+  if (speakRec.mode !== 'recording' || speakRec.lookAwayCount === 0) {
+    speakRecWarn(awayNow, null, false);
+  }
   const eye = speakRecQ('#speak-rec-eye');
-  if (eye) eye.classList.toggle('is-away', awayNow);
+  if (eye) eye.classList.toggle('is-away', awayNow || warningActive);
   const eyeText = speakRecQ('#speak-rec-eye-text');
   if (eyeText) {
     if (speakRec.mode === 'recording') {
@@ -8070,6 +8171,12 @@ function startSpeakRecording() {
   speakRec.eyeGood = 0;
   speakRec.lastGoodAt = Date.now();
   speakRec.away = false;
+  speakRec.awaySince = 0;
+  speakRec.awayCooldownUntil = 0;
+  speakRec.strikeCounted = false;
+  speakRec.blinkStartedAt = 0;
+  speakRec.warningUntil = 0;
+  speakRec.invalidated = false;
   speakRecTimer(0);
   clearInterval(speakRec.timerId);
   speakRec.timerId = setInterval(function () {
@@ -8080,13 +8187,16 @@ function startSpeakRecording() {
   const stopBtn = speakRecQ('[data-act="speak-rec-stop"]');
   if (startBtn) startBtn.hidden = true;
   if (stopBtn) stopBtn.hidden = false;
-  speakRecWarn(false);
+  const invalid = speakRecQ('#speak-rec-invalid');
+  if (invalid) invalid.hidden = true;
+  speakRecWarn(false, '', false);
   speakRecRing('good');
   speakRecStatus(t('Yozib olinmoqda...'), 'rec');
 }
 
-function stopSpeakRecording() {
+function stopSpeakRecording(invalidated) {
   if (!speakRec || speakRec.mode !== 'recording' || !speakRec.recorder) return;
+  speakRec.invalidated = invalidated === true;
   speakRec.mode = 'finishing';
   speakRec.endedAt = Date.now();
   clearInterval(speakRec.timerId);
@@ -8094,10 +8204,55 @@ function stopSpeakRecording() {
   try { speakRec.recorder.stop(); } catch (e) { finishSpeakRecording(); }
 }
 
+/* 3/3: joriy yozuv butunlay tashlanadi — preview/submit ko'rsatilmaydi, faqat Retake. */
+function finishInvalidSpeakRecording() {
+  if (!speakRec) return;
+  clearInterval(speakRec.timerId);
+  clearInterval(speakRec.detectId);
+  const hadChunks = speakRec.chunks && speakRec.chunks.length;
+  speakRec.chunks = [];
+  speakRec.blob = null;
+  if (hadChunks) analyticsCall('capture', 'speaking_recording_discarded', {});
+  if (speakRec.objectUrl) { try { URL.revokeObjectURL(speakRec.objectUrl); } catch (e) {} }
+  speakRec.objectUrl = '';
+  if (speakRec.stream) {
+    try { speakRec.stream.getTracks().forEach(function (tr) { tr.stop(); }); } catch (e) {}
+  }
+  speakRec.stream = null;
+  const video = speakRec.video;
+  if (video) {
+    video.srcObject = null;
+    video.muted = true;
+    video.classList.remove('is-playback');
+    try { video.pause(); } catch (e) {}
+  }
+  speakRec.mode = 'invalid';
+  speakRec.invalidated = true;
+  speakRec.away = true;
+  speakRec.awaySince = 0;
+  speakRec.strikeCounted = false;
+  speakRecTimer(0);
+  speakRecRing('bad');
+  speakRecWarn(true,
+    t('Kameraga qarang! Ogohlantirish: {n}/3').replace('{n}', String(SPEAK_MAX_WARNINGS)), true);
+  const eye = speakRecQ('#speak-rec-eye');
+  if (eye) eye.classList.add('is-away');
+  const eyeText = speakRecQ('#speak-rec-eye-text');
+  if (eyeText) eyeText.textContent = t("Ko'z kontakti: {p}%").replace('{p}', '0');
+  const actions = speakRecQ('#speak-rec-actions');
+  if (actions) actions.hidden = true;
+  const preview = speakRecQ('#speak-rec-preview');
+  if (preview) preview.hidden = true;
+  const invalid = speakRecQ('#speak-rec-invalid');
+  if (invalid) invalid.hidden = false;
+  speakRecStatus(t("Ko'zingiz 3 marta kameradan chetga qaradi. Yozuv to'xtatildi, videoni qaytadan oling."), 'error');
+}
+
 function finishSpeakRecording() {
   if (!speakRec) return;
   clearInterval(speakRec.timerId);
   clearInterval(speakRec.detectId);
+  if (speakRec.invalidated) { finishInvalidSpeakRecording(); return; }
   const type = speakRec.mime || 'video/webm';
   const blob = new Blob(speakRec.chunks, { type: type });
   if (!blob.size) {
@@ -8147,7 +8302,7 @@ function finishSpeakRecording() {
 
 /* Qayta yozish: eski yozuv tashlanadi, kamera va ko'z nazorati qaytadan ishga tushadi */
 function retakeSpeakRecording() {
-  if (!speakRec || speakRec.mode !== 'preview') return;
+  if (!speakRec || (speakRec.mode !== 'preview' && speakRec.mode !== 'invalid')) return;
   const v = speakRec.video;
   if (v) {
     try { v.pause(); } catch (e) { /* preview */ }
@@ -8171,10 +8326,16 @@ function retakeSpeakRecording() {
   speakRec.looking = false;
   speakRec.away = true;
   speakRec.lastGoodAt = 0;
+  speakRec.awaySince = 0;
+  speakRec.awayCooldownUntil = 0;
+  speakRec.strikeCounted = false;
+  speakRec.blinkStartedAt = 0;
+  speakRec.warningUntil = 0;
+  speakRec.invalidated = false;
   speakRec.mode = 'idle';
   speakRecTimer(0);
   speakRecRing('');
-  speakRecWarn(false);
+  speakRecWarn(false, '', false);
   const eye = speakRecQ('#speak-rec-eye');
   if (eye) eye.classList.remove('is-away');
   const eyeText = speakRecQ('#speak-rec-eye-text');
@@ -8187,6 +8348,8 @@ function retakeSpeakRecording() {
   if (stopBtn) stopBtn.hidden = true;
   if (actions) actions.hidden = false;
   if (preview) preview.hidden = true;
+  const invalid = speakRecQ('#speak-rec-invalid');
+  if (invalid) invalid.hidden = true;
   speakRecStatus(t('Kamera va mikrofon ochilmoqda...'));
   startSpeakCamera();
 }

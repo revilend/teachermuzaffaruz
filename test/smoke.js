@@ -1185,7 +1185,27 @@ check(!!q('.speak-rec-ring') && !!q('#speak-rec-timer') && !!q('#speak-rec-warn'
   "speaking: yashil halqa + taymer + 'Kameraga qarang' ogohlantirishi mavjud");
 check(q('#speak-rec-preview').hidden === true,
   'speaking: ko‘rish/yuborish/bekor tugmalari faqat yozuvdan keyin');
+check(/outputFaceBlendshapes:\s*true/.test(appJs) &&
+      /'eyeLookInLeft'/.test(appJs) && /'eyeLookDownRight'/.test(appJs) &&
+      /speakBlendMap/.test(appJs),
+  'speaking: FaceLandmarker blendshapes yoqilgan (eyeLookIn/Out/Up/Down)');
+check(/SPEAK_AWAY_MS\s*=\s*1000/.test(appJs) &&
+      /SPEAK_MAX_WARNINGS\s*=\s*3/.test(appJs) &&
+      /SPEAK_BLINK_MS\s*=\s*400/.test(appJs),
+  'speaking: 1.0 s debounce, 3 warning va 400 ms blink qoidalari');
+check(/function speakFaceSignals/.test(appJs) && /468/.test(appJs) &&
+      /irisAway/.test(appJs) && /gazeAway/.test(appJs) &&
+      /stopSpeakRecording\(true\)/.test(appJs),
+  'speaking: iris + gaze blendshape + head pose birgalikda tekshiriladi');
+check(!!q('#speak-rec-warn-text') && !!q('#speak-rec-invalid') &&
+      q('#speak-rec-invalid').hidden === true &&
+      !!q('#speak-rec-invalid [data-act="speak-rec-retake"]') &&
+      !q('#speak-rec-invalid [data-act="speak-rec-submit"]'),
+  'speaking: 3/3 uchun alohida Retake paneli, Submit yo‘q');
 const speakCssSrc = fs.readFileSync(path.join(root, 'css', 'styles.css'), 'utf8');
+check(/\.speak-rec-ring\.is-bad\s*\{[^}]*#ef4444/.test(speakCssSrc) &&
+      /\.speak-rec-invalid\s*\{/.test(speakCssSrc),
+  'speaking: qizil ring va invalid panel uslublari mavjud');
 check(/\.speak-rec\s*\{[^}]*position:\s*fixed/.test(speakCssSrc) &&
       /\.speak-rec\s*\{[^}]*inset:\s*0/.test(speakCssSrc) &&
       /\.speak-rec\s*\{[^}]*backdrop-filter:\s*blur\(14px\)/.test(speakCssSrc) &&
