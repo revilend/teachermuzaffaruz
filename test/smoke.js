@@ -3375,13 +3375,21 @@ await (async () => {
   logout();
   const prevFetchTs = win.fetch;
   const prevTurnstile = win.turnstile;
-  let tsVerifyMode = 'ok';   /* ok | false | 403 | network */
+  let tsVerifyMode = 'ok';   /* ok | false | 403 | network | pending */
+  let tsPendingResolve = null;
   const tsCalls = { render: [], reset: 0 };
   const tsVerifyCalls = [];
   win.fetch = function (url, opts) {
     if (String(url).indexOf('/verify-turnstile') >= 0) {
       tsVerifyCalls.push({ url: String(url), opts: opts });
       if (tsVerifyMode === 'network') return Promise.reject(new TypeError('Failed to fetch'));
+      if (tsVerifyMode === 'pending') {
+        return new Promise(function (resolve) {
+          tsPendingResolve = function () {
+            resolve({ ok: true, status: 200, json: function () { return Promise.resolve({ ok: true }); } });
+          };
+        });
+      }
       if (tsVerifyMode === '403') {
         return Promise.resolve({
           ok: false,
@@ -3536,6 +3544,25 @@ await (async () => {
   check(tsVerifyCalls.length > recCalls2 &&
         JSON.parse(tsVerifyCalls[tsVerifyCalls.length - 1].opts.body || '{}').token === 'ts-token-recnet',
     'Turnstile (tiklash): fail-open holatida ham token verify URL’ga yuboriladi');
+
+  /* 8) Tiklash: so'rov ketayotganda tugma darhol "Tekshirilmoqda..." + nofaol */
+  tsVerifyMode = 'pending';
+  if (recRender.opts && recRender.opts.callback) recRender.opts.callback('ts-token-pending');
+  setVal('#fp-contact', 'm_amirov');
+  const pendingCallsBefore = tsVerifyCalls.length;
+  clickAct('forgot-send');
+  const busyBtn = q('[data-act="forgot-send"]');
+  check(!!busyBtn && busyBtn.disabled === true && /Tekshirilmoqda\.\.\./.test(busyBtn.textContent || ''),
+    'Tiklash: so‘rov ketayotganda tugma darhol “Tekshirilmoqda...” ko‘rsatadi va nofaol bo‘ladi');
+  clickAct('forgot-send');
+  await new Promise(r => setTimeout(r, 80));
+  check(tsVerifyCalls.length === pendingCallsBefore + 1,
+    'Tiklash: takroriy bosish qo‘shimcha so‘rov yubormaydi (jami bitta verify so‘rovi)');
+  if (tsPendingResolve) tsPendingResolve();
+  check(await until(() => {
+    const b = q('[data-act="forgot-send"]');
+    return !!b && b.disabled === false && !/Tekshirilmoqda/.test(b.textContent || '');
+  }, 4000), 'Tiklash: so‘rov tugagach tugma qayta faollashadi va “Tekshirilmoqda...” yo‘qoladi');
 
   win.turnstile = prevTurnstile;
   win.fetch = prevFetchTs;
