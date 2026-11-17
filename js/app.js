@@ -355,6 +355,8 @@ function fmtAvg(v) { return v == null ? '—' : v.toFixed(1); }
 /* TEACHER_LOGIN, TEACHER_PASSWORD, TEACHER_NAME yuqoriga ko'chirildi */
 
 /* ==================== Cloudflare R2: fayl yuklash ==================== */
+/* R2/worker endpointi. Custom domenga o'tish uchun faqat shu qatorni o'zgartiring
+   (masalan 'https://api.teachermuzaffar.uz') — TURNSTILE_VERIFY_URL ham shundan hosil bo'ladi. */
 const R2_UPLOAD_URL = 'https://teachermuzaffar-upload.amirovmuzaffar070.workers.dev';
 const R2_PUBLIC_BASE = 'https://pub-836df3817ab64cee9075b55d51fe6061.r2.dev/';
 function isR2Url(url) {
@@ -3783,7 +3785,9 @@ function renderTopNavTabs() {
 /* ==================== KIRISH EKRANI (login / parol) ==================== */
 /* ==================== CLOUDFLARE TURNSTILE ==================== */
 const TURNSTILE_SITE_KEY = '0x4AAAAAAGDZyGmTRBp6DcVs';
-const TURNSTILE_VERIFY_URL = 'https://teachermuzaffar-upload.amirovmuzaffar070.workers.dev/verify-turnstile';
+const TURNSTILE_VERIFY_URL = R2_UPLOAD_URL + '/verify-turnstile';
+/* workers.dev ba'zi ISP'larda osilib qoladi — 5 soniyadan keyin so'rov bekor qilinadi */
+const TURNSTILE_VERIFY_TIMEOUT_MS = 5000;
 
 function turnstileReady() {
   return !!(window.turnstile && typeof window.turnstile.render === 'function');
@@ -3854,11 +3858,21 @@ function resetTurnstile(kind) {
   } catch (e) { console.warn('[turnstile] reset:', (e && e.message) || e); }
 }
 async function verifyTurnstileToken(token) {
+  let timer = null;
+  let ctrl = null;
   try {
+    /* Osilib qolgan ulanishda login kutib qolmasligi uchun 5 s timeout */
+    if (typeof AbortController === 'function') {
+      ctrl = new AbortController();
+      timer = setTimeout(function () {
+        try { ctrl.abort(); } catch (e) {}
+      }, TURNSTILE_VERIFY_TIMEOUT_MS);
+    }
     const res = await fetch(TURNSTILE_VERIFY_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: String(token || '') })
+      body: JSON.stringify({ token: String(token || '') }),
+      signal: ctrl ? ctrl.signal : undefined
     });
     let data = null;
     try { data = await res.json(); } catch (e) { data = null; }
@@ -3882,10 +3896,15 @@ async function verifyTurnstileToken(token) {
     if (!detail && res && !res.ok) detail = 'HTTP ' + res.status;
     return { ok: false, data, detail: String(detail || '').trim() };
   } catch (e) {
-    /* Turnstile vidjeti token bergan bo'lsa, tarmoq xatosi ("Failed to fetch")
-       kirishni bloklamaydi — qayta urinish foydalanuvchini qolib ketishdan saqlaydi. */
-    console.warn('[turnstile] verify: tarmoq xatosi — kirish bloklanmaydi', (e && e.message) || e);
+    /* Turnstile vidjeti token bergan bo'lsa, tarmoq/ISP xatosi (Failed to fetch)
+       yoki 5 s timeout (AbortError) kirishni bloklamaydi — login parol xeshi,
+       5 urinish qulfi va ustoz uchun 2FA bilan himoyalangan. */
+    const aborted = !!(e && (e.name === 'AbortError' || /abort/i.test(String(e.message || ''))));
+    console.warn('[turnstile] verify: ' + (aborted ? 'timeout (5 s)' : 'tarmoq xatosi') +
+      ' — kirish bloklanmaydi', (e && e.message) || e);
     return { ok: true, data: null, detail: '' };
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 
