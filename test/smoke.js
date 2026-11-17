@@ -409,11 +409,11 @@ check(q('#password-input').value === '', 'login: noto\'g\'ri parol tozalanadi');
 await loginAs('m_amirov', '123');
 check(text().includes('Xush kelibsiz') && text().includes('Muzaffar Amirov'), 'ustoz: dashboard salomi "Xush kelibsiz, Muzaffar Amirov!"');
 check(q('#app-header').textContent.includes('Muzaffar Amirov'), 'ustoz: headerda "Muzaffar Amirov" brendi');
-check(navLabels().length === 8, 'ustoz: 8 ta nav tabi (' + navLabels().join(', ') + ')');
+check(navLabels().length === 9, 'ustoz: 9 ta nav tabi (' + navLabels().join(', ') + ')');
 
 /* --- Vektor ikonka tizimi: barcha emoji o'rniga SVG badge'lar --- */
-check(qa('.quick-grid .quick-ico').length === 8, 'icon: TEZ AMALLAR gridida 8 ta ikonka badge');
-check(qa('.quick-grid .quick-ico svg').length === 8, "icon: har bir badge ichida SVG (emoji o'rniga)");
+check(qa('.quick-grid .quick-ico').length === 9, 'icon: TEZ AMALLAR gridida 9 ta ikonka badge');
+check(qa('.quick-grid .quick-ico svg').length === 9, "icon: har bir badge ichida SVG (emoji o'rniga)");
 check(['tint-indigo', 'tint-emerald', 'tint-sky', 'tint-amber', 'tint-purple', 'tint-slate', 'tint-rose', 'tint-teal']
   .every(t => qa('.quick-ico.' + t).length === 1),
   'icon: indigo/emerald/sky/amber/purple/slate/rose/teal tints har biri bittadan');
@@ -1392,7 +1392,9 @@ await (async () => {
   await loginAs('m_amirov', '123');
   click('[data-act="nav"][data-screen="home"]');
   check(!!q('[data-act="open-hw"]'), "uyga vazifa: '+ Uyga vazifa' tugmasi (Bosh)");
-  check(text().includes("Berilgan vazifalar guruh sahifasida ko'rinadi"),
+  check(!!q('[data-act="nav"][data-screen="homework"]'),
+    "uyga vazifa: navigatsiyada alohida 'Uyga vazifalar' bo'limi");
+  check(text().includes("Berilgan vazifalar «Uyga vazifalar» bo'limida ko'rinadi"),
     "uyga vazifa: Bosh sahifada qisqa izoh (to'liq ro'yxat yo'q)");
   check(!q('[data-act="del-hw"]') && !q('[data-act="hw-edit"]'),
     "uyga vazifa: Bosh sahifada barcha guruh vazifalari chiqmaydi");
@@ -1494,10 +1496,21 @@ await (async () => {
   check(hwMedia && hwMedia.mediaUrl.includes('/homework-media/hw/dars.mp4') &&
         hwMedia.mediaType === 'video',
     "uyga vazifa: media_url + media_type saqlandi (bucket homework-media)");
+  forceNav('homework');
+  check(!!q('[data-act="hw-group"]') && !q('.hw-item'),
+    "uyga vazifa: bo'lim avval guruhlar ro'yxatini ko'rsatadi");
+  check(!!q('.hw-group-card svg') && text().includes("ta uyga vazifa"),
+    "uyga vazifa: guruh kartasida SVG ikonka va vazifalar soni");
+  click('[data-act="hw-group"][data-gid="g55"]');
+  check(text().includes('Present Perfect shakli'), "uyga vazifa: guruh tanlanganda ro'yxatda ko'rinadi");
+  check(!!q('.hw-due-badge') && q('.hw-due-badge').textContent.includes('20.10.2026'),
+    "uyga vazifa: bajarilish muddati yashil badge'da ko'rinadi");
+  check(!!q('[data-act="hw-edit"]') && !!q('[data-act="open-hw"][data-gid="g55"]'),
+    "uyga vazifa: tahrirlash va shu guruhga vazifa berish tugmalari bor");
   forceNav('groups');
   click('[data-act="filter-group"][data-gid="g55"]');
-  check(text().includes('Present Perfect shakli'), "uyga vazifa: guruh sahifasida ro'yxatda ko'rinadi");
-  check(text().includes('20.10.2026') || text().includes('2026-10-20'), "uyga vazifa: muddat guruh sahifasida ko'rinadi");
+  check(!!q('[data-act="filter-group-all"]') && !q('.hw-item') && !q('[data-act="open-hw"]'),
+    "guruh sahifasi: faqat o'quvchilar — uyga vazifa bo'limi yo'q");
   forceNav('home');
   const hwLocal = JSON.parse(win.localStorage.getItem('et_homework') || '[]');
   check(hwLocal.length === 1 && hwLocal[0].title === 'Present Perfect shakli' &&
@@ -1509,6 +1522,8 @@ await (async () => {
   openStudentView('homework');
   check(text().includes('Present Perfect shakli'), "uyga vazifa: o'quvchi portalida ko'rinadi");
   check(text().includes('10 ta gap tuzing'), "uyga vazifa: tavsif portalda ko'rinadi");
+  check(!!q('.hw-due-badge') && q('.hw-due-badge').textContent.includes('20.10.2026'),
+    "uyga vazifa: o'quvchi portalida muddat yashil badge bilan");
   check(text().includes('Uyga vazifalar') && !!q('.back-row svg'),
     "uyga vazifa: portal bo'limi SVG ikonka bilan mavjud");
 
@@ -1540,8 +1555,8 @@ await (async () => {
   /* ================= 20c. USTOZ: UYGA VAZIFANI O'CHIRISH ================= */
   logout();
   await loginAs('m_amirov', '123');
-  forceNav('groups');
-  click('[data-act="filter-group"][data-gid="g55"]');
+  forceNav('homework');
+  click('[data-act="hw-group"][data-gid="g55"]');
   check(!!q('[data-act="del-hw"]'), "o'chirish: ustoz kartasida 🗑 (SVG) tugma bor");
   check(!!q('[data-act="hw-edit"]'), "uyga vazifa: tahrirlash (edit) tugmasi bor");
   click(q('[data-act="del-hw"]'));
@@ -1590,7 +1605,7 @@ await (async () => {
   check(/\.quick\s*\{[^}]*padding:\s*14px/.test(cssText), 'tez amallar: p-3.5 (14px) padding');
   check(/\.quick-ico\s*\{[^}]*width:\s*36px;\s*\n?\s*height:\s*36px/.test(cssText),
     'tez amallar: ikonka badge bir xil 36×36px');
-  check(qa('.quick-grid .quick').length === 8, "tez amallar: 8 ta karta (barchasi bir xil balandlikda)");
+  check(qa('.quick-grid .quick').length === 9, "tez amallar: 9 ta karta (barchasi bir xil balandlikda)");
 
   /* ================= 21. VOICE RUXSAT KALITI (kartada) ================= */
   logout();
@@ -2304,7 +2319,7 @@ await (async () => {
         text().includes('Telegram bot (@uzbekspeakingcheckbot)'),
     'i18n EN: 3 karta sarlavhalari inglizcha');
   await loginAs('m_amirov', '123');
-  check(navLabels().join(',') === 'Home,Students,Submissions,Payments,Grades,Attendance,Speaking,Profile',
+  check(navLabels().join(',') === 'Home,Students,Homework,Submissions,Payments,Grades,Attendance,Speaking,Profile',
     'i18n: ustoz nav EN tilida');
   check(q('#app-header').textContent.includes('Home'),
     'i18n: header bo‘lim nomi EN (Home)');
@@ -2325,7 +2340,7 @@ await (async () => {
 
   /* UZ ga qaytarish */
   click('[data-act="toggle-lang"]');
-  check(navLabels().join(',') === "Bosh,O'quvchi,Topshiriqlar,To'lov,Baholar,Davomat,Speaking,Profil",
+  check(navLabels().join(',') === "Bosh,O'quvchi,Uyga vazifalar,Topshiriqlar,To'lov,Baholar,Davomat,Speaking,Profil",
     "i18n: UZ ga qaytish — nav o'zbekcha qoldi");
   check(q('.week-nav-bar').textContent.includes('Oldingi hafta'),
     'i18n: hafta tugmalari UZ ga qaytdi');
@@ -2388,11 +2403,11 @@ await (async () => {
   q('#hw-group').value = 'g2';
   setVal('#hw-due', '2026-10-25');
   clickAct('save-hw');
-  click('[data-act="nav"][data-screen="groups"]');
-  click('[data-act="filter-group"][data-gid="g2"]');
+  forceNav('homework');
+  click('[data-act="hw-group"][data-gid="g2"]');
   check(text().includes('Due date') && !text().includes('Topshirish muddati'),
     'i18n EN: "Topshirish muddati" → "Due date"');
-  click('[data-act="filter-group-all"]');
+  click('[data-act="hw-group-back"]');
   check(q('[data-act="toggle-lang"]').textContent.indexOf('UZ') >= 0 &&
         qa('#app-header .lang-opt svg').length === 2,
     'i18n EN: til tugmasida SVG bayroqlar saqlangan');
@@ -3288,6 +3303,9 @@ await (async () => {
   };
   ['home', 'students', 'submissions', 'payments', 'grades', 'attendance', 'speaking', 'profile']
     .forEach((s) => { forceNav(s); scanI18n(s); });
+  forceNav('homework');
+  if (q('[data-act="hw-group-back"]')) clickAct('hw-group-back');
+  scanI18n('homework');
 
   const openAct = (act) => {
     const btn = q('[data-act="' + act + '"]');

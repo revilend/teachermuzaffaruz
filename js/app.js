@@ -155,6 +155,7 @@ const state = {
   screen: 'login',
   filterClass: 'Barchasi',
   filterGroup: null,
+  hwGroup: null,
   filterHwAllow: false,
   groupTypeFilter: 'all',
   search: '',
@@ -192,7 +193,7 @@ const state = {
 
 const AUTH_SCREENS = ['login'];
 /* Faqat ustoz ruxsat beradigan ekranlar */
-const TEACHER_SCREENS = ['groups', 'students', 'submissions', 'debtors', 'payments', 'grades', 'attendance', 'speaking'];
+const TEACHER_SCREENS = ['groups', 'students', 'homework', 'submissions', 'debtors', 'payments', 'grades', 'attendance', 'speaking'];
 
 
 function initials(name) {
@@ -2974,6 +2975,8 @@ const I18N_EN = {
   'Tahrirlash': 'Edit',
   "O'chirish": 'Delete',
   'Topshirish muddati': 'Due date',
+  'Guruhni tanlang — vazifalar va topshiriqlar shu yerda': 'Choose a group — homework and submissions live here',
+  "Berilgan vazifalar «Uyga vazifalar» bo'limida ko'rinadi.": 'Assigned homework appears in the Homework section.',
   'Guruh taylanmagan': 'No group assigned',
   'Barchasi': 'All',
   /* --- Kirish sahifasi (hero): sarlavha, tavsif, 3 ta ma'lumot kartasi --- */
@@ -3698,6 +3701,7 @@ function scrLabel(s) {
     home: 'Bosh sahifa',
     groups: 'Guruhlar',
     students: "O'quvchilar",
+    homework: 'Uyga vazifalar',
     payments: "To'lovlar",
     grades: 'Baholar jurnali',
     attendance: 'Tezkor davomat',
@@ -3732,6 +3736,7 @@ function navItems() {
     return [
       ['home', t('Bosh'), ICON.home],
       ['students', t("O'quvchi"), ICON.students],
+      ['homework', t('Uyga vazifalar'), ICON.bookOpen],
       ['submissions', t('Topshiriqlar'), ICON.clipboardCheck],
       ['payments', t("To'lov"), ICON.star],
       ['grades', t('Baholar'), ICON.grades],
@@ -3769,6 +3774,7 @@ function renderTopNavTabs() {
   const labels = {
     home: 'Bosh sahifa',
     students: "O'quvchilar",
+    homework: 'Uyga vazifalar',
     grades: 'Baholar jurnali',
     attendance: 'Davomat',
     speaking: 'Speaking',
@@ -4291,7 +4297,9 @@ function hwRowHTML(h) {
   const g = groupById(h.groupId);
   const chip = `<span class="chip-class">${g ? esc(g.name) : '—'}</span>`;
   const meta = h.description ? `<div class="muted small" style="margin-top:3px">${esc(h.description)}</div>` : '';
-  const due = `<div class="muted small" style="margin-top:3px">${ico('calendar', 13)} ${t('Topshirish muddati')}: ${h.dueDate ? fmtDMY(h.dueDate) : '—'}</div>`;
+  const due = h.dueDate
+    ? `<div class="hw-due"><span class="hw-due-badge">${ico('calendar', 12)} ${t('Topshirish muddati')}: <b>${fmtDMY(h.dueDate)}</b></span></div>`
+    : `<div class="muted small" style="margin-top:3px">${ico('calendar', 13)} ${t('Topshirish muddati')}: —</div>`;
 
   /* --- Ustoz: karta yuqori o'ng burchagida o'chirish tugmasi --- */
   if (isTeacher()) {
@@ -4951,12 +4959,13 @@ function teacherHome() {
     <button type="button" class="card quick" data-act="nav" data-screen="attendance"><span class="quick-ico tint-emerald">${ICON.cal}</span><span>Tezkor davomat</span></button>
     <button type="button" class="card quick" data-act="nav" data-screen="speaking"><span class="quick-ico tint-sky">${ICON.mic}</span><span>Speaking slotlari</span></button>
     <button type="button" class="card quick" data-act="nav" data-screen="students"><span class="quick-ico tint-amber">${ICON.gradCap}</span><span>O'quvchilar</span></button>
+    <button type="button" class="card quick" data-act="nav" data-screen="homework"><span class="quick-ico tint-blue">${ICON.bookOpen}</span><span>${t('Uyga vazifalar')}</span></button>
     <button type="button" class="card quick" data-act="nav" data-screen="groups"><span class="quick-ico tint-purple">${ICON.groups}</span><span>Guruhlar</span></button>
     <button type="button" class="card quick" data-act="open-add-student"><span class="quick-ico tint-slate">${ICON.userPlus}</span><span>O'quvchi qo'shish</span></button>
   </div>
 
   <button type="button" class="btn btn-primary btn-block" data-act="open-hw">${ico('bookOpen', 16)} Uyga vazifa berish</button>
-  <div class="muted small" style="margin-top:6px;text-align:center">Berilgan vazifalar guruh sahifasida ko'rinadi.</div>
+  <div class="muted small" style="margin-top:6px;text-align:center">${t("Berilgan vazifalar «Uyga vazifalar» bo'limida ko'rinadi.")}</div>
   `;
 }
 
@@ -5608,6 +5617,70 @@ function groupsScreen() {
   `;
 }
 
+/* ==================== UYGA VAZIFALAR BO'LIMI (faqat ustoz) ==================== */
+/* Avval guruhlar ro'yxati: nom + vazifalar soni. Guruh tanlansa — shu guruhning
+   barcha vazifalari, tahrirlash/o'chirish va topshiriqlarni ko'rib chiqish. */
+function tHwCnt(n) {
+  if (getLang() === 'en') return n + ' homework assignment' + (n === 1 ? '' : 's');
+  return n + ' ta uyga vazifa';
+}
+function hwGroupCard(g) {
+  const count = getHomework().filter(function (h) { return h.groupId === g.id; }).length;
+  return `<button type="button" class="card hw-group-card" data-act="hw-group" data-gid="${esc(g.id)}">
+    <span class="quick-ico tint-indigo">${ICON.groups}</span>
+    <span class="hw-group-main">
+      <span class="hw-group-name">${esc(g.name)}</span>
+      <span class="muted small">${tHwCnt(count)}</span>
+    </span>
+    <span class="hw-group-arrow">${ico('arrowRight', 16)}</span>
+  </button>`;
+}
+
+function homeworkScreen() {
+  if (!isTeacher()) return blockedScreen("Bu bo'lim faqat Muzaffar Amirov uchun");
+  const groups = getGroups();
+  const sel = state.hwGroup ? groups.filter(function (g) { return g.id === state.hwGroup; })[0] : null;
+
+  if (sel) {
+    const list = getHomework().filter(function (h) { return h.groupId === sel.id; });
+    const hwIds = list.map(function (h) { return h.dbId; })
+      .filter(function (id) { return id != null; });
+    const subs = submissionsList().filter(function (sub) {
+      return hwIds.some(function (id) { return String(id) === String(sub.homeworkDbId); });
+    });
+    return `
+  <div class="back-row">
+    <button type="button" class="btn btn-xs ghost" data-act="hw-group-back">${ico('arrowLeft', 14)} ${t('Orqaga')}</button>
+    <span class="back-title">${esc(sel.name)}</span>
+  </div>
+  <div class="screen-head">
+    <div>
+      <h2 class="screen-title">${ico('bookOpen', 16)} ${t('Uyga vazifalar')}</h2>
+      <div class="muted small">${esc(sel.name)} · ${tHwCnt(list.length)}</div>
+    </div>
+    <button type="button" class="btn btn-primary btn-sm" data-act="open-hw" data-gid="${esc(sel.id)}">+ ${t('Uyga vazifa berish')}</button>
+  </div>
+  <div class="card">${homeworkListHTML(list)}</div>
+  <div class="section-title">${ico('clipboardCheck', 15)} ${t('Bajarilgan topshiriqlar')}</div>
+  ${subs.length
+    ? `<div class="sub-list">${subs.map(submissionCardHTML).join('')}</div>`
+    : `<div class="card">${emptyState(t("Hozircha yuklangan topshiriqlar yo'q"), 'clipboardCheck')}</div>`}
+    `;
+  }
+
+  return `
+  <div class="screen-head">
+    <div>
+      <h2 class="screen-title">${ico('bookOpen', 16)} ${t('Uyga vazifalar')}</h2>
+      <div class="muted small">${t('Guruhni tanlang — vazifalar va topshiriqlar shu yerda')}</div>
+    </div>
+  </div>
+  ${groups.length
+    ? groups.map(hwGroupCard).join('')
+    : emptyState(t("Hozircha guruh yo'q"), 'groups')}
+  `;
+}
+
 /* ==================== O'QUVCHILAR (faqat ustoz) ==================== */
 function studentCard(s) {
   const g = groupById(s.groupId);
@@ -5706,9 +5779,7 @@ function studentsScreen() {
     <span class="muted small">${ico('groups', 14)} <b>${esc(gf.name)}</b> guruhidagi o'quvchilar</span>
     <button type="button" class="chip-btn" data-act="filter-group-all">Barcha o'quvchilar</button>
   </div>
-  <div class="section-title">${ico('bookOpen', 15)} ${esc(gf.name)} — uyga vazifalar</div>
-  <div class="card">${homeworkListHTML(getHomework().filter(h => h.groupId === gf.id))}</div>
-  <button type="button" class="btn btn-primary btn-block" data-act="open-hw" data-gid="${gf.id}">+ Uyga vazifa berish</button>` : ''}
+` : ''}
 
   <div class="search-wrap">
     <input class="input" id="s-search" type="search" placeholder="O'quvchi ismini kiriting..." value="${esc(state.search)}" />
@@ -8803,6 +8874,7 @@ const SCREENS = {
   'home': homeScreen,
   'groups': groupsScreen,
   'students': studentsScreen,
+  'homework': homeworkScreen,
   'debtors': debtorsScreen,
   'payments': paymentsScreen,
   'grades': gradesScreen,
@@ -9164,7 +9236,11 @@ document.addEventListener('click', function (e) {
       if (c) sendEmailVerifyCode(c.email, c.kind);
     },
     'logout': logout,
-    'nav': function () { go(btn.getAttribute('data-screen')); },
+    'nav': function () {
+      const scr = btn.getAttribute('data-screen');
+      if (scr === 'homework') state.hwGroup = null;
+      go(scr);
+    },
 
     /* --- Dashboard stat kartalari (bosiladigan) --- */
     'stat-groups': function () {
@@ -9221,6 +9297,14 @@ document.addEventListener('click', function (e) {
       state.search = '';
       render();
     },
+
+    /* --- Uyga vazifalar bo'limi: guruh tanlash --- */
+    'hw-group': function () {
+      if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+      state.hwGroup = btn.getAttribute('data-gid');
+      render();
+    },
+    'hw-group-back': function () { state.hwGroup = null; render(); },
 
     /* --- Guruhlar / o'quvchilar --- */
     'open-add-group': openAddGroup,

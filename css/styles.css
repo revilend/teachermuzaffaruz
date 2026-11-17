@@ -589,6 +589,7 @@ img.auth-logo {
 .tint-slate   { background: #f1f5f9; color: #334155; }
 .tint-teal    { background: #f0fdfa; color: #0d9488; }
 .tint-rose    { background: #fff1f2; color: #e11d48; }
+.tint-blue    { background: #eff6ff; color: #2563eb; }
 .quick:active { transform: scale(0.97); }
 
 /* ---------- Guruhlar: yumshoq pastel aksent ---------- */
@@ -2400,3 +2401,31 @@ html[data-theme="dark"] .speak-debt-banner {
   color: #fecdd3;
 }
 html[data-theme="dark"] .speak-debt-banner b { color: #fecdd3; }
+
+/* --- Uyga vazifalar bo'limi: guruh kartasi --- */
+.hw-group-card { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; margin-bottom: 9px; }
+.hw-group-card .quick-ico { flex: none; }
+.hw-group-main { display: flex; flex-direction: column; flex: 1; min-width: 0; gap: 2px; }
+.hw-group-name {
+  font-size: 15px; font-weight: 700; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.hw-group-arrow { display: inline-flex; align-items: center; color: var(--muted); flex: none; }
+
+/* Bajarilish muddati — yashil pill (light + dark) */
+.hw-due { margin-top: 5px; }
+.hw-due-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px; border-radius: 999px;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.30);
+  color: #047857;
+  font-size: 12px; font-weight: 600; line-height: 1.4;
+}
+.hw-due-badge svg { flex: none; }
+.hw-due-badge b { font-weight: 800; }
+html[data-theme="dark"] .hw-due-badge {
+  background: rgba(16, 185, 129, 0.16);
+  border-color: rgba(52, 211, 153, 0.35);
+  color: #6ee7b7;
+}
