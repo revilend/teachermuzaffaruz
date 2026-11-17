@@ -1199,6 +1199,13 @@ check(/\.speak-rec-btn\.watch\s*\{[^}]*#2563eb/.test(speakCssSrc) &&
       /\.speak-rec-btn\.submit\s*\{[^}]*#16a34a/.test(speakCssSrc) &&
       /\.speak-rec-btn\.cancel\s*\{[^}]*#dc2626/.test(speakCssSrc),
   'speaking: ko‘rish ko‘k, yuborish yashil, bekor qilish qizil');
+check(!!q('[data-act="speak-rec-retake"]') && q('#speak-rec-preview').contains(q('[data-act="speak-rec-retake"]')),
+  "speaking: 'Qayta yozish' (Retake) tugmasi yozuvdan keyingi panelda");
+check(/\.speak-rec-video\.is-playback\s*\{[^}]*transform:\s*none/.test(speakCssSrc) &&
+      /\.speak-rec-btn\.retake\s*\{/.test(speakCssSrc),
+  "speaking: ko'rish paytida mirror o'chadi + retake tugma uslubi");
+check(!/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(q('#speak-rec').textContent),
+  "speaking: recorder matnida emoji yo'q (faqat SVG ikonkalar)");
 click('[data-act="speak-rec-close"]');
 check(!q('#speak-rec'), 'speaking: yopilganda recorder tozalanadi');
 closeStudentView();

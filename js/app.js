@@ -3455,6 +3455,10 @@ const I18N_EN = {
   "Ko'z nazorati mavjud emas — yozish mumkin": "Eye tracking unavailable — recording is allowed",
   "Yozishni boshlab bo'lmadi": "Could not start recording",
   "Yozuv bo'sh chiqdi — qayta urinib ko'ring": "The recording is empty — please try again",
+  "Qayta yozish": "Retake",
+  "Kameraga qarab turing — yuz va ko'zlar ko'rinsin": "Look at the camera — keep your face and eyes in view",
+  "Tayyor — yozishni boshlashingiz mumkin": "Ready — you can start recording",
+  "Bulutga yozib bo'lmadi": "Could not save to the cloud",
   "Orqaga": "Back",
   "Speaking qarzingiz": "Your Speaking debt",
   "Speaking topshirib qarzni kamaytiring.": "Submit Speaking to reduce the debt.",
@@ -7721,6 +7725,7 @@ function speakRecMarkup() {
     </div>
     <div class="speak-rec-preview-actions" id="speak-rec-preview" hidden>
       <button type="button" class="speak-rec-btn watch" data-act="speak-rec-watch">${ICON.video} ${t("Videoni ko'rish")}</button>
+      <button type="button" class="speak-rec-btn retake" data-act="speak-rec-retake">${ICON.refresh} ${t('Qayta yozish')}</button>
       <button type="button" class="speak-rec-btn submit" data-act="speak-rec-submit">${ICON.upload} ${speakSubmitLabel()}</button>
       <button type="button" class="speak-rec-btn cancel" data-act="speak-rec-cancel">${ICON.trash} ${t('Bekor qilish')}</button>
     </div>
@@ -7739,12 +7744,14 @@ function openSpeakingRecorder() {
   speakRec = {
     root: root, video: root.querySelector('#speak-rec-video'),
     stream: null, recorder: null, chunks: [], blob: null, objectUrl: '', mime: '',
-    mode: 'idle', looking: false, away: false, lastGoodAt: Date.now(),
+    mode: 'idle', looking: false, away: true, lastGoodAt: 0,
     lookAwayCount: 0, eyeSamples: 0, eyeGood: 0, startedAt: 0, endedAt: 0,
     timerId: null, detectId: null, landmarker: null
   };
   document.body.classList.add('speak-rec-open');
   analyticsCall('capture', 'speaking_recorder_opened', { allowed: true });
+  /* Model kamera ochilishi bilan parallel yuklanadi (faqat recorder ochilganda) */
+  loadSpeakLandmarker();
   startSpeakCamera();
 }
 
@@ -7781,6 +7788,7 @@ async function startSpeakCamera() {
   if (!speakRec.landmarker) {
     /* Face Landmarker yuklanmasa — yozishni bloklamaymiz, faqat ogohlantiramiz */
     speakRec.looking = true;
+    speakRec.away = false;
     speakRecRing('good');
     speakRecStatus(t("Ko'z nazorati mavjud emas — yozish mumkin"), 'warn');
     const btn = speakRecQ('[data-act="speak-rec-start"]');
@@ -7836,16 +7844,29 @@ function speakFaceLooking(lm) {
   const pitch = (nose.y - eyeMidY) / faceH;
   if (pitch < 0.08 || pitch > 0.55) return false;
   if (lm.length >= 478) {
-    const sets = [[33, 133, [468, 469, 470, 471, 472]], [263, 362, [473, 474, 475, 476, 477]]];
-    for (let k = 0; k < sets.length; k++) {
-      const a = pt(sets[k][0]), b = pt(sets[k][1]);
-      if (!a || !b) continue;
-      const iris = sets[k][2].map(pt).filter(Boolean);
+    /* Har ko'z: [tashqi burchak, ichki burchak, yuqori qovoq, pastki qovoq, iris nuqtalari] */
+    const eyes = [
+      [33, 133, 159, 145, [468, 469, 470, 471, 472]],
+      [263, 362, 386, 374, [473, 474, 475, 476, 477]]
+    ];
+    for (let k = 0; k < eyes.length; k++) {
+      const a = pt(eyes[k][0]), b = pt(eyes[k][1]);
+      const up = pt(eyes[k][2]), low = pt(eyes[k][3]);
+      if (!a || !b || !up || !low) continue;
+      const iris = eyes[k][4].map(pt).filter(Boolean);
       if (!iris.length) continue;
-      const ix = iris.reduce(function (s, p) { return s + p.x; }, 0) / iris.length;
       const w = Math.abs(b.x - a.x);
       if (w < 0.005) continue;
+      const lidGap = low.y - up.y;
+      /* Ko'z yumuq / deyarli yumuq (pirpirash) — kameraga qaramayapti */
+      if (lidGap <= 0 || lidGap / w < 0.12) return false;
+      const ix = iris.reduce(function (s, p) { return s + p.x; }, 0) / iris.length;
+      const iy = iris.reduce(function (s, p) { return s + p.y; }, 0) / iris.length;
+      /* Ko'z qorachig'i burchaklar orasida markazda bo'lishi kerak (gorizontal) */
       if (Math.abs(ix - (a.x + b.x) / 2) / w > 0.24) return false;
+      /* ...va qovoqlar orasida markazda (vertikal): pastga/tepaga qarash rad etiladi */
+      const vy = (iy - up.y) / lidGap;
+      if (vy < 0.3 || vy > 0.74) return false;
     }
   }
   return true;
@@ -7861,22 +7882,19 @@ function runSpeakDetection() {
   const lm = res && res.faceLandmarks && res.faceLandmarks[0];
   const looking = !!(lm && speakFaceLooking(lm));
   const now = Date.now();
-  /* Yozish paytida 1.2 s gacha pirpirashga ruxsat */
-  const awayNow = speakRec.mode === 'recording'
-    ? (!looking && now - speakRec.lastGoodAt > SPEAK_GRACE_MS)
-    : !looking;
-  if (looking) {
-    speakRec.lastGoodAt = now;
-    speakRec.away = false;
-  } else if (awayNow && !speakRec.away) {
-    speakRec.away = true;
-    if (speakRec.mode === 'recording') speakRec.lookAwayCount++;
-  }
-  if (speakRec.mode === 'recording') {
-    speakRec.eyeSamples++;
-    if (looking) speakRec.eyeGood++;
-  }
+  /* Yozish paytida 1.2 s gacha pirpirash/tabiiy harakatga ruxsat;
+     yozishdan oldin tugma pirpirab turmasligi uchun qisqa (0.35 s) muhlat */
+  const grace = speakRec.mode === 'recording' ? SPEAK_GRACE_MS : 350;
+  if (looking) speakRec.lastGoodAt = now;
+  const awayNow = !looking && now - speakRec.lastGoodAt > grace;
+  if (awayNow && !speakRec.away && speakRec.mode === 'recording') speakRec.lookAwayCount++;
+  speakRec.away = awayNow;
   speakRec.looking = looking;
+  if (speakRec.mode === 'recording') {
+    /* Muhlat ichidagi pirpirash ko'z kontakti foiziga zarar yetkazmaydi */
+    speakRec.eyeSamples++;
+    if (!awayNow) speakRec.eyeGood++;
+  }
   speakRecRing(awayNow ? 'away' : 'good');
   speakRecWarn(awayNow);
   const eye = speakRecQ('#speak-rec-eye');
@@ -7890,20 +7908,27 @@ function runSpeakDetection() {
       eyeText.textContent = awayNow ? t('Yuz topilmadi') : t('Yuz aniqlandi');
     }
   }
+  if (speakRec.mode === 'ready') {
+    speakRecStatus(awayNow
+      ? t("Kameraga qarab turing — yuz va ko'zlar ko'rinsin")
+      : t('Tayyor — yozishni boshlashingiz mumkin'), awayNow ? 'warn' : '');
+  }
   const startBtn = speakRecQ('[data-act="speak-rec-start"]');
-  if (startBtn && speakRec.mode === 'ready') startBtn.disabled = !looking;
+  if (startBtn && speakRec.mode === 'ready') startBtn.disabled = awayNow;
 }
 
 function speakPickMime() {
   if (typeof MediaRecorder === 'undefined' || !MediaRecorder.isTypeSupported) return '';
-  const list = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'];
+  /* Android/desktop Chrome: webm; iOS Safari: mp4 */
+  const list = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm',
+    'video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4'];
   for (let i = 0; i < list.length; i++) if (MediaRecorder.isTypeSupported(list[i])) return list[i];
   return '';
 }
 
 function startSpeakRecording() {
   if (!speakRec || speakRec.mode !== 'ready' || !speakRec.stream) return;
-  if (speakRec.landmarker && !speakRec.looking) { toast(t('Kameraga qarang'), 'error'); return; }
+  if (speakRec.landmarker && speakRec.away) { toast(t('Kameraga qarang'), 'error'); return; }
   const mime = speakPickMime();
   try {
     speakRec.recorder = mime ? new MediaRecorder(speakRec.stream, { mimeType: mime })
@@ -7966,7 +7991,7 @@ function finishSpeakRecording() {
     speakRecStatus(t("Yozuv bo'sh chiqdi — qayta urinib ko'ring"), 'error');
     const startBtn = speakRecQ('[data-act="speak-rec-start"]');
     const stopBtn = speakRecQ('[data-act="speak-rec-stop"]');
-    if (startBtn) { startBtn.hidden = false; startBtn.disabled = !speakRec.looking; }
+    if (startBtn) { startBtn.hidden = false; startBtn.disabled = !!speakRec.landmarker && speakRec.away; }
     if (stopBtn) stopBtn.hidden = true;
     startSpeakDetection();
     return;
@@ -7982,6 +8007,7 @@ function finishSpeakRecording() {
     video.srcObject = null;
     video.muted = false;
     video.loop = true;
+    video.classList.add('is-playback'); /* yozuv mirrorlanmagan — ko'rish ham ustoz ko'rgandek */
     video.src = speakRec.objectUrl;
     try { video.pause(); } catch (e) { /* preview */ }
   }
@@ -8002,6 +8028,52 @@ function finishSpeakRecording() {
   const preview = speakRecQ('#speak-rec-preview');
   if (preview) preview.hidden = false;
   speakRecStatus(t("Tayyor — videoni ko'ring yoki yuboring."));
+}
+
+/* Qayta yozish: eski yozuv tashlanadi, kamera va ko'z nazorati qaytadan ishga tushadi */
+function retakeSpeakRecording() {
+  if (!speakRec || speakRec.mode !== 'preview') return;
+  const v = speakRec.video;
+  if (v) {
+    try { v.pause(); } catch (e) { /* preview */ }
+    v.classList.remove('is-playback');
+    v.loop = false;
+    v.muted = true;
+    v.removeAttribute('src');
+    v.srcObject = null;
+    try { v.load(); } catch (e) { /* detached */ }
+  }
+  if (speakRec.objectUrl) { try { URL.revokeObjectURL(speakRec.objectUrl); } catch (e) {} }
+  speakRec.objectUrl = '';
+  speakRec.blob = null;
+  speakRec.chunks = [];
+  speakRec.recorder = null;
+  speakRec.lookAwayCount = 0;
+  speakRec.eyeSamples = 0;
+  speakRec.eyeGood = 0;
+  speakRec.startedAt = 0;
+  speakRec.endedAt = 0;
+  speakRec.looking = false;
+  speakRec.away = true;
+  speakRec.lastGoodAt = 0;
+  speakRec.mode = 'idle';
+  speakRecTimer(0);
+  speakRecRing('');
+  speakRecWarn(false);
+  const eye = speakRecQ('#speak-rec-eye');
+  if (eye) eye.classList.remove('is-away');
+  const eyeText = speakRecQ('#speak-rec-eye-text');
+  if (eyeText) eyeText.textContent = t('Yuz aniqlanmoqda...');
+  const startBtn = speakRecQ('[data-act="speak-rec-start"]');
+  const stopBtn = speakRecQ('[data-act="speak-rec-stop"]');
+  const actions = speakRecQ('#speak-rec-actions');
+  const preview = speakRecQ('#speak-rec-preview');
+  if (startBtn) { startBtn.hidden = false; startBtn.disabled = true; }
+  if (stopBtn) stopBtn.hidden = true;
+  if (actions) actions.hidden = false;
+  if (preview) preview.hidden = true;
+  speakRecStatus(t('Kamera va mikrofon ochilmoqda...'));
+  startSpeakCamera();
 }
 
 function watchSpeakRecording() {
@@ -8040,6 +8112,8 @@ async function submitSpeakRecording() {
       lookAwayCount: metrics.lookAwayCount,
       eyeContactPercent: metrics.eyeContactPercent
     });
+    /* Bazaga yozilmagan bo'lsa "topshirildi" deb yolg'on aytmaymiz */
+    if (!saved) throw new Error(t("Bulutga yozib bo'lmadi"));
     const subs = getTgSubs();
     subs.push({
       id: saved && saved.id != null ? 't' + saved.id : 'tlocal' + Date.now(),
@@ -8102,8 +8176,9 @@ function renderTgInbox() {
       </div>
       ${sub.eyeContactPercent != null || sub.lookAwayCount != null || sub.mediaUrl ? `<div class="speak-metrics">
         ${sub.mediaUrl ? `<a class="btn btn-xs ghost speak-watch" href="${esc(sub.mediaUrl)}" target="_blank" rel="noopener">${ico('video', 13)} ${t("Videoni ko'rish")}</a>` : ''}
-        ${sub.eyeContactPercent != null ? `<span class="speak-metric">${ico('eye', 13)} ${t('Kameraga qarash')}: ${sub.eyeContactPercent}%</span>` : ''}
-        ${sub.lookAwayCount != null ? `<span class="speak-metric">${ico('alert', 13)} ${t('Chetga qarash')}: ${sub.lookAwayCount}</span>` : ''}
+        ${sub.eyeContactPercent != null ? `<span class="speak-metric${sub.eyeContactPercent < 60 ? ' is-low' : ''}">${ico('eye', 13)} ${t('Kameraga qarash')}: ${sub.eyeContactPercent}%</span>` : ''}
+        ${sub.lookAwayCount != null ? `<span class="speak-metric${sub.lookAwayCount >= 3 ? ' is-low' : ''}">${ico('alert', 13)} ${t('Chetga qarash')}: ${sub.lookAwayCount}</span>` : ''}
+        ${sub.durationSec != null ? `<span class="speak-metric">${ico('clock', 13)} ${Math.floor(sub.durationSec / 60)}:${String(sub.durationSec % 60).padStart(2, '0')}</span>` : ''}
       </div>` : ''}
       <div class="grade-row">
         ${[1,2,3,4,5,6,7,8,9,10].map(n => `
@@ -9862,6 +9937,7 @@ document.addEventListener('click', function (e) {
     'speak-rec-start': function () { startSpeakRecording(); },
     'speak-rec-stop': function () { stopSpeakRecording(); },
     'speak-rec-watch': function () { watchSpeakRecording(); },
+    'speak-rec-retake': function () { retakeSpeakRecording(); },
     'speak-rec-submit': function () { submitSpeakRecording(); },
     'speak-rec-cancel': function () { closeSpeakRecorder(); },
 

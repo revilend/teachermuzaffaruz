@@ -2464,6 +2464,8 @@ body.speak-rec-open { overflow: hidden; }
   background: #0b1220;
   transform: scaleX(-1);
 }
+/* Yozuv ko'rilayotganda mirror o'chadi: yozuv aslida shunday saqlangan */
+.speak-rec-video.is-playback { transform: none; }
 .speak-rec-ring {
   position: absolute;
   inset: -9px;
@@ -2564,6 +2566,9 @@ body.speak-rec-open { overflow: hidden; }
 .speak-rec-btn.watch { background: #2563eb; }
 .speak-rec-btn.submit { background: #16a34a; }
 .speak-rec-btn.cancel { background: #dc2626; }
+.speak-rec-btn.retake { background: #475569; }
+.speak-rec-btn:focus-visible,
+.speak-rec-close:focus-visible { outline: 2px solid #f8fafc; outline-offset: 2px; }
 .speak-rec-close {
   position: absolute;
   top: 14px;
@@ -2617,4 +2622,7 @@ html[data-theme="dark"] .speak-locked-ico { background: rgba(245, 158, 11, .2); 
 }
 .speak-metric svg { width: 13px; height: 13px; }
 html[data-theme="dark"] .speak-metric { background: rgba(96, 165, 250, .14); color: #cbd5e1; }
+/* Past ko'rsatkich (kam ko'z kontakti / ko'p chetga qarash) — ustoz e'tibori uchun */
+.speak-metric.is-low { background: rgba(245, 158, 11, .16); color: #b45309; }
+html[data-theme="dark"] .speak-metric.is-low { background: rgba(245, 158, 11, .22); color: #fbbf24; }
 .speak-watch { text-decoration: none; }
