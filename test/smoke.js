@@ -635,24 +635,45 @@ check(feeSt3.every(s => Number(s.paymentDebt) === 50000),
   "moliya: maktab guruhida yangi oylik qarz qo'shilmaydi");
 click('[data-act="nav"][data-screen="groups"]');
 
-/* --- Guruh kartasini bosish → faqat shu guruh o'quvchilari --- */
+/* --- Guruhlar: guruh ichida FAQAT ism + speaking qarzi --- */
 click(qa('.group-card').filter(c => c.textContent.includes('IELTS Band 7.0'))[0]);
-check(text().includes("O'quvchilar"), "guruh→o'quvchi: guruh kartasi bosilganda o'quvchilar ekrani ochildi");
-check(studentCards() === 2, "guruh→o'quvchi: faqat IELTS guruhidagi 2 ta o'quvchi ko'rinadi");
-check(!!q('[data-act="filter-group-all"]') && text().includes('Barcha o\'quvchilar'),
-  "guruh→o'quvchi: 'Barcha o'quvchilar' reset tugmasi bor");
-check(text().includes('IELTS Band 7.0 guruhidagi'), "guruh→o'quvchi: aktiv guruh nomi ko'rinadi");
+check(text().includes("Guruh o'quvchilari") && text().includes('IELTS Band 7.0'),
+  "guruh detail: guruh nomi va o'quvchilar ko'rinishi ochildi");
+check(qa('.group-student-debt').length === 2 && qa('.group-student-debt .s-name').length === 2,
+  "guruh detail: faqat IELTS guruhidagi 2 ta o'quvchi ismi ko'rinadi");
+check(text().includes('Malika Yusupova') && text().includes('Bekzod Alimov'),
+  "guruh detail: o'quvchilarning to'liq ism-familiyasi ko'rinadi");
+check(qa('.group-student-debt .debt-controls').length === 2 &&
+      qa('.group-student-debt [data-act="debt-minus"]').length === 2 &&
+      qa('.group-student-debt [data-act="debt-plus"]').length === 2,
+  "guruh detail: har bir o'quvchida speaking qarzi tugmalari bor");
+check(!q('[data-act="voice-toggle"]') && !q('[data-act="web-speaking-toggle"]') &&
+      !q('[data-act="edit-student"]') && !q('[data-act="del-student"]') &&
+      !q('[data-act="pay-student"]') && !q('.student-card'),
+  "guruh detail: ruxsat/tahrir/o'chirish/to'lov va ortiqcha kartalar YO'Q");
+clickAct('group-detail-back');
+check(groupCards() === 2, "guruh detail: Orqaga → guruhlar ro'yxati qaytdi");
+
+/* --- O'quvchilar: xuddi shu guruhlar ro'yxati + to'liq boshqaruv --- */
+click('[data-act="nav"][data-screen="students"]');
+check(groupCards() === 2 && studentCards() === 6,
+  "o'quvchilar: guruhlar ro'yxati va barcha o'quvchilar birga ko'rinadi");
+click(qa('.group-card').filter(c => c.textContent.includes('IELTS Band 7.0'))[0]);
+check(studentCards() === 2 && text().includes('IELTS Band 7.0 guruhidagi'),
+  "o'quvchilar → guruh: faqat IELTS o'quvchilari (2 ta) va guruh sarlavhasi");
+check(qa('[data-act="voice-toggle"]').length === 2 && qa('[data-act="web-speaking-toggle"]').length === 2 &&
+      qa('[data-act="edit-student"]').length === 2 && qa('[data-act="del-student"]').length === 2,
+  "o'quvchilar → guruh: voice/web ruxsat + tahrirlash/o'chirish to'liq ko'rinadi");
 check(!q('[data-act="remind-debtors"]') && !q('[data-act="nav"][data-screen="debtors"]'),
-  "guruh turi: maktab guruhida qarzdor tugmalari DOM'da umuman yo'q");
+  "o'quvchilar → maktab guruhi: qarzdor tugmalari ko'rinmaydi");
 clickAct('filter-group-all');
-check(studentCards() === 6 && !q('[data-act="filter-group-all"]'),
-  "guruh→o'quvchi: 'Barcha o'quvchilar' bosildi → filtr tozalandi (6 ta)");
-click('[data-act="nav"][data-screen="groups"]');
+check(studentCards() === 6 && groupCards() === 2 && !q('[data-act="filter-group-all"]'),
+  "o'quvchilar: 'Barcha o'quvchilar' → filtr tozalandi, guruhlar ro'yxati qaytdi");
 click(qa('.group-card').filter(c => c.textContent.includes('General English'))[0]);
-check(!!q('[data-act="remind-debtors"]') && !!q('[data-act="nav"][data-screen="debtors"]'),
-  "guruh turi: repetitorlik guruhida qarzdor tugmalari ko'rinadi");
-check(!!q('[data-act="remind-debtors"]') && /qarzdorlarga\s+eslatma/i.test(q('[data-act="remind-debtors"]').textContent),
-  "guruh turi: repetitorlik guruhida 'Qarzdorlarga xabar' tugmasi ishlaydi");
+check(studentCards() === 4 && !!q('[data-act="remind-debtors"]') && !!q('[data-act="nav"][data-screen="debtors"]'),
+  "o'quvchilar → repetitorlik guruhi: to'liq ro'yxat va qarzdor tugmalari");
+check(qa('[data-act="pay-student"]').length >= 1 && qa('[data-act="debt-add"]').length >= 1,
+  "o'quvchilar → repetitorlik guruhi: to'lov qo'shish tugmalari ko'rinadi");
 clickAct('filter-group-all');
 
 /* ================= 4. O'QUVCHILAR ================= */
@@ -1600,9 +1621,9 @@ await (async () => {
   check(!!q('[data-act="hw-edit"]') && !!q('[data-act="open-hw"][data-gid="g55"]'),
     "uyga vazifa: tahrirlash va shu guruhga vazifa berish tugmalari bor");
   forceNav('groups');
-  click('[data-act="filter-group"][data-gid="g55"]');
-  check(!!q('[data-act="filter-group-all"]') && !q('.hw-item') && !q('[data-act="open-hw"]'),
-    "guruh sahifasi: faqat o'quvchilar — uyga vazifa bo'limi yo'q");
+  click('[data-act="group-detail"][data-gid="g55"]');
+  check(qa('.group-student-debt').length >= 1 && !q('.hw-item') && !q('[data-act="open-hw"]'),
+    "guruh detaili: faqat ism + speaking qarzi — uyga vazifa bo'limi yo'q");
   forceNav('home');
   const hwLocal = JSON.parse(win.localStorage.getItem('et_homework') || '[]');
   check(hwLocal.length === 1 && hwLocal[0].title === 'Present Perfect shakli' &&

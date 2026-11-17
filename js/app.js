@@ -184,6 +184,7 @@ const state = {
   pending2fa: null,
   subGroup: 'all',
   studentView: '',
+  groupDetail: '',
   webSpeakingBusy: {},
   resetCtx: null,
   authStep: 'landing',
@@ -3298,6 +3299,12 @@ const I18N_EN = {
   "To'lovlar": "Payments",
   "To'lov": "Payments",
   "Guruhlar": "Groups",
+  "Guruh o'quvchilari": "Group students",
+  "Bosib, speaking qarzini belgilash": "Tap to set speaking debt",
+  "Bosib, o'quvchilarni boshqarish": "Tap to manage students",
+  "Hozircha guruhda o'quvchi yo'q": "No students in this group yet",
+  "Kamaytirish": "Decrease",
+  "Ko'paytirish": "Increase",
   "O'quvchilar": "Students",
   "O'quvchi": "Students",
   "Sinflar": "Classes",
@@ -3590,6 +3597,7 @@ const I18N_EN = {
   "Oylik jadval": "Monthly schedule",
   "Belgilash": "Set",
   "belgilanmagan": "not set",
+  "Oylik to'lov": "Monthly fee",
   "Summa (so'mda)": "Amount (in sum)",
   "Maktab sinfi": "School class",
   "Sinfni tanlang": "Select class",
@@ -5679,15 +5687,18 @@ function isSchoolGroup(g) {
   return groupTypeOf(g) === 'school';
 }
 
-function groupCard(g, students) {
+function groupCard(g, students, opts) {
+  opts = opts || {};
+  const cardAct = opts.act || 'filter-group';
+  const hint = opts.hint || t("Bosib, guruh o'quvchilarini ko'rish");
   const cnt = students.filter(s => s.groupId === g.id).length;
   const sched = groupScheduleText(g);
   const fee = Math.max(0, Number(g.monthlyFee) || 0);
   const tutoring = groupTypeOf(g) === 'tutoring';
-  return `<div class="card group-card" data-act="filter-group" data-gid="${g.id}" style="cursor:pointer" role="button" title="O'quvchilarni ko'rsatish">
+  return `<div class="card group-card" data-act="${cardAct}" data-gid="${g.id}" style="cursor:pointer" role="button" title="${esc(hint)}">
     <div class="row between">
       <h3 class="card-h">${esc(g.name)}</h3>
-      <span class="pill">${cnt} o'quvchi</span>
+      <span class="pill">${tGrpCnt(cnt)}</span>
     </div>
     <div class="gc-type ${tutoring ? 'is-tutoring' : 'is-school'}">${tutoring ? ico('gradCap', 14) + ' Repetitor guruhi' : ico('building', 14) + ' Maktab guruhi'}</div>
     <div class="meta-rows">
@@ -5697,9 +5708,9 @@ function groupCard(g, students) {
            <div class="meta-row">${ico('clock', 15)} <span>${esc(g.time)}</span></div>`}
     </div>
     <div class="gc-fee">${tutoring
-      ? `${ico('wallet', 14)} Oylik to'lov: ${fee > 0 ? `<b>${fmtSom(fee)} so'm</b>` : `<span class="muted">belgilanmagan</span>`}`
+      ? `${ico('wallet', 14)} ${t("Oylik to'lov")}: ${fee > 0 ? `<b>${fmtSom(fee)} so'm</b>` : `<span class="muted">${t('belgilanmagan')}</span>`}`
       : `${ico('gift', 14)} <b>Bepul</b> <span class="muted">(maktab guruhi)</span>`}</div>
-    <div class="muted small" style="margin-top:7px">Bosib, guruh o'quvchilarini ko'rish</div>
+    <div class="muted small" style="margin-top:7px">${esc(hint)}</div>
     <div class="gc-actions">
       <button type="button" class="btn btn-ghost btn-sm" data-act="grade-group-go" data-group="${g.id}">${ico('grades', 15)} Baholar</button>
       <button type="button" class="btn btn-ghost btn-sm" data-act="open-attendance" data-group="${g.id}">${ico('cal', 15)} Davomat</button>
@@ -5886,10 +5897,44 @@ function debtorsScreen() {
   `;
 }
 
+/* Guruhlar bo'limidagi qisqa ko'rinish: faqat ism + speaking qarzi.
+   Boshqa ruxsatlar, tahrirlash/o'chirish va to'lovlar bu yerda ko'rsatilmaydi. */
+function groupDebtStudentRow(s) {
+  return `<div class="card group-student-debt">
+    <span class="s-name">${esc(s.fullName)}</span>
+    <div class="debt-controls">
+      <button type="button" class="btn btn-xs ghost" data-act="debt-minus" data-sid="${s.id}" aria-label="${t('Kamaytirish')}">−</button>
+      <span class="debt-num">${tTa(Number(s.speakingDebt) || 0)}</span>
+      <button type="button" class="btn btn-xs ghost" data-act="debt-plus" data-sid="${s.id}" aria-label="${t('Ko\'paytirish')}">+</button>
+    </div>
+  </div>`;
+}
+
+function groupDebtDetailScreen(g, students) {
+  const list = students.filter(function (s) { return s.groupId === g.id; });
+  return `
+  <div class="back-row">
+    <button type="button" class="btn btn-xs ghost" data-act="group-detail-back">${ico('arrowLeft', 14)} ${t('Orqaga')}</button>
+    <span class="back-title">${esc(g.name)}</span>
+  </div>
+  <div class="screen-head">
+    <div>
+      <h2 class="screen-title">${ico('groups', 16)} ${t('Guruh o\'quvchilari')}</h2>
+      <div class="muted small">${tGrpCnt(list.length)}</div>
+    </div>
+  </div>
+  ${list.length
+    ? `<div class="group-debt-list">${list.map(groupDebtStudentRow).join('')}</div>`
+    : emptyState(t("Hozircha guruhda o'quvchi yo'q"), 'students')}
+  `;
+}
+
 function groupsScreen() {
   if (!isTeacher()) return blockedScreen("Bu bo'lim faqat Muzaffar Amirov uchun");
   const all = getGroups();
   const students = getStudents();
+  const detail = state.groupDetail ? all.filter(function (g) { return g.id === state.groupDetail; })[0] : null;
+  if (detail) return groupDebtDetailScreen(detail, students);
   const typeF = state.groupTypeFilter === 'school' || state.groupTypeFilter === 'tutoring'
     ? state.groupTypeFilter : 'all';
   const groups = typeF === 'all' ? all : all.filter(g => groupTypeOf(g) === typeF);
@@ -5909,7 +5954,7 @@ function groupsScreen() {
   <div class="chips groups-type-chips">
     ${typeChips.map(c => `<button type="button" class="chip-btn${typeF === c.key ? ' active' : ''}" data-act="filter-group-type" data-type="${c.key}" aria-pressed="${typeF === c.key ? 'true' : 'false'}">${ico(c.icon, 13)} ${c.label}</button>`).join('')}
   </div>
-  ${groups.length ? groups.map(g => groupCard(g, students)).join('') : emptyState(typeF === 'school' ? "Maktab guruhi yo'q" : typeF === 'tutoring' ? "Repetitorlik guruhi yo'q" : "Hozircha guruh yo'q", 'groups')}
+  ${groups.length ? groups.map(g => groupCard(g, students, { act: 'group-detail', hint: t('Bosib, speaking qarzini belgilash') })).join('') : emptyState(typeF === 'school' ? "Maktab guruhi yo'q" : typeF === 'tutoring' ? "Repetitorlik guruhi yo'q" : "Hozircha guruh yo'q", 'groups')}
   `;
 }
 
@@ -6065,6 +6110,8 @@ function studentsScreen() {
   if (!isTeacher()) return blockedScreen("Bu bo'lim faqat Muzaffar Amirov uchun");
   const chips = ['Barchasi'].concat(APP_DATA.classes);
   const gf = state.filterGroup ? groupById(state.filterGroup) : null;
+  const allGroups = getGroups();
+  const allStudents = getStudents();
   /* Maktab guruhi bepul — qarzdorlik tugmalari umuman kerak emas */
   const showDebtTools = !gf || groupTypeOf(gf) !== 'school';
   return `
@@ -6080,6 +6127,8 @@ function studentsScreen() {
     <span class="muted small">${ico('groups', 14)} <b>${esc(gf.name)}</b> guruhidagi o'quvchilar</span>
     <button type="button" class="chip-btn" data-act="filter-group-all">Barcha o'quvchilar</button>
   </div>
+` : allGroups.length ? `<div class="section-title">${ico('groups', 15)} ${t('Guruhlar')} — ${t('Guruhni tanlang')}</div>
+  <div class="students-groups-list">${allGroups.map(g => groupCard(g, allStudents, { act: 'filter-group', hint: t("Bosib, o'quvchilarni boshqarish") })).join('')}</div>
 ` : ''}
 
   <div class="search-wrap">
@@ -10326,6 +10375,7 @@ document.addEventListener('click', function (e) {
     'nav': function () {
       const scr = btn.getAttribute('data-screen');
       if (scr === 'homework') state.hwGroup = null;
+      if (scr === 'groups') state.groupDetail = '';
       go(scr);
     },
 
@@ -10333,6 +10383,7 @@ document.addEventListener('click', function (e) {
     'stat-groups': function () {
       if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
       state.groupTypeFilter = 'all';
+      state.groupDetail = '';
       go('groups');
     },
     'stat-students': function () {
@@ -10370,7 +10421,18 @@ document.addEventListener('click', function (e) {
       render();
     },
 
-    /* --- Guruh kartasini bosish → faqat shu guruh o'quvchilari --- */
+    /* --- Guruhlar bo'limida guruh ichiga kirish: faqat ism + speaking qarzi --- */
+    'group-detail': function () {
+      if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+      state.groupDetail = btn.getAttribute('data-gid') || '';
+      render();
+    },
+    'group-detail-back': function () {
+      state.groupDetail = '';
+      render();
+    },
+
+    /* --- O'quvchilar bo'limida guruh kartasi → to'liq o'quvchi boshqaruvi --- */
     'filter-group': function () {
       if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
       state.filterGroup = btn.getAttribute('data-gid');
