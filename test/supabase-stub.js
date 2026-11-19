@@ -49,6 +49,8 @@ function createStub(seed) {
         const row = Object.assign({}, r);
         if (row.id == null) row.id = ++seq[q.table];
         else seq[q.table] = Math.max(seq[q.table], Number(row.id) || 0);
+        /* PostgREST default: created_at = now() */
+        if (row.created_at == null) row.created_at = new Date().toISOString();
         rows.push(row);
         return Object.assign({}, row);
       });

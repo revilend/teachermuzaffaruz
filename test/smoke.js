@@ -967,7 +967,7 @@ check(text().includes('8-sinf') && text().includes('General English'), 'student:
 check(q('#app-header').textContent.includes("O'quvchi"), 'student: headerda "O\'quvchi"');
 check(navLabels().length === 2 && navLabels().join(',') === 'Kabinet,Profil', 'student: nav faqat Kabinet + Profil');
 
-check(qa('.student-action').length === 4, 'student: kabinetda 4 ta asosiy bo\'lim kartasi');
+check(qa('.student-action').length === 5, 'student: kabinetda 5 ta asosiy bo\'lim kartasi');
 check(!text().includes('Tez amallar'), 'student: "Tez amallar" sarlavhasi yo\'q');
 openStudentView('grades');
 check(text().includes('Baholar') && qa('.grade-row').length > 0, 'student: baholar ichki oynasi');
@@ -1026,8 +1026,8 @@ check(text().includes('Speaking topshirish') && !text().includes('Speaking qarzi
 check(q('#screen').firstElementChild && q('#screen').firstElementChild.classList.contains('hero-card'),
   "kabinet tartibi: profil kartasi eng birinchi o'rinda (maktab guruhi)");
 check(!q('.pay-banner'), "kabinet tartibi: maktab guruhida to'lov banneri umuman yo'q");
-check(!!q('.student-actions') && q('.student-actions').children.length === 4,
-  "kabinet tartibi: 4 ta bo'lim kartasi (2x2 grid) profil kartasidan keyin");
+check(!!q('.student-actions') && q('.student-actions').children.length === 5,
+  "kabinet tartibi: 5 ta bo'lim kartasi (2x2 grid) profil kartasidan keyin");
 
 /* --- Repetitorlik guruhi (g2) o'quvchisi: to'lov bo'limi ko'rinadi --- */
 logout();
@@ -1314,12 +1314,15 @@ closeStudentView();
 check(text().includes('Uyga vazifalar'), "student: 'Uyga vazifalar' kartasi portalda");
 
 /* ================= 14. CHAT (Ustoz ↔ O'quvchi) ================= */
-check(text().includes('Muzaffar Amirov bilan Chat'), "chat: o'quvchi portali bo'limi bor");
-check(!!q('#chat-list') && !!q('#chat-input'), "chat: portalda xabarlashuv (ro'yxat + input)");
+check(text().includes("O'qituvchi bilan suhbat"), "chat: o'quvchi panelida 'O'qituvchi bilan suhbat' bo'limi bor");
+check(!q('.chat-card') && !q('#chat-list'), "chat: bosh sahifada inline chat bloki olib tashlangan");
+openStudentView('chat');
+check(!!q('#chat-list') && !!q('#chat-input'), "chat: alohida sahifada xabarlashuv (ro'yxat + input)");
 setVal('#chat-input', 'Tayyor ustoz');
 clickAct('send-chat');
 check(q('#chat-list').textContent.includes('Tayyor ustoz'), "chat: o'quvchi xabar yubordi");
 check(!!q('#chat-list .chat-msg.mine'), "chat: o'quvchi xabari o'zi tomonida (mine)");
+closeStudentView();
 
 logout();
 await loginAs('m_amirov', '123');
@@ -1332,13 +1335,39 @@ check(q('#chat-list').textContent.includes('Tayyor ustoz'), "chat: ustoz o'quvch
 setVal('#chat-input', 'Assalom Jasur');
 clickAct('send-chat');
 check(q('#chat-list').textContent.includes('Assalom Jasur'), "chat: ustoz xabar yozdi");
+check(!!q('#chat-list .chat-msg.mine [data-act="chat-edit"]') && !!q('#chat-list .chat-msg.mine [data-act="chat-del"]'),
+  'chat: o‘z xabarida SVG tahrirlash/o‘chirish tugmalari bor');
+click(q('#chat-list .chat-msg.mine [data-act="chat-edit"]'));
+check(!!q('#chat-edit-input'), 'chat: tahrirlash maydoni ochildi');
+setVal('#chat-edit-input', 'Assalom Jasur (tahrir)');
+clickAct('chat-save');
+check(q('#chat-list').textContent.includes('Assalom Jasur (tahrir)'), 'chat: xabar tahrirlandi');
+check(!!q('#chat-list .chat-edited') && /tahrirlangan/.test(q('#chat-list .chat-edited').textContent),
+  'chat: “tahrirlangan” belgisi ko‘rinadi');
+click(q('#chat-list .chat-msg.mine [data-act="chat-del"]'));
+check(!!q('#chat-list .chat-deleting') && q('#chat-list').textContent.includes("Xabarni o'chirasizmi?"),
+  'chat: o‘chirishdan oldin tasdiq so‘raladi');
+clickAct('chat-del-cancel');
+check(!!q('#chat-list .chat-msg.mine'), 'chat: tasdiq bekor qilindi — xabar qoldi');
+click(q('#chat-list .chat-msg.mine [data-act="chat-del"]'));
+clickAct('chat-del-confirm');
+check(!q('#chat-list').textContent.includes('Assalom Jasur (tahrir)'), 'chat: xabar o‘chirildi');
+setVal('#chat-input', 'Assalom Jasur');
+clickAct('send-chat');
+check(q('#chat-list').textContent.includes('Assalom Jasur'), 'chat: qayta yuborildi');
 click('[data-act="close-modal"]');
 check(q('#modal-overlay').hidden === true, 'chat: modal yopildi');
 
 /* o'quvchi ustoz xabarini ko'radi */
 logout();
 await loginAs('jasur', '4321');
+for (let i = 0; i < 30 && !q('[data-view="chat"] .nav-badge'); i++) {
+  await new Promise(r => setTimeout(r, 50));
+}
+check(!!q('[data-view="chat"] .nav-badge'), "chat: o'qilmagan xabarlar badge bilan ko'rinadi");
+openStudentView('chat');
 check(q('#chat-list') && q('#chat-list').textContent.includes('Assalom Jasur'), "chat: o'quvchi ustoz xabarini kordi");
+closeStudentView();
 
 /* ================= 15. NEYTRAL GRADEBOOK (CSS) ================= */
 const cssText = fs.readFileSync(path.join(root, 'css', 'styles.css'), 'utf8');
@@ -3365,10 +3394,22 @@ await (async () => {
   await loginAs('restore1', '9876');
   forceNav('home');
   check(!!q('.hw-comment-notice'), 'topshiriq: kabinetda yangi komentariya bildirishnomasi chiqadi');
+  check(q('.hw-comment-notice [data-act="hw-comment-open"]').textContent.includes('Ochish'),
+    'topshiriq: bildirishnomada “Ochish” tugmasi');
+  {
+    const notice = q('.hw-comment-notice'), grid = q('.student-actions');
+    check(!!notice && !!grid && !!(notice.compareDocumentPosition(grid) & 4),
+      'topshiriq: bildirishnoma nav kartalaridan oldin — ustma-ust tushmaydi');
+  }
+  click('[data-act="hw-comment-open"]');
+  check(!!q('#hw-list') && text().includes('Yaxshi bajaribsan'),
+    'topshiriq: “Ochish” vazifani ochadi va komentariya ko‘rinadi');
+  click('[data-act="student-back"]');
+  check(!q('.hw-comment-notice'), 'topshiriq: ochilgach bildirishnoma yashiriladi');
   openStudentView('homework');
-  check(text().includes('Yaxshi bajaribsan'), 'topshiriq: vazifa ichida o‘qituvchi komentariyasi ko‘rinadi');
-  click('[data-act="hw-comments-seen"]');
-  check(!q('.hw-comment-notice'), 'topshiriq: “Ko‘rdim” bosilgach bildirishnoma yashiriladi');
+  check(text().includes('Yaxshi bajaribsan'),
+    'topshiriq: komentariya vazifada doimiy ko‘rinib qoladi');
+  closeStudentView();
 
   /* (e) ruxsat o'chirilsa — yuklash bo'limi DOM'da umuman yo'q */
   logout();
@@ -3589,7 +3630,7 @@ await (async () => {
   win.localStorage.setItem('app_lang', JSON.stringify('en'));
   ['home', 'profile'].forEach((s) => { forceNav(s); scanI18n('student:' + s); });
   forceNav('home');
-  ['attendance', 'homework', 'grades', 'speaking'].forEach((v) => {
+  ['attendance', 'homework', 'grades', 'speaking', 'chat'].forEach((v) => {
     openStudentView(v);
     scanI18n('student-view:' + v);
     closeStudentView();

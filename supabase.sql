@@ -33,6 +33,7 @@ create table if not exists public.messages (
 
 create index if not exists messages_student_idx
   on public.messages (student_id, created_at);
+alter table public.messages add column if not exists edited_at timestamptz;
 
 -- 3) Telegram bot speaking topshiriklari (voice/video fayl IDlari)
 create table if not exists public.speaking_submissions (

@@ -53,6 +53,7 @@ const K = {
   attendance: 'et_attendance',
   speaking: 'et_speaking',
   messages: 'et_messages',
+  chatSeen: 'et_chat_seen',
   homework: 'et_homework',
   homeworkDone: 'et_hw_done',
   payments: 'et_payments',
@@ -173,6 +174,9 @@ const state = {
   slotMode: 'create',
   slotId: '',
   chatSid: null,
+  chatEditId: null,
+  chatDelId: null,
+  hwFocus: '',
   classHint: false,
   loginTimer: null,
   loginError: '',
@@ -586,7 +590,8 @@ const CloudSync = (function () {
           sid: sid == null ? 's' + r.student_id : sid,
           sender: r.sender,
           text: r.text,
-          createdAt: r.created_at
+          createdAt: r.created_at,
+          editedAt: r.edited_at || ''
         });
       });
       store.set(K.messages, cache);
@@ -1105,11 +1110,12 @@ const CloudSync = (function () {
     await pullPayments(dbId);
 
     /* xabarlar — faqat o'z suhbati */
-    const mRes = await client.from('messages').select('id, student_id, sender, text, created_at')
+    const mRes = await client.from('messages').select('id, student_id, sender, text, created_at, edited_at')
       .eq('student_id', dbId).order('created_at', { ascending: true });
     if (!mRes.error) {
       store.set(K.messages, (mRes.data || []).map(function (r) {
-        return { id: 'm' + r.id, sid: 's' + dbId, sender: r.sender, text: r.text, createdAt: r.created_at };
+        return { id: 'm' + r.id, sid: 's' + dbId, sender: r.sender, text: r.text,
+          createdAt: r.created_at, editedAt: r.edited_at || '' };
       }));
     }
 
@@ -1320,6 +1326,48 @@ const CloudSync = (function () {
       const ins = await client.from('attendance').insert(rows);
       if (ins.error) throw ins.error;
     }
+  }
+
+  function messageDbId(localId) {
+    const m = /^m(\d+)$/.exec(String(localId));
+    return m ? Number(m[1]) : null;
+  }
+
+  async function editMessage(localId, text) {
+    const cache = store.get(K.messages, []);
+    const msg = cache.filter(function (m) { return String(m.id) === String(localId); })[0];
+    if (!msg) return false;
+    msg.text = text;
+    msg.editedAt = new Date().toISOString();
+    store.set(K.messages, cache);
+    const dbId = messageDbId(localId);
+    if (!ready() || !hasMessages || dbId == null) return true;
+    try {
+      let res = await client.from('messages').update({ text: text, edited_at: msg.editedAt }).eq('id', dbId);
+      if (res.error && (res.error.code === 'PGRST204' || res.error.code === '42703')) {
+        res = await client.from('messages').update({ text: text }).eq('id', dbId);
+      }
+      if (res.error) throw res.error;
+    } catch (e) {
+      console.warn('[cloud] edit msg:', (e && e.message) || e);
+    }
+    return true;
+  }
+
+  async function deleteMessage(localId) {
+    const cache = store.get(K.messages, []);
+    const msg = cache.filter(function (m) { return String(m.id) === String(localId); })[0];
+    if (!msg) return false;
+    store.set(K.messages, cache.filter(function (m) { return String(m.id) !== String(localId); }));
+    const dbId = messageDbId(localId);
+    if (!ready() || !hasMessages || dbId == null) return true;
+    try {
+      const res = await client.from('messages').delete().eq('id', dbId);
+      if (res.error) throw res.error;
+    } catch (e) {
+      console.warn('[cloud] del msg:', (e && e.message) || e);
+    }
+    return true;
   }
 
   async function sendMessage(sid, sender, text) {
@@ -2324,6 +2372,8 @@ const CloudSync = (function () {
     pullTeacherPassword: pullTeacherPassword,
     pushTeacherPassword: pushTeacherPassword,
     sendMessage: sendMessage,
+    editMessage: editMessage,
+    deleteMessage: deleteMessage,
     subscribe: subscribe,
     deleteStudent: deleteStudent,
     deleteGroup: deleteGroup,
@@ -3088,6 +3138,13 @@ function onCloudNotifChange(table, row, old) {
       if (!s) return;
       Notif.notifyOnce('msg:' + row.id, s.fullName + ': Yangi xabar keldi');
     }
+    /* Realtime: tahrir/o'chirish/yangi xabar — ochiq suhbatni darhol yangilaymiz */
+    const stuRow = linkedStudent();
+    const chatSid = isTeacher() ? (state.chatSid || '') : (stuRow ? stuRow.id : '');
+    if (chatSid && chatSid === 's' + row.student_id && state.screen === 'home') {
+      if (!isTeacher() && state.studentView === 'chat') markChatSeen(chatSid);
+      refreshChat();
+    }
     return;
   }
 
@@ -3162,6 +3219,7 @@ const ICON = {
   eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.7-7 10-7 10 7 10 7-3.7 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>',
   eyeOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.7 5.1A10.7 10.7 0 0 1 12 5c6.3 0 10 7 10 7a18.3 18.3 0 0 1-2.6 3.5"/><path d="M6.6 6.6A17.4 17.4 0 0 0 2 12s3.7 7 10 7a10.4 10.4 0 0 0 5.4-1.5"/><path d="M9.9 9.9a3 3 0 1 0 4.2 4.2"/><path d="m3 3 18 18"/></svg>',
   message: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.4 8.9 8.9 0 0 1-4-.9L3 21l1.9-5A8.4 8.4 0 0 1 12.5 3 8.4 8.4 0 0 1 21 11.5Z"/></svg>',
+  close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
   stopRec: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>',
   cameraCheck: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8.5 7 7l1.5-2h7L17 7l3 1.5v9A2.5 2.5 0 0 1 17.5 20h-11A2.5 2.5 0 0 1 4 17.5Z"/><circle cx="12" cy="12.5" r="3.2"/><path d="m9 4 1.6 2h2.8L15 4"/></svg>',
   video: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="m16 10.2 5.2-3.2v10L16 13.8Z"/></svg>',
@@ -3674,6 +3732,11 @@ const I18N_EN = {
   "Uyga vazifalar": "Homework",
   "Baholar": "Grades",
   "Speaking topshirish": "Submit Speaking",
+  "O'qituvchi bilan suhbat": "Chat with Teacher",
+  "tahrirlangan": "edited",
+  "Xabarni o'chirasizmi?": "Delete this message?",
+  "Ha": "Yes",
+  "Tahrirlash": "Edit",
   "Ustoz ruxsati kerak": "Teacher permission required",
   "Speaking topshirish uchun ustozdan ruxsat so'rang.": "Ask your teacher for permission to submit speaking tasks.",
   "Saytda speaking topshirish": "Website speaking submission",
@@ -5446,17 +5509,18 @@ function studentPortal() {
   const myHw = getHomework().filter(h => h.groupId && h.groupId === st.groupId);
   /* O'qituvchi komentariyasi — yangi bo'lsa kabinetda yaqqol bildirishnoma */
   const hwSeenAt = store.get(K.hwCommentsSeen, '') || '';
-  const freshComments = myHw.filter(function (h) {
+  const freshList = myHw.filter(function (h) {
     const sub = myHomeworkSubmission(h);
     return sub && sub.teacherComment && String(sub.commentedAt || '') > hwSeenAt;
-  }).length;
+  });
+  const freshComments = freshList.length;
   const hwCommentBanner = freshComments ? `<div class="card hw-comment-notice">
       <span class="hw-comment-notice-ico">${ico('message', 18)}</span>
       <div class="hw-comment-notice-body">
         <b>${t("O'qituvchi {n} ta vazifangizga komentariya yozdi").replace('{n}', freshComments)}</b>
         <p class="muted small">${t("Vazifa ichida o'qib, fayllaringizni ko'rishingiz mumkin.")}</p>
       </div>
-      <button type="button" class="btn btn-xs ghost" data-act="hw-comments-seen">${t("Ko'rdim")}</button>
+      <button type="button" class="btn btn-xs ghost" data-act="hw-comment-open" data-hid="${esc(String(freshList[0].id))}">${t('Ochish')}</button>
     </div>` : '';
 
   /* --- Baholar --- */
@@ -5493,7 +5557,6 @@ function studentPortal() {
   </div>`;
 
   const homeworkHTML = `
-  ${hwCommentBanner}
   <div class="card" id="hw-list">${homeworkListHTML(myHw)}</div>`;
 
   const gradesHTML = `
@@ -5534,11 +5597,22 @@ function studentPortal() {
     <div id="my-submissions" class="audio-list">${mySubs}</div>
   </div>`;
 
+  const chatHTML = `
+  <div class="card chat-card">
+    ${chatHint()}
+    <div class="chat-list" id="chat-list">${chatListHTML(st.id, 'student')}</div>
+    <div class="chat-input-row">
+      <input class="input" id="chat-input" placeholder="${t('Muzaffar Amirovga xabar yozing...')}" autocomplete="off" />
+      <button type="button" class="btn btn-primary" data-act="send-chat">${t('Yuborish')}</button>
+    </div>
+  </div>`;
+
   const studentViews = {
     attendance: { title: t('Davomat'), html: attendanceHTML },
     homework: { title: t('Uyga vazifalar'), html: homeworkHTML },
     grades: { title: t('Baholar'), html: gradesHTML },
-    speaking: { title: t('Speaking topshirish'), html: speakingHTML }
+    speaking: { title: t('Speaking topshirish'), html: speakingHTML },
+    chat: { title: t("O'qituvchi bilan suhbat"), html: chatHTML }
   };
   const activeView = state.studentView && studentViews[state.studentView] ? state.studentView : '';
   if (activeView) {
@@ -5580,6 +5654,11 @@ function studentPortal() {
       <span class="quick-ico tint-sky">${ICON.mic}</span>
       <span class="student-action-label">${t('Speaking topshirish')}</span>
     </button>
+    <button type="button" class="card student-action" data-act="student-view" data-view="chat">
+      <span class="quick-ico tint-rose">${ICON.message}</span>
+      <span class="student-action-label">${t("O'qituvchi bilan suhbat")}</span>
+      ${chatUnreadFor(st.id) ? `<span class="nav-badge student-action-badge">${chatUnreadFor(st.id)}</span>` : ''}
+    </button>
   </div>`;
 
   return `
@@ -5596,29 +5675,17 @@ function studentPortal() {
     </div>
   </section>
 
-  ${payBanner}
-  ${speakBanner}
+  ${spDebt > 0
+    ? `${payBanner}${speakBanner}${hwCommentBanner}`
+    : (payBanner ? `${payBanner}${hwCommentBanner}` : hwCommentBanner)}
 
   ${cardsHTML}
-
-  ${hwCommentBanner}
-
-  <div class="section-title">${t('Muzaffar Amirov bilan Chat')}</div>
-  <div class="card chat-card">
-    ${chatHint()}
-    <div class="chat-list" id="chat-list">${chatListHTML(st.id, 'student')}</div>
-    <div class="chat-input-row">
-      <input class="input" id="chat-input" placeholder="${t('Muzaffar Amirovga xabar yozing...')}" autocomplete="off" />
-      <button type="button" class="btn btn-primary" data-act="send-chat">${t('Yuborish')}</button>
-    </div>
-  </div>
 
   <div class="section-title">${t('Sozlamalar')}</div>
   <div class="card">
     <div class="list-row"><span>Login</span><span class="login-val">${esc(u.login || '')}</span></div>
     <div class="list-row"><span>${t('Parol')}</span><span class="muted">••••</span></div>
   </div>
-  <button type="button" class="btn btn-ghost btn-block" data-act="open-change-pwd">${ico('key', 16)} ${t("Parolni o'zgartirish")}</button>
   `;
 }
 
@@ -10081,6 +10148,19 @@ function render() {
 }
 
 /* ==================== CHAT (Ustoz ↔ O'quvchi) ==================== */
+function chatSeenMap() { return store.get(K.chatSeen, {}) || {}; }
+function chatUnreadFor(sid) {
+  const seen = String(chatSeenMap()[sid] || '');
+  return messagesFor(sid).filter(function (m) {
+    return m.sender === 'teacher' && String(m.createdAt || '') > seen;
+  }).length;
+}
+function markChatSeen(sid) {
+  if (!sid) return;
+  const map = chatSeenMap();
+  map[sid] = new Date().toISOString();
+  store.set(K.chatSeen, map);
+}
 function fmtHM(iso) {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return '';
@@ -10095,10 +10175,38 @@ function messagesFor(sid) {
 function chatListHTML(sid, viewer) {
   const msgs = messagesFor(sid);
   if (!msgs.length) return `<div class="empty"><span class="empty-ico">${ICON.message}</span>${t("Hozircha xabar yo'q")}</div>`;
-  return msgs.map(m => `<div class="chat-msg ${m.sender === viewer ? 'mine' : 'theirs'}" data-message-id="${esc(String(m.id))}">
-      <div class="chat-text">${esc(m.text)}</div>
-      <div class="chat-time">${fmtHM(m.createdAt)}</div>
-    </div>`).join('');
+  return msgs.map(function (m) {
+    const mine = m.sender === viewer;
+    const mid = String(m.id);
+    if (mine && state.chatEditId === mid) {
+      return `<div class="chat-msg mine chat-editing" data-message-id="${esc(mid)}">
+        <input class="input chat-edit-input" id="chat-edit-input" value="${esc(m.text)}" />
+        <div class="chat-actions">
+          <button type="button" class="chat-ico" data-act="chat-save" data-mid="${esc(mid)}" aria-label="${esc(t('Saqlash'))}">${ico('check', 15)}</button>
+          <button type="button" class="chat-ico" data-act="chat-cancel" aria-label="${esc(t('Bekor qilish'))}">${ico('close', 15)}</button>
+        </div>
+      </div>`;
+    }
+    if (mine && state.chatDelId === mid) {
+      return `<div class="chat-msg mine chat-deleting" data-message-id="${esc(mid)}">
+        <div class="chat-text">${t("Xabarni o'chirasizmi?")}</div>
+        <div class="chat-actions">
+          <button type="button" class="chat-ico danger" data-act="chat-del-confirm" data-mid="${esc(mid)}" aria-label="${esc(t('Ha'))}">${ico('check', 15)}</button>
+          <button type="button" class="chat-ico" data-act="chat-del-cancel" aria-label="${esc(t('Bekor qilish'))}">${ico('close', 15)}</button>
+        </div>
+      </div>`;
+    }
+    return `<div class="chat-msg ${mine ? 'mine' : 'theirs'}" data-message-id="${esc(mid)}">
+      <div class="chat-text">${esc(m.text)}${m.editedAt ? ` <span class="chat-edited">(${t('tahrirlangan')})</span>` : ''}</div>
+      <div class="chat-foot">
+        <span class="chat-time">${fmtHM(m.createdAt)}</span>
+        ${mine ? `<span class="chat-actions">
+          <button type="button" class="chat-ico" data-act="chat-edit" data-mid="${esc(mid)}" aria-label="${esc(t('Tahrirlash'))}">${ico('brush', 14)}</button>
+          <button type="button" class="chat-ico danger" data-act="chat-del" data-mid="${esc(mid)}" aria-label="${esc(t('O\'chirish'))}">${ico('trash', 14)}</button>
+        </span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
 }
 function chatHint() {
   if (CloudSync.messagesAvailable()) return '';
@@ -10127,6 +10235,8 @@ function openChat(sid) {
   const st = studentById(sid);
   if (!st) return;
   state.chatSid = sid;
+  state.chatEditId = null;
+  state.chatDelId = null;
   openModal(`
     <div class="modal-head">
       <h3>${ico('message', 20)} Xabar yozish</h3>
@@ -10149,6 +10259,27 @@ function openChat(sid) {
   refreshChat();
   setTimeout(function () { const el = $('#chat-input'); if (el) el.focus(); }, 60);
 }
+function saveChatEdit(mid) {
+  const inp = $('#chat-edit-input');
+  const text = inp ? String(inp.value || '').trim() : '';
+  if (!text) { toast('Xabar matnini kiriting', 'error'); return; }
+  state.chatEditId = null;
+  const saving = CloudSync.editMessage(mid, text);
+  updateChatView(); /* lokal kesh darhol yangilandi */
+  Promise.resolve(saving)
+    .catch(function (e) { console.warn('[cloud] edit:', (e && e.message) || e); })
+    .then(function () { updateChatView(); });
+}
+
+function confirmChatDelete(mid) {
+  state.chatDelId = null;
+  const removing = CloudSync.deleteMessage(mid);
+  updateChatView(); /* lokal kesh darhol yangilandi */
+  Promise.resolve(removing)
+    .catch(function (e) { console.warn('[cloud] del:', (e && e.message) || e); })
+    .then(function () { updateChatView(); });
+}
+
 function sendChat() {
   const c = activeChat();
   const input = $('#chat-input');
@@ -10609,6 +10740,36 @@ document.addEventListener('click', function (e) {
     /* --- Chat --- */
     'open-chat': function () { openChat(btn.getAttribute('data-sid')); },
     'send-chat': sendChat,
+    'chat-edit': function () {
+      state.chatEditId = btn.getAttribute('data-mid');
+      state.chatDelId = null;
+      updateChatView();
+      setTimeout(function () {
+        const inp = $('#chat-edit-input');
+        if (inp) { inp.focus(); try { inp.setSelectionRange(inp.value.length, inp.value.length); } catch (e) {} }
+      }, 40);
+    },
+    'chat-cancel': function () { state.chatEditId = null; updateChatView(); },
+    'chat-save': function () { saveChatEdit(btn.getAttribute('data-mid')); },
+    'chat-del': function () {
+      state.chatDelId = btn.getAttribute('data-mid');
+      state.chatEditId = null;
+      updateChatView();
+    },
+    'chat-del-cancel': function () { state.chatDelId = null; updateChatView(); },
+    'chat-del-confirm': function () { confirmChatDelete(btn.getAttribute('data-mid')); },
+    'hw-comment-open': function () {
+      store.set(K.hwCommentsSeen, new Date().toISOString());
+      state.studentView = 'homework';
+      state.hwFocus = btn.getAttribute('data-hid') || '';
+      render();
+      setTimeout(function () {
+        if (!state.hwFocus) return;
+        const el = document.querySelector('.hw-item[data-hid="' + String(state.hwFocus).replace(/"/g, '') + '"]');
+        state.hwFocus = '';
+        if (el && el.scrollIntoView) { try { el.scrollIntoView({ block: 'center' }); } catch (e) {} }
+      }, 60);
+    },
 
     /* --- Speaking qarzi --- */
     'debt-plus': function () { changeDebt(btn.getAttribute('data-sid'), +1); },
@@ -10721,7 +10882,14 @@ document.addEventListener('click', function (e) {
     'student-view': function () {
       state.studentView = btn.getAttribute('data-view') || '';
       state.attOpen = false;
+      state.chatEditId = null;
+      state.chatDelId = null;
+      if (state.studentView === 'chat') {
+        const stu = linkedStudent();
+        if (stu) markChatSeen(stu.id);
+      }
       render();
+      if (state.studentView === 'chat') refreshChat();
     },
     'student-back': function () { state.studentView = ''; render(); },
     'remind-debtors': openRemindDebtors,
