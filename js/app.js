@@ -211,6 +211,7 @@ const state = {
   mockAssignId: '',
   mockAssignDraft: [],
   mockDelId: '',
+  mockDelResultId: '',
   mockCatView: '',
   mockRole: ''
 };
@@ -4052,7 +4053,19 @@ Object.assign(I18N_EN, {
   'Bu audio faqat bir marta tinglanadi': 'This audio can be played only once',
   'Vaqt tugadi': 'Time is up',
   'Biriktirilgan fayl': 'Attached file',
-  'Hozircha guruh yo‘q': 'No groups yet'
+  'Hozircha guruh yo‘q': 'No groups yet',
+  'Variantli': 'Multiple choice',
+  'Yozma javob': 'Written answer',
+  'To‘g‘ri javob (so‘z, son yoki gap)': 'Correct answer (word, number or sentence)',
+  'Masalan: 25 | twenty five': 'e.g. 25 | twenty five',
+  'Bir nechta qabul qilinadigan variantni | yoki / bilan ajrating':
+    'Separate multiple accepted variants with | or /',
+  'Harf / variant qo‘shish': 'Add option / letter',
+  'Variantni o‘chirish': 'Delete option',
+  'Javobingizni yozing': 'Type your answer',
+  'Kamida bitta savol va javob kiriting': 'Add at least one question and its answer',
+  'Natija o‘chirildi': 'Result deleted',
+  'Bu natijani o‘chirishni tasdiqlaysizmi?': 'Delete this result?'
 });
 
 function t(s) {
@@ -10470,19 +10483,71 @@ function mockAssignedDefs(st) {
     return mockGroupIds(d).indexOf(gid) >= 0;
   }));
 }
+/* Savol harflari: A..Z, keyin AA, AB, ... — variantlar soni cheklanmagan */
+function mockLetter(i) {
+  let n = Math.max(0, Number(i) || 0);
+  let out = '';
+  do {
+    out = String.fromCharCode(65 + (n % 26)) + out;
+    n = Math.floor(n / 26) - 1;
+  } while (n >= 0);
+  return out;
+}
+/* Yozma javobni solishtirish uchun normalizatsiya */
+function mockNormAnswer(v) {
+  return String(v == null ? '' : v).trim().toLowerCase().replace(/\s+/g, ' ');
+}
+/* Ustoz bergan javob variantlari: "25 | twenty five" yoki "color / colour" */
+function mockAcceptedAnswers(q) {
+  const raw = q && q.answer != null ? String(q.answer) : '';
+  return raw.split(/[|/]/).map(mockNormAnswer).filter(function (x) { return !!x; });
+}
+function mockIsWritten(q) { return !!q && q.type === 'written'; }
+function mockCheckAnswer(q, given) {
+  if (!q) return false;
+  if (mockIsWritten(q)) {
+    const val = mockNormAnswer(given);
+    return !!val && mockAcceptedAnswers(q).indexOf(val) >= 0;
+  }
+  if (given == null || given === '') return false;
+  return Number(given) === Number(q.ans);
+}
+/* Ko'rsatish uchun to'g'ri javob matni */
+function mockAnswerText(q) {
+  if (!q) return '';
+  if (mockIsWritten(q)) return String(q.answer || '');
+  return (q.opts && q.opts[q.ans]) || '';
+}
+function mockGivenText(q, given) {
+  if (given == null || given === '') return '';
+  if (mockIsWritten(q)) return String(given);
+  return (q.opts && q.opts[Number(given)]) || '';
+}
 function mockNormalizeQuestion(q) {
   q = q || {};
-  const opts = (Array.isArray(q.opts) ? q.opts : []).map(function (o) {
-    return String(o == null ? '' : o).trim();
-  }).filter(function (o) { return !!o; });
-  let ans = Number(q.ans);
-  if (!isFinite(ans) || ans < 0 || ans >= opts.length) ans = 0;
+  const type = q.type === 'written' ? 'written' : 'mcq';
+  /* Bo'sh variantlar chiqarib tashlanadi, lekin to'g'ri javob indeksi
+     qaysi variant tanlanganiga qarab qayta hisoblanadi. */
+  const raw = Array.isArray(q.opts) ? q.opts : [];
+  const opts = [];
+  const wanted = Number(q.ans);
+  let ans = -1;
+  raw.forEach(function (o, i) {
+    const s = String(o == null ? '' : o).trim();
+    if (!s) return;
+    if (i === wanted) ans = opts.length;
+    opts.push(s);
+  });
+  if (ans < 0) ans = isFinite(wanted) && wanted >= 0 && wanted < opts.length ? wanted : 0;
+  if (opts.length && ans >= opts.length) ans = 0;
   return {
     id: q.id || mockNewId('q'),
+    type: type,
     text: String(q.text || '').trim(),
     cefr: String(q.cefr || '').trim().toUpperCase(),
-    opts: opts,
-    ans: ans,
+    opts: type === 'written' ? [] : opts,
+    ans: type === 'written' ? 0 : ans,
+    answer: type === 'written' ? String(q.answer == null ? '' : q.answer).trim() : '',
     izoh: String(q.izoh || '').trim()
   };
 }
@@ -10680,6 +10745,14 @@ const MockSync = (function () {
       return true;
     } catch (e) { return false; }
   }
+  async function deleteAttempt(id) {
+    if (!ready() || !id) return false;
+    try {
+      const res = await client.from('mock_attempts').delete().eq('id', String(id));
+      if (res.error) { if (tableMissing(res.error)) enabled = false; return false; }
+      return true;
+    } catch (e) { return false; }
+  }
   async function push(attempt) {
     if (!ready() || !attempt) return false;
     const st = getStudents().filter(function (x) { return x.id === attempt.sid; })[0] || null;
@@ -10737,7 +10810,7 @@ const MockSync = (function () {
     return changed;
   }
   return {
-    ready: ready, pushDef: pushDef, deleteDef: deleteDef, push: push,
+    ready: ready, pushDef: pushDef, deleteDef: deleteDef, deleteAttempt: deleteAttempt, push: push,
     pullMine: pullMine, pullAll: pullAll, mergeDefs: mergeDefs, mergeAttempts: mergeAttempts
   };
 })();
@@ -10873,14 +10946,18 @@ function mockRunSections(def) {
 }
 function mockQCardHTML(q, num, run) {
   const sel = run.answers ? run.answers[q.id] : null;
+  const written = mockIsWritten(q);
   return `<div class="card mock-q" data-mq="${esc(q.id)}">
     <div class="mock-q-head"><span class="mock-q-num">${num}</span><span>${esc(q.text || '')}</span>${mockCefrPill(q.cefr)}</div>
-    <div class="mock-opts">${(q.opts || []).map(function (o, oi) {
-      const letter = String.fromCharCode(65 + oi);
-      return `<button type="button" class="mock-opt${Number(sel) === oi ? ' is-sel' : ''}" data-act="mock-pick" data-mq="${esc(q.id)}" data-mopt="${oi}">
-        <span class="mock-opt-key">${letter}</span><span>${esc(o)}</span>
-      </button>`;
-    }).join('')}</div>
+    ${written
+      ? `<div class="mock-written-ans">
+        <input type="text" class="input mock-ans-input" data-mock-ans="${esc(q.id)}" value="${esc(sel == null ? '' : sel)}" placeholder="${esc(t('Javobingizni yozing'))}" autocomplete="off" autocapitalize="off" spellcheck="false" />
+      </div>`
+      : `<div class="mock-opts">${(q.opts || []).map(function (o, oi) {
+        return `<button type="button" class="mock-opt${Number(sel) === oi ? ' is-sel' : ''}" data-act="mock-pick" data-mq="${esc(q.id)}" data-mopt="${oi}">
+          <span class="mock-opt-key">${mockLetter(oi)}</span><span>${esc(o)}</span>
+        </button>`;
+      }).join('')}</div>`}
   </div>`;
 }
 function mockRunnerHTML() {
@@ -11078,6 +11155,18 @@ function mockStart(id) {
   /* "Boshlash" klikining o'zida — mobil brauzerlar avtomatik ijroga ruxsat beradi */
   if (def.category === 'listening') mockListenAutoplay();
 }
+function mockRunProgress() {
+  const run = state.mockRun;
+  if (!run) return;
+  const total = mockAllQuestions(run.def).length;
+  const done = Object.keys(run.answers || {}).length;
+  const btn = $('#mock-submit-btn');
+  if (btn) btn.disabled = done < total || !total;
+  const hint = $('.mock-submit-hint');
+  if (hint) hint.textContent = t('Barcha savollarga javob bering') + ' — ' + done + '/' + total;
+  const title = $('.mock-run-title');
+  if (title) title.textContent = t(mockCat(run.cat).label) + ' · ' + done + '/' + total;
+}
 function mockPick(qid, opt) {
   if (!state.mockRun) return;
   state.mockRun.answers[qid] = Number(opt);
@@ -11087,14 +11176,17 @@ function mockPick(qid, opt) {
       b.classList.toggle('is-sel', Number(b.getAttribute('data-mopt')) === Number(opt));
     });
   }
-  const total = mockAllQuestions(state.mockRun.def).length;
-  const done = Object.keys(state.mockRun.answers).length;
-  const btn = $('#mock-submit-btn');
-  if (btn) btn.disabled = done < total;
-  const hint = $('.mock-submit-hint');
-  if (hint) hint.textContent = t('Barcha savollarga javob bering') + ' — ' + done + '/' + total;
-  const title = $('.mock-run-title');
-  if (title) title.textContent = t(mockCat(state.mockRun.cat).label) + ' · ' + done + '/' + total;
+  mockRunProgress();
+}
+/* Yozma javob maydoni: bo'sh qiymat javob hisoblanmaydi */
+function mockWrittenInput(el) {
+  const run = state.mockRun;
+  if (!run || !el) return;
+  const qid = el.getAttribute('data-mock-ans');
+  const val = String(el.value || '');
+  if (val.trim()) run.answers[qid] = val;
+  else delete run.answers[qid];
+  mockRunProgress();
 }
 /* Mock bo'yicha yagona CEFR chegaralari: eng yuqori daraja, uning
    minimal to'g'ri javob soni ballga yetgan bo'lsa beriladi. */
@@ -11111,7 +11203,7 @@ function mockGrade(def, answers) {
   const qs = mockAllQuestions(def);
   let score = 0;
   qs.forEach(function (q) {
-    if (answers && Number(answers[q.id]) === Number(q.ans)) score++;
+    if (mockCheckAnswer(q, answers ? answers[q.id] : null)) score++;
   });
   const total = qs.length;
   const percent = total ? Math.round(score * 100 / total) : 0;
@@ -11237,13 +11329,14 @@ function mockReviewHTML(a) {
   if (!qs.length) return '';
   return `<div class="mock-review">${qs.map(function (q, i) {
     const chosen = a.answers ? a.answers[q.id] : null;
-    const ok = Number(chosen) === Number(q.ans);
+    const ok = mockCheckAnswer(q, chosen);
+    const given = mockGivenText(q, chosen);
     return `<div class="mock-rev ${ok ? 'is-ok' : 'is-bad'}">
       <div class="mock-rev-q"><span class="mock-q-num">${i + 1}</span> ${esc(q.text || '')}</div>
       <div class="mock-rev-line"><span>${t('Sizning javobingiz')}:</span>
-        <b class="${ok ? 'is-correct' : 'is-wrong'}">${chosen == null || !q.opts[chosen] ? '—' : esc(q.opts[chosen])}</b></div>
+        <b class="${ok ? 'is-correct' : 'is-wrong'}">${given ? esc(given) : '—'}</b></div>
       <div class="mock-rev-line"><span>${t('To‘g‘ri javob')}:</span>
-        <b class="is-correct">${esc(q.opts[q.ans] || '—')}</b></div>
+        <b class="is-correct">${esc(mockAnswerText(q) || '—')}</b></div>
       ${q.izoh ? `<div class="mock-rev-why">${ico('alert', 13)}<span><b>${t('Izoh')}:</b> ${esc(q.izoh)}</span></div>` : ''}
     </div>`;
   }).join('')}</div>`;
@@ -11407,6 +11500,7 @@ function mockTeacherRowHTML(a) {
   const c = mockCat(a.category);
   const open = !!(state.mockTOpen && state.mockTOpen[a.id]);
   const isMcq = c.kind === 'mcq';
+  const delOpen = String(state.mockDelResultId || '') === String(a.id);
   return `<div class="card mock-person ${isMcq ? 'is-mcq' : 'is-manual'}" data-mockrow="${esc(a.id)}">
     <div class="mock-person-head">
       <span class="avatar mock-avatar">${esc(initials(a.studentName || '?'))}</span>
@@ -11426,6 +11520,17 @@ function mockTeacherRowHTML(a) {
       ${open ? mockReviewHTML(a) : ''}` : ''}
     ${c.key === 'speaking' ? mockVideosHTML(a) : ''}
     ${!isMcq ? mockTeacherGradeForm(a) : ''}
+    ${delOpen
+      ? `<div class="mock-confirm">
+        <span>${t('Bu natijani o‘chirishni tasdiqlaysizmi?')}</span>
+        <div class="mock-btns">
+          <button type="button" class="btn btn-xs danger" data-act="mock-result-del-yes" data-id="${esc(a.id)}">${t('Ha, o‘chirish')}</button>
+          <button type="button" class="btn btn-xs ghost" data-act="mock-result-del-cancel">${t('Bekor qilish')}</button>
+        </div>
+      </div>`
+      : `<div class="mock-person-actions">
+        <button type="button" class="btn btn-xs ghost mock-danger" data-act="mock-result-del" data-id="${esc(a.id)}">${ico('trash', 13)} ${t('O‘chirish')}</button>
+      </div>`}
   </div>`;
 }
 function mockTeacherGradeForm(a) {
@@ -11493,6 +11598,23 @@ function mockTeacherScreen() {
     return mockResultSectionHTML(sec, mockSortResults(all.filter(function (a) { return sec.cats.indexOf(a.category) >= 0; })));
   }).join('')}</div>`;
 }
+/* Natijani o'chirish: R2 videolar + lokal holat + Supabase (mock_attempts) */
+async function mockDeleteResult(id) {
+  if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+  const a = mockResultById(id);
+  if (!a) return;
+  const urls = (a.videos || []).map(function (v) { return v && v.url; }).filter(function (u) { return !!u; });
+  for (let i = 0; i < urls.length; i++) {
+    try { await deleteFileFromR2(urls[i]); } catch (e) { /* fayl o'chmasa ham davom etamiz */ }
+  }
+  store.set(K.mock, mockResults().filter(function (x) { return String(x.id) !== String(id); }));
+  if (state.mockTOpen) delete state.mockTOpen[id];
+  if (state.mockDelResultId === id) state.mockDelResultId = '';
+  if (state.mockResultId === id) state.mockResultId = '';
+  MockSync.deleteAttempt(id);
+  render();
+  toast(t('Natija o‘chirildi'));
+}
 function mockSaveTeacherGrade(id) {
   if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
   const a = mockResultById(id);
@@ -11512,7 +11634,12 @@ function mockSaveTeacherGrade(id) {
 
 /* --- Builder: yangi/tahrirlash --- */
 function mockNewQuestion(cefr) {
-  return { id: mockNewId('q'), text: '', cefr: cefr || '', opts: ['', '', '', ''], ans: 0, izoh: '' };
+  return { id: mockNewId('q'), type: 'mcq', text: '', cefr: cefr || '', opts: ['', '', ''], ans: 0, answer: '', izoh: '' };
+}
+function mockQuestionValid(q) {
+  if (!q || !String(q.text || '').trim()) return false;
+  if (q.type === 'written') return !!String(q.answer || '').trim();
+  return (Array.isArray(q.opts) ? q.opts : []).filter(function (o) { return String(o == null ? '' : o).trim(); }).length >= 2;
 }
 function mockNewPart(index, cefr) {
   return { id: mockNewId('p'), title: 'Part ' + (index + 1), cefr: cefr || 'B1', passage: '', questions: [mockNewQuestion(cefr || 'B1')] };
@@ -11578,29 +11705,53 @@ function mockThresholdsHTML(def) {
   </div>`;
 }
 function mockBAnswerSelect(path, val, optCount) {
-  const n = Math.max(2, Math.min(4, optCount || 4));
+  const n = Math.max(2, Number(optCount) || 2);
   const cur = Number(val) || 0;
   return `<select class="input" data-mb="${esc(path)}">${Array.from({ length: n }).map(function (_, i) {
-    return `<option value="${i}"${i === cur ? ' selected' : ''}>${String.fromCharCode(65 + i)}</option>`;
+    return `<option value="${i}"${i === cur ? ' selected' : ''}>${mockLetter(i)}</option>`;
   }).join('')}</select>`;
+}
+function mockBNode(path) {
+  if (!state.mockBuilder) return null;
+  const parts = String(path || '').split('.');
+  let node = state.mockBuilder.draft;
+  for (let i = 0; i < parts.length; i++) {
+    if (node == null) return null;
+    node = node[parts[i]];
+  }
+  return node == null ? null : node;
 }
 function mockBRemove(act, path) {
   return `<button type="button" class="btn btn-xs ghost mock-danger" data-act="${act}" data-path="${esc(path)}">${ico('trash', 12)}</button>`;
 }
 function mockBQFields(base, q, idx) {
   const parent = base.slice(0, base.lastIndexOf('.'));
+  const written = q.type === 'written';
+  const opts = Array.isArray(q.opts) ? q.opts : [];
   return `<div class="mock-build-q">
     <div class="mock-build-q-head"><span class="mock-q-num">${idx + 1}</span>
+      <div class="mock-qtype">
+        <button type="button" class="mock-tab${written ? '' : ' is-active'}" data-act="mock-b-qtype" data-path="${esc(base)}" data-qtype="mcq">${t('Variantli')}</button>
+        <button type="button" class="mock-tab${written ? ' is-active' : ''}" data-act="mock-b-qtype" data-path="${esc(base)}" data-qtype="written">${t('Yozma javob')}</button>
+      </div>
       <button type="button" class="btn btn-xs ghost mock-danger" data-act="mock-b-del-q" data-path="${esc(parent)}" data-idx="${idx}">${ico('trash', 12)}</button>
     </div>
     ${mockBInput(base + '.text', t('Savol matni'))}
-    <div class="mock-build-opts">${[0, 1, 2, 3].map(function (oi) {
-      return mockBInput(base + '.opts.' + oi, String.fromCharCode(65 + oi) + ' ' + t('variant'));
-    }).join('')}</div>
-    <div class="mock-build-answer">
-      <span>${t('To‘g‘ri javob')}</span>
-      ${mockBAnswerSelect(base + '.ans', q.ans, Math.max(2, (q.opts || []).length))}
-    </div>
+    ${written
+      ? `<label class="mock-field-label">${t('To‘g‘ri javob (so‘z, son yoki gap)')}</label>
+        ${mockBInput(base + '.answer', t('Masalan: 25 | twenty five'))}
+        <div class="muted small mock-answer-hint">${t('Bir nechta qabul qilinadigan variantni | yoki / bilan ajrating')}</div>`
+      : `<div class="mock-build-opts">${opts.map(function (_, oi) {
+          return `<div class="mock-build-opt">
+            ${mockBInput(base + '.opts.' + oi, mockLetter(oi) + ' ' + t('variant'))}
+            ${opts.length > 2 ? `<button type="button" class="btn btn-xs ghost mock-danger" data-act="mock-b-del-opt" data-path="${esc(base)}" data-idx="${oi}" aria-label="${esc(t('Variantni o‘chirish'))}">${ico('trash', 12)}</button>` : ''}
+          </div>`;
+        }).join('')}</div>
+        <button type="button" class="btn btn-xs ghost mock-add-opt" data-act="mock-b-add-opt" data-path="${esc(base)}">${ico('plus', 12)} ${t('Harf / variant qo‘shish')}</button>
+        <div class="mock-build-answer">
+          <span>${t('To‘g‘ri javob')}</span>
+          ${mockBAnswerSelect(base + '.ans', q.ans, opts.length)}
+        </div>`}
     ${mockBTextarea(base + '.izoh', 2, t('Izoh'))}
   </div>`;
 }
@@ -11674,7 +11825,9 @@ function mockBuilderBodyHTML(def, c, step) {
           ${(p.questions || []).map(function (q, qi) {
             return `<div class="mock-build-answer-row">
               <span>${qi + 1}. ${esc(q.text || '—')}</span>
-              ${mockBAnswerSelect(base + '.questions.' + qi + '.ans', q.ans, (q.opts || []).length)}
+              ${q.type === 'written'
+                ? `<b class="mock-ans-badge">${esc(q.answer || '—')}</b>`
+                : mockBAnswerSelect(base + '.questions.' + qi + '.ans', q.ans, (q.opts || []).length)}
             </div>`;
           }).join('')}
         </div>`;
@@ -11767,10 +11920,10 @@ function mockBuilderSave() {
   let valid = false;
   if (c.key === 'writing') valid = !!def.prompt;
   else if (c.key === 'speaking') valid = def.questions.some(function (q) { return !!q.text; });
-  else if (c.key === 'reading') valid = def.parts.some(function (p) { return p.questions.some(function (q) { return q.text && q.opts.length >= 2; }); });
-  else if (c.key === 'listening') valid = def.tasks.some(function (tk) { return tk.questions.some(function (q) { return q.text && q.opts.length >= 2; }); });
-  else valid = def.questions.some(function (q) { return q.text && q.opts.length >= 2; });
-  if (!valid) { toast(t('Kamida bitta savol va 2 ta variant kiriting'), 'error'); return; }
+  else if (c.key === 'reading') valid = def.parts.some(function (p) { return p.questions.some(mockQuestionValid); });
+  else if (c.key === 'listening') valid = def.tasks.some(function (tk) { return tk.questions.some(mockQuestionValid); });
+  else valid = def.questions.some(mockQuestionValid);
+  if (!valid) { toast(t('Kamida bitta savol va javob kiriting'), 'error'); return; }
   mockSaveDef(def);
   state.mockBuilder = null;
   state.mockTab = def.category;
@@ -11782,6 +11935,31 @@ function mockBAddQuestion(path) {
   if (!state.mockBuilder) return;
   const arr = mockFieldValue(state.mockBuilder.draft, path);
   if (Array.isArray(arr)) arr.push(mockNewQuestion('B1'));
+  render();
+}
+/* Savol turi: variantli (A, B, C, ...) yoki yozma javob (so'z/gap) */
+function mockBSetQType(path, type) {
+  const q = mockBNode(path);
+  if (!q) return;
+  q.type = type === 'written' ? 'written' : 'mcq';
+  if (q.type === 'mcq' && (!Array.isArray(q.opts) || q.opts.length < 2)) q.opts = ['', '', ''];
+  if (q.type === 'written' && typeof q.answer !== 'string') q.answer = '';
+  render();
+}
+function mockBAddOption(path) {
+  const q = mockBNode(path);
+  if (!q) return;
+  if (!Array.isArray(q.opts)) q.opts = [];
+  q.opts.push('');
+  render();
+}
+function mockBDelOption(path, idx) {
+  const q = mockBNode(path);
+  if (!q || !Array.isArray(q.opts) || q.opts.length <= 2) return;
+  const i = Number(idx);
+  q.opts.splice(i, 1);
+  if (Number(q.ans) >= q.opts.length) q.ans = 0;
+  else if (Number(q.ans) > i) q.ans = Number(q.ans) - 1;
   render();
 }
 function mockBDelQuestion(path, idx) {
@@ -12750,6 +12928,12 @@ document.addEventListener('click', function (e) {
       render();
     },
     'mock-save-grade': function () { mockSaveTeacherGrade(btn.getAttribute('data-id')); },
+    'mock-result-del': function () {
+      state.mockDelResultId = btn.getAttribute('data-id') || '';
+      render();
+    },
+    'mock-result-del-yes': function () { mockDeleteResult(btn.getAttribute('data-id')); },
+    'mock-result-del-cancel': function () { state.mockDelResultId = ''; render(); },
 
     /* --- Mock builder (ustoz) --- */
     'mock-add': function () { mockOpenBuilder(null); },
@@ -12784,6 +12968,9 @@ document.addEventListener('click', function (e) {
       render();
     },
     'mock-b-add-q': function () { mockBAddQuestion(btn.getAttribute('data-path')); },
+    'mock-b-qtype': function () { mockBSetQType(btn.getAttribute('data-path'), btn.getAttribute('data-qtype')); },
+    'mock-b-add-opt': function () { mockBAddOption(btn.getAttribute('data-path')); },
+    'mock-b-del-opt': function () { mockBDelOption(btn.getAttribute('data-path'), btn.getAttribute('data-idx')); },
     'mock-b-del-q': function () {
       const arr = mockBArray(btn.getAttribute('data-path'));
       if (arr.length > 1) arr.splice(Number(btn.getAttribute('data-idx')), 1);
@@ -12933,6 +13120,8 @@ document.addEventListener('input', function (e) {
       state.editor.note = t.value;
       if (state.editor.score != null) persistEditor(true);
     }
+  } else if (t.hasAttribute && t.hasAttribute('data-mock-ans')) {
+    mockWrittenInput(t);
   }
 });
 

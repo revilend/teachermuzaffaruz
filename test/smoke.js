@@ -1203,6 +1203,30 @@ check(!!q('.mock-listen-locknote') && text().includes('bir marta'),
   'mock listening: bir martalik ijro ogohlantirishi ko‘rinadi');
 clickAct('mock-exit');
 click('[data-act="mock-cat-back"]');
+
+/* Yozma javob (so‘z/gap) + cheksiz harf variantlari — avtomatik baholash */
+win.__mock.saveDef({
+  id: 'md_listen2', title: 'Listening Written 1', category: 'listening', groupIds: ['g2'],
+  tasks: [{ id: 'tk2', title: 'Task 1', questions: [
+    { id: 'lw1', type: 'written', text: 'How many visitors came?', answer: '25 | twenty five' },
+    { id: 'lw2', text: 'Which letter is correct?', opts: ['A opt', 'B opt', 'C opt', 'D opt', 'E opt'], ans: 4 }
+  ] }]
+}, true);
+click('[data-act="mock-cat-open"][data-cat="listening"]');
+click('[data-act="mock-start"][data-id="md_listen2"]');
+check(qa('[data-mock-ans="lw1"]').length === 1, 'mock listening: yozma javob uchun matn maydoni chiqadi');
+check(qa('[data-act="mock-pick"][data-mq="lw2"]').length === 5,
+  'mock listening: 5 ta harf varianti (A–E) ko‘rsatiladi');
+setVal('[data-mock-ans="lw1"]', '  Twenty   Five ');
+click('[data-act="mock-pick"][data-mq="lw2"][data-mopt="4"]');
+check(q('[data-act="mock-submit"]').disabled === false,
+  'mock listening: yozma javob va E varianti bilan “Yuborish” faol');
+clickAct('mock-submit');
+check(/2\/2/.test(text()), 'mock listening: yozma javob normalizatsiya qilinib avtomatik baholandi (2/2)');
+clickAct('mock-review');
+check(text().includes('twenty five') && text().includes('E opt'), 'mock listening: yozma va harfli javoblar tahlilda ko‘rsatiladi');
+clickAct('mock-home');
+click('[data-act="mock-cat-back"]');
 closeStudentView();
 
 /* ================= 11. O'QUVCHI: PAROLNI O'ZGARTIRISH ================= */
@@ -1315,6 +1339,49 @@ click('[data-act="mock-del-yes"][data-id="' + builtDef.id + '"]');
 check(!(JSON.parse(win.localStorage.getItem('et_mock_defs')) || []).some(d => d.id === builtDef.id),
   'mock ustoz: test o‘chirildi');
 
+/* Builder: “Harf / variant qo‘shish” + yozma javob + tahrirda guruh qo‘shish */
+clickAct('mock-add');
+setVal('[data-mb="title"]', 'Written & Letters Test');
+click('[data-act="mock-b-step"][data-step="questions"]');
+setVal('[data-mb="parts.0.questions.0.text"]', 'Write the number of visitors.');
+click('[data-act="mock-b-add-opt"][data-path="parts.0.questions.0"]');
+click('[data-act="mock-b-add-opt"][data-path="parts.0.questions.0"]');
+check(!!q('[data-mb="parts.0.questions.0.opts.3"]') && !!q('[data-mb="parts.0.questions.0.opts.4"]'),
+  'mock builder: “Harf / variant qo‘shish” bilan D va E variantlari qo‘shildi');
+check(qa('[data-mb="parts.0.questions.0.ans"] option').length === 5,
+  'mock builder: to‘g‘ri javob tanlagichi A–E (5 ta) variantni ko‘rsatadi');
+setVal('[data-mb="parts.0.questions.0.opts.3"]', 'Option D');
+setVal('[data-mb="parts.0.questions.0.opts.4"]', 'Option E');
+click('[data-act="mock-b-qtype"][data-path="parts.0.questions.0"][data-qtype="written"]');
+check(!!q('[data-mb="parts.0.questions.0.answer"]'), 'mock builder: “Yozma javob” maydoni ko‘rinadi');
+setVal('[data-mb="parts.0.questions.0.answer"]', '42 | forty two');
+setCheck('[data-mb="group"][data-gid="g1"]', true);
+clickAct('mock-save');
+const writtenDef = (JSON.parse(win.localStorage.getItem('et_mock_defs')) || [])
+  .filter(d => d.title === 'Written & Letters Test')[0];
+check(!!writtenDef && writtenDef.parts[0].questions[0].type === 'written' &&
+      writtenDef.parts[0].questions[0].answer === '42 | forty two',
+  'mock builder: yozma javob (42 | forty two) saqlandi');
+click('[data-act="mock-edit"][data-id="' + writtenDef.id + '"]');
+setCheck('[data-mb="group"][data-gid="g2"]', true);
+clickAct('mock-save');
+const regroupedDef = (JSON.parse(win.localStorage.getItem('et_mock_defs')) || [])
+  .filter(d => d.id === writtenDef.id)[0];
+check(regroupedDef.groupIds.indexOf('g1') >= 0 && regroupedDef.groupIds.indexOf('g2') >= 0,
+  'mock ustoz: tahrirlashda qo‘shimcha guruh biriktirildi (g1 + g2)');
+
+/* Natijani o‘chirish (barcha bo‘limlardagi kartalarda) */
+click('[data-act="mock-cat-back"]');
+const delRow = q('#mock-sec-vg .mock-person');
+check(!!delRow && !!delRow.querySelector('[data-act="mock-result-del"]'),
+  'mock ustoz: natija kartasida “O‘chirish” tugmasi bor');
+const delId = delRow.getAttribute('data-mockrow');
+click('[data-act="mock-result-del"][data-id="' + delId + '"]');
+check(!!q('#mock-sec-vg .mock-confirm'), 'mock ustoz: natija o‘chirish tasdiqlashi ko‘rinadi');
+click('[data-act="mock-result-del-yes"][data-id="' + delId + '"]');
+check(!(JSON.parse(win.localStorage.getItem('et_mock_results')) || []).some(a => a.id === delId),
+  'mock ustoz: natija lokal holatdan o‘chirildi');
+
 check(!!q('#mock-sec-rl') && !q('#mock-sec-rl').hidden, 'mock ustoz: Reading/Listening natija bo‘limi');
 check(text().includes('Reading va Listening javoblari'), 'mock ustoz: bo‘lim sarlavhasi ko‘rinadi');
 check(text().includes('Jasur Karimov'), 'mock ustoz: o‘quvchi to‘liq ismi');
@@ -1325,7 +1392,8 @@ check(/4\/4/.test(text()) && !!q('#mock-sec-rl .mock-cefr'), 'mock ustoz: ball v
 clickAct('mock-review');
 check(text().includes('Izoh') && text().includes('To‘g‘ri javob'), 'mock ustoz: to‘liq javoblar tahlili');
 
-click('[data-act="mock-cat-back"]');
+/* Natija o‘chirilgach asosiy mock ekranidamiz — “Orqaga” faqat kerak bo‘lsa bosiladi */
+if (q('[data-act="mock-cat-back"]')) click('[data-act="mock-cat-back"]');
 check(!!q('#mock-sec-writing') && !q('#mock-sec-writing').hidden && !!q('#mock-sec-writing .mock-ta'),
   'mock ustoz: Writing bo‘limi va tahrirlanadigan matn');
 const mwRow = q('#mock-sec-writing .mock-person');

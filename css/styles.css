@@ -3103,6 +3103,18 @@ html[data-theme="dark"] .mock-confirm { background: rgba(244, 63, 94, 0.14); }
   .mock-build-opts { grid-template-columns: 1fr; }
 }
 
+/* ==== Cheksiz variantlar (A..Z, AA...) va yozma javob ==== */
+.mock-written-ans { margin-top: 11px; }
+.mock-ans-input { width: 100%; }
+.mock-qtype { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.mock-qtype .mock-tab { padding: 4px 9px; font-size: 11px; }
+.mock-build-opt { display: flex; align-items: center; gap: 5px; }
+.mock-build-opt .input { flex: 1; min-width: 0; margin-top: 0; }
+.mock-add-opt { margin-top: 7px; }
+.mock-answer-hint { margin-top: 4px; line-height: 1.45; }
+.mock-ans-badge { font-size: 12px; font-weight: 700; color: var(--accent); }
+.mock-person-actions { display: flex; justify-content: flex-end; margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--line); }
+
 /* ==== 6-kartali grid, o'quvchi ro'yxati, taymer, CEFR ustuni ==== */
 .mock-cats-6 .mock-cat { align-items: center; }
 .mock-cat-go { margin-left: auto; flex: none; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 8px; background: var(--bg); color: var(--muted); }
