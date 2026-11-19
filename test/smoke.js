@@ -413,7 +413,7 @@ check(q('#password-input').value === '', 'login: noto\'g\'ri parol tozalanadi');
 await loginAs('m_amirov', '123');
 check(text().includes('Xush kelibsiz') && text().includes('Muzaffar Amirov'), 'ustoz: dashboard salomi "Xush kelibsiz, Muzaffar Amirov!"');
 check(q('#app-header').textContent.includes('Muzaffar Amirov'), 'ustoz: headerda "Muzaffar Amirov" brendi');
-check(navLabels().length === 9, 'ustoz: 9 ta nav tabi (' + navLabels().join(', ') + ')');
+check(navLabels().length === 10, 'ustoz: 10 ta nav tabi (' + navLabels().join(', ') + ')');
 
 /* --- Vektor ikonka tizimi: barcha emoji o'rniga SVG badge'lar --- */
 check(qa('.quick-grid .quick-ico').length === 9, 'icon: TEZ AMALLAR gridida 9 ta ikonka badge');
@@ -967,7 +967,7 @@ check(text().includes('8-sinf') && text().includes('General English'), 'student:
 check(q('#app-header').textContent.includes("O'quvchi"), 'student: headerda "O\'quvchi"');
 check(navLabels().length === 2 && navLabels().join(',') === 'Kabinet,Profil', 'student: nav faqat Kabinet + Profil');
 
-check(qa('.student-action').length === 5, 'student: kabinetda 5 ta asosiy bo\'lim kartasi');
+check(qa('.student-action').length === 6, 'student: kabinetda 6 ta asosiy bo\'lim kartasi');
 check(!text().includes('Tez amallar'), 'student: "Tez amallar" sarlavhasi yo\'q');
 openStudentView('grades');
 check(text().includes('Baholar') && qa('.grade-row').length > 0, 'student: baholar ichki oynasi');
@@ -1026,8 +1026,8 @@ check(text().includes('Speaking topshirish') && !text().includes('Speaking qarzi
 check(q('#screen').firstElementChild && q('#screen').firstElementChild.classList.contains('hero-card'),
   "kabinet tartibi: profil kartasi eng birinchi o'rinda (maktab guruhi)");
 check(!q('.pay-banner'), "kabinet tartibi: maktab guruhida to'lov banneri umuman yo'q");
-check(!!q('.student-actions') && q('.student-actions').children.length === 5,
-  "kabinet tartibi: 5 ta bo'lim kartasi (2x2 grid) profil kartasidan keyin");
+check(!!q('.student-actions') && q('.student-actions').children.length === 6,
+  "kabinet tartibi: 6 ta bo'lim kartasi (2x2 grid) profil kartasidan keyin");
 
 /* --- Repetitorlik guruhi (g2) o'quvchisi: to'lov bo'limi ko'rinadi --- */
 logout();
@@ -1053,6 +1053,75 @@ check(!!q('.pay-banner') && /to'lov|To'langan/i.test(text()),
 logout();
 await loginAs('jasur', '123');
 check(text().includes('Jasur Karimov'), "guruh turi: Jasur qayta kirdi (keyingi testlar uchun)");
+
+/* ================= 11b. MOCK TESTLAR (O'QUVCHI) ================= */
+forceNav('home');
+check(!!q('[data-act="student-view"][data-view="mock"]'), 'mock: kabinetda “Mock testlar” kartasi bor');
+openStudentView('mock');
+check(qa('[data-act="mock-start"]').length === 6, 'mock: 6 ta bo‘lim kartasi');
+check(text().includes('Reading') && text().includes('Listening') && text().includes('Writing') &&
+      text().includes('Speaking') && text().includes('Grammar') && text().includes('Vocabulary'),
+  'mock: 6 bo‘lim nomi (Reading/Listening/Writing/Speaking/Grammar/Vocabulary)');
+
+/* Reading — matn + savollar, avtomatik baholash va izohlar */
+click('[data-act="mock-start"][data-cat="reading"]');
+check(!!q('.mock-passage') && qa('[data-act="mock-pick"]').length === 12,
+  'mock reading: matn va 12 ta variant ko‘rinadi');
+check(q('[data-act="mock-submit"]').disabled === true, 'mock reading: javobsiz “Yuborish” bloklangan');
+['r1', 'r2', 'r3', 'r4'].forEach(function (qid) {
+  click('[data-act="mock-pick"][data-mq="' + qid + '"][data-mopt="0"]');
+});
+check(q('[data-act="mock-submit"]').disabled === false, 'mock reading: barcha javoblardan keyin “Yuborish” faol');
+clickAct('mock-submit');
+check(!!q('.mock-score-card') && /4\/4/.test(text()) && text().includes('100%') && !!q('.mock-cefr'),
+  'mock reading: ball, foiz va CEFR badge hisoblandi');
+check(!!q('[data-act="mock-review"]'), 'mock reading: “Javoblarni ko‘rib chiqish” tugmasi bor');
+clickAct('mock-review');
+check(text().includes('Sizning javobingiz') && text().includes('To‘g‘ri javob') && text().includes('Izoh'),
+  'mock reading: javob, to‘g‘ri javob va Izoh ko‘rsatiladi');
+
+/* Writing — matn yuboriladi, ustoz tekshiruvi kutiladi */
+clickAct('mock-home');
+click('[data-act="mock-start"][data-cat="writing"]');
+const mockEssay = 'I agree that children should start learning a second language at primary school. ' +
+  'Young learners remember new sounds quickly and they are not afraid of making mistakes. ' +
+  'For example, my cousin learned English songs at the age of seven and now she speaks fluently.';
+setVal('#mock-writing', mockEssay);
+check(Number(q('#mock-word-count').textContent) === mockEssay.trim().split(/\s+/).length,
+  'mock writing: so‘z hisoblagichi ishlaydi');
+clickAct('mock-submit');
+check(text().includes('Baholanmoqda'), 'mock writing: yuborilgach ustoz tekshiruvi kutilmoqda');
+
+/* Vocabulary — avtomatik baholash */
+clickAct('mock-home');
+click('[data-act="mock-start"][data-cat="vocabulary"]');
+['v1', 'v2', 'v3', 'v4', 'v5'].forEach(function (qid) {
+  click('[data-act="mock-pick"][data-mq="' + qid + '"][data-mopt="0"]');
+});
+clickAct('mock-submit');
+check(/5\/5/.test(text()), 'mock vocabulary: avtomatik baholandi (5/5)');
+
+/* Speaking — rasm, savol bo‘yicha video va avtomatik o‘tish */
+clickAct('mock-home');
+click('[data-act="mock-start"][data-cat="speaking"]');
+check(!!q('.mock-q-img'), 'mock speaking: 1-savolda o‘rta o‘lchamdagi rasm bor');
+check(qa('.mock-dot').length === 4, 'mock speaking: 4 savol progressi');
+clickAct('mock-speak-record');
+const spAttemptId = (JSON.parse(win.localStorage.getItem('et_mock_results')) || [])
+  .filter(a => a.category === 'speaking').pop().id;
+check(!!spAttemptId, 'mock speaking: video urinishi yaratildi');
+click('[data-act="speak-rec-close"]');
+win.__mock.saveSpeakingVideo(spAttemptId, 'sp1',
+  'https://pub-836df3817ab64cee9075b55d51fe6061.r2.dev/mock/demo.webm',
+  { eyeContactPercent: 91, lookAwayCount: 0, durationSec: 12 });
+check((q('.mock-speak-step') || {}).textContent.indexOf('2 / 4') >= 0,
+  'mock speaking: video saqlangach 2-savolga avtomatik o‘tildi');
+const spSaved = JSON.parse(win.localStorage.getItem('et_mock_results')).filter(a => a.id === spAttemptId)[0];
+check(!!spSaved && spSaved.videos.length === 1 && spSaved.videos[0].url.indexOf('demo.webm') > 0,
+  'mock speaking: video savol bo‘yicha R2 havolasi bilan saqlandi');
+clickAct('mock-speak-finish');
+check(text().includes('Baholanmoqda'), 'mock speaking: yakunlangach ustoz tekshiruvi kutilmoqda');
+closeStudentView();
 
 /* ================= 11. O'QUVCHI: PAROLNI O'ZGARTIRISH ================= */
 click('[data-act="nav"][data-screen="profile"]');
@@ -1083,7 +1152,49 @@ logout();
 await loginAs('m_amirov', '123');
 click('[data-act="nav"][data-screen="students"]');
 check(text().includes('Nilufar Ergasheva'), 'ustoz: qayta kirdi');
+
 check(!!q('.s-contact .login-val') && !q('.s-contact code'), "login: o'quvchi kartasida login oddiy matn — kod badge yo'q");
+logout();
+
+/* --- Mock testlar natijalari (ustoz paneli) --- */
+await loginAs('m_amirov', '123');
+forceNav('mock');
+check(qa('[data-act="mock-tab"]').length === 6, 'mock ustoz: 6 ta kategoriya tabi');
+check(!!q('#mock-sec-rl') && !q('#mock-sec-rl').hidden, 'mock ustoz: Reading/Listening natija bo‘limi');
+check(text().includes('Reading va Listening javoblari'), 'mock ustoz: bo‘lim sarlavhasi ko‘rinadi');
+check(text().includes('Jasur Karimov'), 'mock ustoz: o‘quvchi to‘liq ismi');
+check(qa('#mock-sec-rl .chip-class').length >= 1 && qa('#mock-sec-rl .pill').length >= 1 &&
+      qa('#mock-sec-rl .mock-person-when').length >= 1,
+  'mock ustoz: sinf, guruh va sana/vaqt ko‘rsatiladi');
+check(/4\/4/.test(text()) && !!q('#mock-sec-rl .mock-cefr'), 'mock ustoz: ball va CEFR badge');
+clickAct('mock-review');
+check(text().includes('Izoh') && text().includes('To‘g‘ri javob'), 'mock ustoz: to‘liq javoblar tahlili');
+
+click('[data-act="mock-tab"][data-cat="writing"]');
+check(!q('#mock-sec-writing').hidden && !!q('#mock-sec-writing .mock-ta'),
+  'mock ustoz: Writing bo‘limi va tahrirlanadigan matn');
+const mwRow = q('#mock-sec-writing .mock-person');
+const mwId = mwRow.getAttribute('data-mockrow');
+setVal('#mock-t-text-' + mwId, 'Teacher edited version of the essay.');
+setVal('#mock-t-feedback-' + mwId, 'Good ideas — add one more example.');
+setVal('#mock-t-grade-' + mwId, '8');
+click('[data-act="mock-save-grade"][data-id="' + mwId + '"]');
+const mwSaved = JSON.parse(win.localStorage.getItem('et_mock_results')).filter(a => a.id === mwId)[0];
+check(mwSaved.teacherText === 'Teacher edited version of the essay.' &&
+      mwSaved.feedback === 'Good ideas — add one more example.' && mwSaved.teacherGrade === '8',
+  'mock ustoz: tahrir + izoh + erkin baho (teacher_grade) saqlandi');
+
+click('[data-act="mock-tab"][data-cat="speaking"]');
+check(!q('#mock-sec-speaking').hidden && qa('#mock-sec-speaking video').length >= 1,
+  'mock ustoz: speaking videolari ijro uchun ko‘rinadi');
+setVal('#mock-t-grade-' + spAttemptId, '7');
+click('[data-act="mock-save-grade"][data-id="' + spAttemptId + '"]');
+check(JSON.parse(win.localStorage.getItem('et_mock_results')).filter(a => a.id === spAttemptId)[0].teacherGrade === '7',
+  'mock ustoz: speaking video bahosi saqlandi');
+
+click('[data-act="mock-tab"][data-cat="vocabulary"]');
+check(!q('#mock-sec-vg').hidden && text().includes('Vocabulary va Grammar'),
+  'mock ustoz: Vocabulary va Grammar birlashgan bo‘limi');
 logout();
 
 await loginAs('nilufar', '7777');
@@ -2617,7 +2728,7 @@ await (async () => {
         text().includes('Telegram bot (@uzbekspeakingcheckbot)'),
     'i18n EN: 3 karta sarlavhalari inglizcha');
   await loginAs('m_amirov', '123');
-  check(navLabels().join(',') === 'Home,Students,Homework,Submissions,Payments,Grades,Attendance,Speaking,Profile',
+  check(navLabels().join(',') === 'Home,Students,Homework,Submissions,Mock Tests,Payments,Grades,Attendance,Speaking,Profile',
     'i18n: ustoz nav EN tilida');
   check(q('#app-header').textContent.includes('Home'),
     'i18n: header bo‘lim nomi EN (Home)');
@@ -2638,7 +2749,7 @@ await (async () => {
 
   /* UZ ga qaytarish */
   click('[data-act="toggle-lang"]');
-  check(navLabels().join(',') === "Bosh,O'quvchi,Uyga vazifalar,Topshiriqlar,To'lov,Baholar,Davomat,Speaking,Profil",
+  check(navLabels().join(',') === "Bosh,O'quvchi,Uyga vazifalar,Topshiriqlar,Mock testlar,To'lov,Baholar,Davomat,Speaking,Profil",
     "i18n: UZ ga qaytish — nav o'zbekcha qoldi");
   check(q('.week-nav-bar').textContent.includes('Oldingi hafta'),
     'i18n: hafta tugmalari UZ ga qaytdi');

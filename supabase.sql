@@ -434,3 +434,21 @@ drop policy if exists "homework-media anon delete" on storage.objects;
 create policy "homework-media anon delete" on storage.objects
   for delete to anon, authenticated
   using (bucket_id = 'homework-media');
+
+-- ==================== MOCK TESTS ====================
+-- 6 bo'limli mock test natijalari (payload — to'liq urinish JSON ko'rinishida).
+create table if not exists public.mock_tests (
+  id text primary key,
+  student_id bigint references public.students (id) on delete cascade,
+  sid text,
+  category text,
+  payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists mock_tests_sid_idx on public.mock_tests (sid, updated_at desc);
+create index if not exists mock_tests_cat_idx on public.mock_tests (category, updated_at desc);
+alter table public.mock_tests enable row level security;
+drop policy if exists "mock_tests anon all" on public.mock_tests;
+create policy "mock_tests anon all" on public.mock_tests
+  for all to anon, authenticated using (true) with check (true);
