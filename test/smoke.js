@@ -235,6 +235,7 @@ const click = el => { const node = typeof el === 'string' ? q(el) : el; if (!nod
 const clickAct = act => click(q('[data-act="' + act + '"]'));
 const setVal = (sel, val) => { const el = q(sel); if (!el) throw new Error('setVal: ' + sel + ' topilmadi'); el.value = val; el.dispatchEvent(new win.Event('input', { bubbles: true })); };
 const changeVal = (sel, val) => { const el = q(sel); if (!el) throw new Error('changeVal: ' + sel + ' topilmadi'); el.value = val; el.dispatchEvent(new win.Event('change', { bubbles: true })); };
+const setCheck = (sel, checked) => { const el = q(sel); if (!el) throw new Error('setCheck: ' + sel + ' topilmadi'); el.checked = !!checked; el.dispatchEvent(new win.Event('change', { bubbles: true })); };
 const forceNav = screen => {
   const b = doc.createElement('button');
   b.setAttribute('data-act', 'nav');
@@ -416,8 +417,8 @@ check(q('#app-header').textContent.includes('Muzaffar Amirov'), 'ustoz: headerda
 check(navLabels().length === 10, 'ustoz: 10 ta nav tabi (' + navLabels().join(', ') + ')');
 
 /* --- Vektor ikonka tizimi: barcha emoji o'rniga SVG badge'lar --- */
-check(qa('.quick-grid .quick-ico').length === 9, 'icon: TEZ AMALLAR gridida 9 ta ikonka badge');
-check(qa('.quick-grid .quick-ico svg').length === 9, "icon: har bir badge ichida SVG (emoji o'rniga)");
+check(qa('.quick-grid .quick-ico').length === 10, 'icon: TEZ AMALLAR gridida 10 ta ikonka badge');
+check(qa('.quick-grid .quick-ico svg').length === 10, "icon: har bir badge ichida SVG (emoji o'rniga)");
 check(['tint-indigo', 'tint-emerald', 'tint-sky', 'tint-amber', 'tint-purple', 'tint-slate', 'tint-rose', 'tint-teal']
   .every(t => qa('.quick-ico.' + t).length === 1),
   'icon: indigo/emerald/sky/amber/purple/slate/rose/teal tints har biri bittadan');
@@ -425,8 +426,8 @@ const quickOrder = qa('.quick-grid .quick[data-screen]').map(b => b.getAttribute
 check(JSON.stringify(quickOrder.slice(0, 5)) ===
   JSON.stringify(['homework', 'attendance', 'submissions', 'speaking', 'grades']),
   'home: tez amallar tartibi — uyga vazifa, davomat, topshiriqlar, speaking, baholar');
-check(quickOrder.length === 8 && qa('.quick-grid .quick').length === 9,
-  'home: qolgan tez amallar beshtalikdan keyin saqlangan (9 ta karta)');
+check(quickOrder.length === 9 && qa('.quick-grid .quick').length === 10,
+  'home: qolgan tez amallar beshtalikdan keyin saqlangan (10 ta karta)');
 
 /* Sayt speaking videosi → ustozga FAQAT matnli Telegram xabari (video/baho tugmalarisiz) */
 const outboxBeforeWebNotice = (cloudStub.db.telegram_outbox || []).length;
@@ -1055,16 +1056,61 @@ await loginAs('jasur', '123');
 check(text().includes('Jasur Karimov'), "guruh turi: Jasur qayta kirdi (keyingi testlar uchun)");
 
 /* ================= 11b. MOCK TESTLAR (O'QUVCHI) ================= */
+/* Demo/sinov testlari YO'Q: biriktirilmagan bo'lsa bo'sh holat ko'rinadi */
 forceNav('home');
 check(!!q('[data-act="student-view"][data-view="mock"]'), 'mock: kabinetda “Mock testlar” kartasi bor');
 openStudentView('mock');
-check(qa('[data-act="mock-start"]').length === 6, 'mock: 6 ta bo‘lim kartasi');
-check(text().includes('Reading') && text().includes('Listening') && text().includes('Writing') &&
-      text().includes('Speaking') && text().includes('Grammar') && text().includes('Vocabulary'),
-  'mock: 6 bo‘lim nomi (Reading/Listening/Writing/Speaking/Grammar/Vocabulary)');
+check(qa('[data-act="mock-start"]').length === 0 && text().includes('biriktirilmagan'),
+  'mock: biriktirilgan test yo‘q — bo‘sh holat ko‘rinadi');
+check(!text().includes('Buyuk Barer') && !text().includes('Reading — 1-qism'),
+  'mock: hardcoded/demo testlar butunlay olib tashlangan');
+
+/* Ustoz yaratgan testlar (g2 guruhiga biriktirilgan) */
+const mockOpts = function () { return ['To describe the reef', 'To advertise tours', 'To explain coral growing']; };
+win.__mock.saveDef({
+  id: 'md_read', title: 'Reading Practice 1', category: 'reading', groupIds: ['g2'], cefr: 'B1',
+  parts: [{ id: 'p1', title: 'Part 1', cefr: 'B1',
+    passage: 'The Great Barrier Reef is the world\'s largest coral reef system. Rising sea temperatures have caused mass coral bleaching.',
+    questions: [
+      { id: 'r1', text: 'What is the main purpose of the text?', opts: mockOpts(), ans: 0, izoh: 'It describes the reef and its threats.' },
+      { id: 'r2', text: 'What causes coral bleaching?', opts: ['Rising sea temperatures', 'Tourists', 'New nurseries'], ans: 0, izoh: 'The text says rising sea temperatures.' },
+      { id: 'r3', text: 'What are local organisations doing?', opts: ['Replanting coral', 'Building roads', 'Increasing fishing'], ans: 0, izoh: 'They replant coral.' },
+      { id: 'r4', text: 'Which statement is true?', opts: ['The reef is over 2,300 km', 'It has one fish species', 'Bleaching helps corals'], ans: 0, izoh: 'The first sentence says 2,300 km.' }
+    ] }]
+}, true);
+win.__mock.saveDef({
+  id: 'md_write', title: 'Writing Task 1', category: 'writing', groupIds: ['g2'],
+  prompt: 'Some people believe students should learn a second language from primary school. Do you agree?',
+  instruction: 'Write at least 70 words.'
+}, true);
+win.__mock.saveDef({
+  id: 'md_voc', title: 'Vocabulary Check', category: 'vocabulary', groupIds: ['g2'], cefr: 'A2',
+  questions: [
+    { id: 'v1', text: 'A person who studies stars is an ___.', opts: ['astronomer', 'architect', 'accountant'], ans: 0, izoh: 'Astronomer studies stars.' },
+    { id: 'v2', text: 'Opposite of “ancient”.', opts: ['modern', 'old', 'historic'], ans: 0, izoh: 'Modern is the opposite.' },
+    { id: 'v3', text: '“Reliable” means ___.', opts: ['can be trusted', 'very fast', 'expensive'], ans: 0, izoh: 'Reliable means trustworthy.' },
+    { id: 'v4', text: 'Closest to “enormous”.', opts: ['huge', 'tiny', 'narrow'], ans: 0, izoh: 'Enormous means huge.' },
+    { id: 'v5', text: '“To borrow” means ___.', opts: ['take and return later', 'buy forever', 'give away'], ans: 0, izoh: 'Borrow means take for a time.' }
+  ]
+}, true);
+win.__mock.saveDef({
+  id: 'md_speak', title: 'Speaking Practice', category: 'speaking', groupIds: ['g2'],
+  questions: [
+    { id: 'sp1', text: 'Describe a place in your city that you like.', imageUrl: 'https://pub-836df3817ab64cee9075b55d51fe6061.r2.dev/mock/demo.png' },
+    { id: 'sp2', text: 'What do you usually do there?' },
+    { id: 'sp3', text: 'How has it changed in recent years?' },
+    { id: 'sp4', text: 'Would you recommend it to a visitor?' }
+  ]
+}, true);
+closeStudentView();
+openStudentView('mock');
+check(qa('[data-act="mock-start"]').length === 4, 'mock: faqat biriktirilgan 4 ta test ko‘rinadi');
+check(text().includes('Reading Practice 1') && text().includes('Writing Task 1') &&
+      text().includes('Vocabulary Check') && text().includes('Speaking Practice'),
+  'mock: ustoz yaratgan testlar ro‘yxati ko‘rinadi');
 
 /* Reading — matn + savollar, avtomatik baholash va izohlar */
-click('[data-act="mock-start"][data-cat="reading"]');
+click('[data-act="mock-start"][data-id="md_read"]');
 check(!!q('.mock-passage') && qa('[data-act="mock-pick"]').length === 12,
   'mock reading: matn va 12 ta variant ko‘rinadi');
 check(q('[data-act="mock-submit"]').disabled === true, 'mock reading: javobsiz “Yuborish” bloklangan');
@@ -1082,7 +1128,7 @@ check(text().includes('Sizning javobingiz') && text().includes('To‘g‘ri javo
 
 /* Writing — matn yuboriladi, ustoz tekshiruvi kutiladi */
 clickAct('mock-home');
-click('[data-act="mock-start"][data-cat="writing"]');
+click('[data-act="mock-start"][data-id="md_write"]');
 const mockEssay = 'I agree that children should start learning a second language at primary school. ' +
   'Young learners remember new sounds quickly and they are not afraid of making mistakes. ' +
   'For example, my cousin learned English songs at the age of seven and now she speaks fluently.';
@@ -1094,7 +1140,7 @@ check(text().includes('Baholanmoqda'), 'mock writing: yuborilgach ustoz tekshiru
 
 /* Vocabulary — avtomatik baholash */
 clickAct('mock-home');
-click('[data-act="mock-start"][data-cat="vocabulary"]');
+click('[data-act="mock-start"][data-id="md_voc"]');
 ['v1', 'v2', 'v3', 'v4', 'v5'].forEach(function (qid) {
   click('[data-act="mock-pick"][data-mq="' + qid + '"][data-mopt="0"]');
 });
@@ -1103,7 +1149,7 @@ check(/5\/5/.test(text()), 'mock vocabulary: avtomatik baholandi (5/5)');
 
 /* Speaking — rasm, savol bo‘yicha video va avtomatik o‘tish */
 clickAct('mock-home');
-click('[data-act="mock-start"][data-cat="speaking"]');
+click('[data-act="mock-start"][data-id="md_speak"]');
 check(!!q('.mock-q-img'), 'mock speaking: 1-savolda o‘rta o‘lchamdagi rasm bor');
 check(qa('.mock-dot').length === 4, 'mock speaking: 4 savol progressi');
 clickAct('mock-speak-record');
@@ -1156,10 +1202,68 @@ check(text().includes('Nilufar Ergasheva'), 'ustoz: qayta kirdi');
 check(!!q('.s-contact .login-val') && !q('.s-contact code'), "login: o'quvchi kartasida login oddiy matn — kod badge yo'q");
 logout();
 
-/* --- Mock testlar natijalari (ustoz paneli) --- */
+/* --- Mock testlar: ustoz paneli --- */
 await loginAs('m_amirov', '123');
+check(!!q('.quick-grid [data-act="nav"][data-screen="mock"]'),
+  'mock ustoz: TEZ AMALLAR ichida “Mock testlar” tezkor kartasi');
 forceNav('mock');
 check(qa('[data-act="mock-tab"]').length === 6, 'mock ustoz: 6 ta kategoriya tabi');
+check(!!q('[data-act="mock-add"]') && text().includes("Yangi Mock qo'shish"),
+  'mock ustoz: “+ Yangi Mock qo‘shish” tugmasi');
+check(!!q('.mock-def[data-def="md_read"]'), 'mock ustoz: yaratilgan reading test ro‘yxati ko‘rinadi');
+check(qa('.mock-def[data-def="md_read"] .mock-def-group').length === 1 &&
+      text().includes('General English'),
+  'mock ustoz: test tepasida biriktirilgan guruh badge’i');
+
+/* Builder: Reading — Part 1/Part 2, step tablar, savol/javob/izoh */
+clickAct('mock-add');
+check(!!q('.mock-build') && !!q('[data-mb="title"]'), 'mock builder: forma ochildi');
+check(qa('[data-mb="parts.0.passage"], [data-mb="parts.1.passage"]').length === 2,
+  'mock builder reading: Part 1 va Part 2 matn maydonlari');
+check(qa('[data-act="mock-b-step"]').length === 4, 'mock builder reading: Matn→Savollar→Javoblar→Izoh tablari');
+setVal('[data-mb="title"]', 'Builder Reading Test');
+setVal('[data-mb="parts.0.passage"]', 'A short passage for the builder test.');
+setCheck('[data-mb="group"][data-gid="g1"]', true);
+click('[data-act="mock-b-step"][data-step="questions"]');
+setVal('[data-mb="parts.0.questions.0.text"]', 'What is the passage about?');
+setVal('[data-mb="parts.0.questions.0.opts.0"]', 'A builder test');
+setVal('[data-mb="parts.0.questions.0.opts.1"]', 'A holiday');
+changeVal('[data-mb="parts.0.questions.0.ans"]', '0');
+click('[data-act="mock-b-step"][data-step="izoh"]');
+setVal('[data-mb="parts.0.questions.0.izoh"]', 'The passage is about a builder test.');
+clickAct('mock-save');
+const builtDef = (JSON.parse(win.localStorage.getItem('et_mock_defs')) || [])
+  .filter(d => d.title === 'Builder Reading Test')[0];
+check(!!builtDef && builtDef.groupIds.indexOf('g1') >= 0 && !!builtDef.parts[0].questions[0].izoh,
+  'mock builder: reading matn + savol + javob + izoh bilan saqlandi');
+
+/* Guruhlarga biriktirish */
+click('[data-act="mock-assign"][data-id="' + builtDef.id + '"]');
+check(!!q('.mock-assign') && qa('[data-act="mock-assign-toggle"]').length >= 2,
+  'mock ustoz: guruhlarni biriktirish paneli');
+click('[data-act="mock-assign-toggle"][data-gid="g2"]');
+click('[data-act="mock-assign-save"][data-id="' + builtDef.id + '"]');
+const assignedDef = (JSON.parse(win.localStorage.getItem('et_mock_defs')) || [])
+  .filter(d => d.id === builtDef.id)[0];
+check(assignedDef.groupIds.indexOf('g1') >= 0 && assignedDef.groupIds.indexOf('g2') >= 0,
+  'mock ustoz: guruhlar biriktirildi (g1 + g2)');
+
+/* Tahrirlash */
+click('[data-act="mock-edit"][data-id="' + builtDef.id + '"]');
+check((q('[data-mb="title"]') || {}).value === 'Builder Reading Test',
+  'mock ustoz: tahrirlash formasi mavjud qiymatlar bilan ochildi');
+setVal('[data-mb="title"]', 'Builder Reading Test v2');
+clickAct('mock-save');
+check((JSON.parse(win.localStorage.getItem('et_mock_defs')) || [])
+  .some(d => d.id === builtDef.id && d.title === 'Builder Reading Test v2'),
+  'mock ustoz: tahrirlash saqlandi');
+
+/* O'chirish */
+click('[data-act="mock-del"][data-id="' + builtDef.id + '"]');
+click('[data-act="mock-del-yes"][data-id="' + builtDef.id + '"]');
+check(!(JSON.parse(win.localStorage.getItem('et_mock_defs')) || []).some(d => d.id === builtDef.id),
+  'mock ustoz: test o‘chirildi');
+
 check(!!q('#mock-sec-rl') && !q('#mock-sec-rl').hidden, 'mock ustoz: Reading/Listening natija bo‘limi');
 check(text().includes('Reading va Listening javoblari'), 'mock ustoz: bo‘lim sarlavhasi ko‘rinadi');
 check(text().includes('Jasur Karimov'), 'mock ustoz: o‘quvchi to‘liq ismi');
@@ -1906,7 +2010,7 @@ await (async () => {
   check(/\.quick\s*\{[^}]*padding:\s*14px/.test(cssText), 'tez amallar: p-3.5 (14px) padding');
   check(/\.quick-ico\s*\{[^}]*width:\s*36px;\s*\n?\s*height:\s*36px/.test(cssText),
     'tez amallar: ikonka badge bir xil 36×36px');
-  check(qa('.quick-grid .quick').length === 9, "tez amallar: 9 ta karta (barchasi bir xil balandlikda)");
+  check(qa('.quick-grid .quick').length === 10, "tez amallar: 10 ta karta (barchasi bir xil balandlikda)");
 
   /* ================= 21. VOICE RUXSAT KALITI (kartada) ================= */
   logout();

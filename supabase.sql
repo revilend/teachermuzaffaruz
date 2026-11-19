@@ -436,8 +436,29 @@ create policy "homework-media anon delete" on storage.objects
   using (bucket_id = 'homework-media');
 
 -- ==================== MOCK TESTS ====================
--- 6 bo'limli mock test natijalari (payload — to'liq urinish JSON ko'rinishida).
+-- Ustoz yaratgan mock testlar (payload — to'liq ta'rif).
+-- group_ids — shu test biriktirilgan guruhlar ro'yxati (JSON massiv).
 create table if not exists public.mock_tests (
+  id text primary key,
+  title text not null default '',
+  category text,
+  group_ids jsonb not null default '[]'::jsonb,
+  payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+-- Eski o'rnatishlar uchun ustunlar (avval natijalar shu jadvalda saqlanardi)
+alter table public.mock_tests add column if not exists title text not null default '';
+alter table public.mock_tests add column if not exists group_ids jsonb not null default '[]'::jsonb;
+create index if not exists mock_tests_cat_idx on public.mock_tests (category, updated_at desc);
+create index if not exists mock_tests_group_idx on public.mock_tests using gin (group_ids);
+alter table public.mock_tests enable row level security;
+drop policy if exists "mock_tests anon all" on public.mock_tests;
+create policy "mock_tests anon all" on public.mock_tests
+  for all to anon, authenticated using (true) with check (true);
+
+-- O'quvchilar mock urinishlari (payload — to'liq urinish JSON ko'rinishida).
+create table if not exists public.mock_attempts (
   id text primary key,
   student_id bigint references public.students (id) on delete cascade,
   sid text,
@@ -446,9 +467,9 @@ create table if not exists public.mock_tests (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-create index if not exists mock_tests_sid_idx on public.mock_tests (sid, updated_at desc);
-create index if not exists mock_tests_cat_idx on public.mock_tests (category, updated_at desc);
-alter table public.mock_tests enable row level security;
-drop policy if exists "mock_tests anon all" on public.mock_tests;
-create policy "mock_tests anon all" on public.mock_tests
+create index if not exists mock_attempts_sid_idx on public.mock_attempts (sid, updated_at desc);
+create index if not exists mock_attempts_cat_idx on public.mock_attempts (category, updated_at desc);
+alter table public.mock_attempts enable row level security;
+drop policy if exists "mock_attempts anon all" on public.mock_attempts;
+create policy "mock_attempts anon all" on public.mock_attempts
   for all to anon, authenticated using (true) with check (true);
