@@ -3371,11 +3371,37 @@ await (async () => {
   check(text().includes('Restored Student') && text().includes('Present Perfect shakli'),
     'topshiriq: o‘quvchi ismi + vazifa nomi ko‘rinadi');
   check(qa('.sub-filters .chip-btn').length >= 2, 'topshiriq: guruh bo‘yicha filtr chiplari');
+  {
+    const subCss = fs.readFileSync(path.join(root, 'css', 'styles.css'), 'utf8');
+    check(/\.sub-filters \.chip-btn\.active[\s\S]{0,220}color:\s*#ffffff/i.test(subCss),
+      'topshiriq: faol filtr pill matni toza oq (#ffffff)');
+    const bar0 = q('#sub-filters');
+    bar0.scrollLeft = 120;
+    const groupChip = qa('[data-act="sub-group"]').filter(b => b.getAttribute('data-gid') !== 'all')[0];
+    const wantGid = groupChip.getAttribute('data-gid');
+    click(groupChip);
+    const activeChip = q('[data-act="sub-group"].active');
+    check(!!activeChip && activeChip.getAttribute('data-gid') === wantGid,
+      'topshiriq: tanlangan guruh filtri renderdan keyin ham saqlanadi');
+    check(Number(q('#sub-filters').getAttribute('data-scroll')) === 120 &&
+          q('#sub-filters').scrollLeft === 120,
+      'topshiriq: filtr barining gorizontal skroll holati saqlanadi');
+    click('[data-act="sub-group"][data-gid="all"]');
+    check(q('[data-act="sub-group"].active').getAttribute('data-gid') === 'all',
+      'topshiriq: filtr qayta “Barchasi”ga o‘tadi');
+  }
   check(!!q('.sub-card .hw-doc-link'), 'topshiriq: PDF fayl yuklab olish tugmasi bilan');
   setVal('.sub-comment', 'Yaxshi bajaribsan, davom et!');
   clickAct('sub-comment');
   check(await until(() => !!q('.sub-teacher-note'), 3000), 'topshiriq: komentariya yuborildi va ko‘rinadi');
-  const cRow = (cloudStub.db.homework_submissions || [])[0] || {};
+
+  check(q('.sub-comment') && q('.sub-comment').value === '',
+    'topshiriq: yuborilgandan keyin izoh maydoni bo‘sh');
+  check(!!q('.sub-card .sub-gr-badge') && q('.sub-card .sub-gr-badge').textContent.trim().length > 0,
+    'topshiriq: kartada o‘quvchi guruhi badge bilan ko‘rinadi');
+  check(!!q('.sub-teacher-note [data-act="sub-comment-edit"]') &&
+        !!q('.sub-teacher-note [data-act="sub-comment-del"]'),
+    'topshiriq: saqlangan izohda tahrirlash/o‘chirish SVG tugmalari bor');  const cRow = (cloudStub.db.homework_submissions || [])[0] || {};
   check(cRow.teacher_comment === 'Yaxshi bajaribsan, davom et!' && !!cRow.commented_at,
     'topshiriq: teacher_comment + commented_at yangilandi');
   const tgRow = (cloudStub.db.telegram_outbox || []).filter(r => String(r.chat_id) === '555001')[0] || {};
@@ -3384,7 +3410,41 @@ await (async () => {
     'topshiriq: o‘quvchi Telegramiga komentariya xabari navbatga qo‘yildi');
   check(!q('[data-act="nav"][data-screen="submissions"] .nav-badge'),
     'topshiriq: komentariyadan keyin badge yo‘qoladi');
+
+
+  /* (c2) saqlangan komentariyani tahrirlash va o‘chirish */
+  setVal('.sub-comment', 'vaqtinchalik matn');
   forceNav('home');
+  forceNav('submissions');
+  check(q('.sub-comment') && q('.sub-comment').value === '',
+    'topshiriq: boshqa sahifadan qaytganda izoh maydoni bo‘sh qoladi');
+  click('.sub-teacher-note [data-act="sub-comment-edit"]');
+  check(!!q('.sub-edit-comment') && q('.sub-edit-comment').value.indexOf('Yaxshi bajaribsan') === 0,
+    'topshiriq: izoh tahrirlash maydoni mavjud izoh bilan ochiladi');
+  setVal('.sub-edit-comment', 'Yaxshi bajaribsan, davom et! (tahrir)');
+  clickAct('sub-comment-save');
+  check(await until(() => !!q('.sub-teacher-note') &&
+    q('.sub-teacher-note').textContent.indexOf('(tahrir)') >= 0, 3000),
+    'topshiriq: izoh tahrirlandi va ko‘rinadi');
+  click('[data-act="sub-comment-edit"]');
+  clickAct('sub-comment-edit-cancel');
+  check(!!q('.sub-teacher-note') && !q('.sub-edit-comment'),
+    'topshiriq: tahrirlash bekor qilinadi');
+  click('.sub-teacher-note [data-act="sub-comment-del"]');
+  check(!!q('.sub-teacher-note.is-confirm') && text().includes("Komentariyani o'chirasizmi?"),
+    'topshiriq: izoh o‘chirishdan oldin tasdiq so‘raladi');
+  clickAct('sub-comment-del-cancel');
+  check(!!q('.sub-teacher-note') && !q('.sub-teacher-note.is-confirm'),
+    'topshiriq: o‘chirish bekor qilindi — izoh qoldi');
+  click('[data-act="sub-comment-del"]');
+  clickAct('sub-comment-del-confirm');
+  check(await until(() => !q('.sub-teacher-note'), 3000),
+    'topshiriq: izoh o‘chirildi (Supabase + lokal)');
+  /* keyingi o‘quvchi testlari uchun izohni qayta yozamiz */
+  setVal('.sub-comment', 'Yaxshi bajaribsan, davom et!');
+  clickAct('sub-comment');
+  check(await until(() => !!q('.sub-teacher-note'), 3000),
+    'topshiriq: izoh qayta yozildi');  forceNav('home');
   check(!!q('[data-act="open-hw"]') && !q('.hw-item'),
     'topshiriq: Bosh sahifadagi “Uyga vazifa berish” tugmasi tartibi buzilmagan');
 

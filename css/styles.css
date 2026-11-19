@@ -2834,3 +2834,31 @@ html[data-theme="dark"] .speak-status.is-done { background: rgba(16, 185, 129, .
 }
 .hw-comment-notice button { flex: none; white-space: nowrap; }
 
+
+/* ==================== TOPSHIRIQLAR: filtr, izoh tahriri, guruh badge ==================== */
+.sub-filters {
+  scroll-behavior: auto;
+  scrollbar-width: thin;
+}
+.sub-filters .chip-btn.active,
+.chip-btn.active {
+  background: var(--accent-grad);
+  border-color: transparent;
+  color: #ffffff;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, .18);
+}
+html[data-theme="dark"] .sub-filters .chip-btn.active,
+html[data-theme="dark"] .chip-btn.active { color: #ffffff; }
+
+.sub-name-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.sub-gr-badge { flex: none; font-weight: 700; }
+.sub-teacher-note { align-items: center; }
+.sub-teacher-note.is-confirm { background: rgba(239, 68, 68, .10); }
+.sub-note-text { flex: 1; min-width: 0; }
+.sub-note-actions { display: inline-flex; align-items: center; gap: 2px; flex: none; }
+.sub-note-actions .chat-ico { color: #15803d; }
+.sub-note-actions .chat-ico.danger { color: #dc2626; }
+html[data-theme="dark"] .sub-note-actions .chat-ico { color: #86efac; }
+html[data-theme="dark"] .sub-note-actions .chat-ico.danger { color: #fca5a5; }
+.sub-note-edit { margin-top: 8px; }
+.sub-note-edit-actions { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }

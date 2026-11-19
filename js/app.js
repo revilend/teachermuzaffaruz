@@ -187,6 +187,9 @@ const state = {
   turnstileToken: '',
   pending2fa: null,
   subGroup: 'all',
+  subScroll: 0,
+  subEditId: null,
+  subDelId: null,
   studentView: '',
   groupDetail: '',
   webSpeakingBusy: {},
@@ -1747,6 +1750,16 @@ const CloudSync = (function () {
       .filter(function (x) { return String(x.id) !== String(id); }));
     return { storageErrors: storageErrors };
   }
+  async function deleteSubmissionComment(id) {
+    if (!ready()) throw new Error('Supabase sozlanmagan');
+    const res = await client.from('homework_submissions')
+      .update({ teacher_comment: '', commented_at: null })
+      .eq('id', id).select();
+    if (res.error) throw res.error;
+    const saved = mapSubmission((res.data && res.data[0]) ||
+      { id: id, teacher_comment: '', commented_at: null });
+    return putLocalSubmission(saved);
+  }
   async function commentSubmission(id, comment) {
     if (!ready()) throw new Error('Supabase sozlanmagan');
     const text = String(comment || '').trim();
@@ -2372,6 +2385,7 @@ const CloudSync = (function () {
     pullTeacherPassword: pullTeacherPassword,
     pushTeacherPassword: pushTeacherPassword,
     sendMessage: sendMessage,
+    deleteSubmissionComment: deleteSubmissionComment,
     editMessage: editMessage,
     deleteMessage: deleteMessage,
     subscribe: subscribe,
@@ -3732,6 +3746,9 @@ const I18N_EN = {
   "Uyga vazifalar": "Homework",
   "Baholar": "Grades",
   "Speaking topshirish": "Submit Speaking",
+  "Komentariyani tahrirlash": "Edit comment",
+  "Komentariyani o'chirish": "Delete comment",
+  "Komentariyani o'chirasizmi?": "Delete this comment?",
   "O'qituvchi bilan suhbat": "Chat with Teacher",
   "tahrirlangan": "edited",
   "Xabarni o'chirasizmi?": "Delete this message?",
@@ -5711,27 +5728,59 @@ function submissionHomework(s) {
 function submissionCardHTML(s) {
   const st = submissionStudent(s);
   const hw = submissionHomework(s);
+  const stGroup = st ? groupById(st.groupId) : null;
   const when = s.createdAt ? fmtDMY(String(s.createdAt).slice(0, 10)) : '';
   const haveComment = !!String(s.teacherComment || '').trim();
+  const sid = esc(String(s.id));
+  const editing = String(state.subEditId) === String(s.id);
+  const deleting = String(state.subDelId) === String(s.id);
+  const commentBlock = deleting
+    ? `<div class="sub-teacher-note is-confirm">
+        ${ico('alert', 14)}
+        <span class="sub-note-text">${t("Komentariyani o'chirasizmi?")}</span>
+        <span class="sub-note-actions">
+          <button type="button" class="btn btn-xs danger" data-act="sub-comment-del-confirm" data-sub="${sid}">${t('Ha')}</button>
+          <button type="button" class="btn btn-xs ghost" data-act="sub-comment-del-cancel">${t('Bekor qilish')}</button>
+        </span>
+      </div>`
+    : editing
+      ? `<div class="sub-note-edit">
+          <label class="field-label" for="sub-edit-${sid}">${ico('message', 14)} ${t('Komentariyani tahrirlash')}</label>
+          <textarea class="input sub-edit-comment" id="sub-edit-${sid}" rows="2">${esc(s.teacherComment || '')}</textarea>
+          <div class="sub-note-edit-actions">
+            <button type="button" class="btn btn-xs primary" data-act="sub-comment-save" data-sub="${sid}">${ico('check', 13)} ${t('Saqlash')}</button>
+            <button type="button" class="btn btn-xs ghost" data-act="sub-comment-edit-cancel">${t('Bekor qilish')}</button>
+          </div>
+        </div>`
+      : haveComment
+        ? `<div class="sub-teacher-note">${ico('checkCircle', 14)}
+            <span class="sub-note-text"><b>Komentariya:</b> ${esc(s.teacherComment)}${s.commentedAt ? ` <span class="muted small">${esc(timeAgoText(s.commentedAt))}</span>` : ''}</span>
+            <span class="sub-note-actions">
+              <button type="button" class="chat-ico" data-act="sub-comment-edit" data-sub="${sid}" aria-label="${esc(t('Tahrirlash'))}">${ico('brush', 14)}</button>
+              <button type="button" class="chat-ico danger" data-act="sub-comment-del" data-sub="${sid}" aria-label="${esc(t("Komentariyani o'chirish"))}">${ico('trash', 14)}</button>
+            </span>
+          </div>`
+        : `<div class="sub-new-badge">${ico('alert', 13)} Ko'rilmagan</div>`;
   return `<div class="card sub-card${haveComment ? ' is-seen' : ' is-new'}">
     <div class="row between sub-head">
       <div class="col sub-who">
-        <strong>${esc(st ? st.fullName : "O'quvchi")}</strong>
+        <div class="sub-name-row">
+          <strong>${esc(st ? st.fullName : "O'quvchi")}</strong>
+          ${stGroup ? `<span class="chip-class sub-gr-badge">${esc(stGroup.name)}</span>` : ''}
+        </div>
         <span class="muted small">${esc(hw ? hw.title : 'Uyga vazifa')}</span>
       </div>
       <div class="sub-head-right">
         <span class="chip-class">${esc(when)}</span>
-        <button type="button" class="btn btn-xs danger" data-act="sub-del" data-sub="${esc(String(s.id))}">${ico('trash', 13)} ${t("O'chirish")}</button>
+        <button type="button" class="btn btn-xs danger" data-act="sub-del" data-sub="${sid}">${ico('trash', 13)} ${t("O'chirish")}</button>
       </div>
     </div>
     ${submissionFilesHTML(s.files)}
     ${s.note ? `<p class="sub-note">${ico('message', 14)} ${esc(s.note)}</p>` : ''}
-    ${haveComment ? `<div class="sub-teacher-note">${ico('checkCircle', 14)}
-        <span><b>Komentariya:</b> ${esc(s.teacherComment)}${s.commentedAt ? ` <span class="muted small">${esc(timeAgoText(s.commentedAt))}</span>` : ''}</span>
-      </div>` : `<div class="sub-new-badge">${ico('alert', 13)} Ko'rilmagan</div>`}
-    <label class="field-label" for="sub-comment-${esc(String(s.id))}">${ico('message', 14)} Komentariya yozish</label>
-    <textarea class="input sub-comment" id="sub-comment-${esc(String(s.id))}" rows="2" placeholder="${t("O'quvchiga izoh...")}">${esc(s.teacherComment || '')}</textarea>
-    <button type="button" class="btn btn-primary btn-block" data-act="sub-comment" data-sub="${esc(String(s.id))}">${ico('upload', 15)} Yuborish</button>
+    ${commentBlock}
+    ${editing || deleting ? '' : `<label class="field-label" for="sub-comment-${sid}">${ico('message', 14)} Komentariya yozish</label>
+    <textarea class="input sub-comment" id="sub-comment-${sid}" rows="2" placeholder="${t("O'quvchiga izoh...")}"></textarea>
+    <button type="button" class="btn btn-primary btn-block" data-act="sub-comment" data-sub="${sid}">${ico('upload', 15)} Yuborish</button>`}
   </div>`;
 }
 
@@ -5749,10 +5798,39 @@ function submissionsScreen() {
       return `<button type="button" class="chip-btn${state.subGroup === g.id ? ' active' : ''}" data-act="sub-group" data-gid="${esc(g.id)}">${esc(g.name)}</button>`;
     })).join('');
   return `<div class="screen-head"><h2 class="screen-title">${ico('clipboardCheck', 16)} Bajarilgan topshiriqlar</h2></div>
-  <div class="sub-filters">${filterChips}</div>
+  <div class="sub-filters" id="sub-filters" data-scroll="${Number(state.subScroll) || 0}">${filterChips}</div>
   ${list.length
     ? `<div class="sub-list">${list.map(submissionCardHTML).join('')}</div>`
     : `<div class="card">${emptyState("Hozircha yuklangan topshiriqlar yo'q", 'clipboardCheck')}</div>`}`;
+}
+
+/* Saqlangan komentariyani tahrirlash (Supabase + lokal kesh) */
+async function saveSubmissionCommentEdit(id) {
+  if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+  const box = $('#sub-edit-' + id);
+  const text = String((box && box.value) || '').trim();
+  if (!text) { toast('Avval komentariyani yozing', 'error'); return; }
+  state.subEditId = null;
+  try {
+    await CloudSync.commentSubmission(id, text);
+    toast('Komentariya yangilandi');
+  } catch (e) {
+    toast('Komentariyani saqlab bo\'lmadi: ' + ((e && e.message) || e), 'error');
+  }
+  render();
+}
+
+/* Komentariyani o'chirish (tasdiqdan keyin) */
+async function removeSubmissionComment(id) {
+  if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+  state.subDelId = null;
+  try {
+    await CloudSync.deleteSubmissionComment(id);
+    toast("Komentariya o'chirildi");
+  } catch (e) {
+    toast('Komentariyani o\'chirib bo\'lmadi: ' + ((e && e.message) || e), 'error');
+  }
+  render();
 }
 
 /* Ustoz komentariyasi: bazaga + o'quvchining Telegramiga */
@@ -5764,6 +5842,7 @@ async function sendSubmissionComment(btn) {
   const box = $('#sub-comment-' + id);
   const text = String((box && box.value) || '').trim();
   if (!text) { toast('Avval komentariyani yozing', 'error'); return; }
+  if (box) box.value = '';
   if (btn) btn.disabled = true;
   try {
     await CloudSync.commentSubmission(sub.id, text);
@@ -10131,7 +10210,19 @@ function render() {
   $('#bottom-nav').innerHTML = renderNav();
   renderTopNavTabs();
   renderTopNavControls();
+  /* Filtr pillari skroll holatini saqlab qolamiz (qayta renderda 0 ga sakramasin) */
+  if (scr === 'submissions') {
+    const oldBar = $('#sub-filters');
+    if (oldBar) state.subScroll = oldBar.scrollLeft || 0;
+  }
   $('#screen').innerHTML = (SCREENS[scr] || loginScreen)();
+  if (scr === 'submissions') {
+    const bar = $('#sub-filters');
+    if (bar) {
+      bar.scrollLeft = Number(state.subScroll) || 0;
+      bar.setAttribute('data-scroll', String(Number(state.subScroll) || 0));
+    }
+  }
   if (scr === 'login') {
     state.turnstileToken = '';
     if (authStep() === 'recover') { paintRecoverCaptcha(); startResendTimer(); }
@@ -10630,8 +10721,33 @@ document.addEventListener('click', function (e) {
     'do-del-sub': function () { doDeleteSubmission(btn.getAttribute('data-sub')); },
     'run-diagnostics': function () { openDiagnostics(); },
     'diag-rerun': function () { fillDiagnostics(); },
-    'sub-group': function () { state.subGroup = btn.getAttribute('data-gid') || 'all'; render(); },
+    'sub-group': function () {
+      const bar = $('#sub-filters');
+      if (bar) state.subScroll = bar.scrollLeft || 0;
+      state.subGroup = btn.getAttribute('data-gid') || 'all';
+      state.subEditId = null;
+      state.subDelId = null;
+      render();
+    },
     'sub-comment': function () { sendSubmissionComment(btn); },
+    'sub-comment-edit': function () {
+      state.subEditId = btn.getAttribute('data-sub');
+      state.subDelId = null;
+      render();
+      setTimeout(function () {
+        const box = $('#sub-edit-' + state.subEditId);
+        if (box && box.focus) { box.focus(); try { box.setSelectionRange(box.value.length, box.value.length); } catch (e) {} }
+      }, 40);
+    },
+    'sub-comment-edit-cancel': function () { state.subEditId = null; render(); },
+    'sub-comment-save': function () { saveSubmissionCommentEdit(btn.getAttribute('data-sub')); },
+    'sub-comment-del': function () {
+      state.subDelId = btn.getAttribute('data-sub');
+      state.subEditId = null;
+      render();
+    },
+    'sub-comment-del-cancel': function () { state.subDelId = null; render(); },
+    'sub-comment-del-confirm': function () { removeSubmissionComment(btn.getAttribute('data-sub')); },
     'save-reset': function () { saveResetPwd(btn.getAttribute('data-sid')); },
 
     /* --- Zaxira (backup/restore) --- */
