@@ -3747,6 +3747,7 @@ const I18N_EN = {
   "Baholar": "Grades",
   "Speaking topshirish": "Submit Speaking",
   "Komentariyani tahrirlash": "Edit comment",
+  "Kichraytirish": "Collapse",
   "Komentariyani o'chirish": "Delete comment",
   "Komentariyani o'chirasizmi?": "Delete this comment?",
   "O'qituvchi bilan suhbat": "Chat with Teacher",
@@ -8814,20 +8815,27 @@ function webSpeakCard(sub, st, archived) {
   const done = archived === true;
   const rejected = sub.status === 'rad_etildi';
   const statusLabel = rejected ? t('Bekor qilindi') : done ? t('Baholandi') : t('Kutilmoqda');
+  const vid = esc(String(sub.id));
   return `
-  <div class="${done ? 'speak-archived' : 'audio-item'}" data-tgcard="${done ? '' : esc(sub.id)}">
-    <div class="audio-item__meta">
-      <strong>${st ? esc(st.fullName) : '—'}</strong>
-      ${st ? `<span class="chip-class">${esc(st.schoolClass)}</span>` : ''} ·
-      ${ico('video', 14)} ${t('Video')}
-      ${sub.createdAt ? ' · ' + esc(speakWhenLabel(sub.createdAt)) : ''} ·
-      <span class="speak-status ${done ? 'is-done' : 'is-wait'}">${statusLabel}${done && sub.score != null ? ': ' + sub.score + '/10' : ''}</span>
+  <div class="${done ? 'speak-archived' : 'audio-item'}" data-tgcard="${done ? '' : vid}">
+    <div class="speak-card-head">
+      <div class="speak-card-who">
+        <strong class="speak-card-name">${st ? esc(st.fullName) : '—'}</strong>
+        ${st && st.schoolClass ? `<span class="chip-class speak-card-grade">${esc(tClass(st.schoolClass))}</span>` : ''}
+      </div>
+      <div class="speak-card-meta">
+        <span class="speak-meta-item">${ico('video', 13)} ${t('Video')}</span>
+        ${sub.createdAt ? `<span class="speak-meta-item">${ico('calendar', 13)} ${esc(speakWhenLabel(sub.createdAt))}</span>` : ''}
+        <span class="speak-status ${done ? 'is-done' : 'is-wait'}">${statusLabel}${done && sub.score != null ? ': ' + sub.score + '/10' : ''}</span>
+      </div>
     </div>
-    ${sub.mediaUrl ? `<div class="speak-video-wrap">
+    ${sub.mediaUrl ? `<div class="speak-video-wrap" data-vid="${vid}">
       <video class="speak-video" controls playsinline preload="metadata" src="${esc(sub.mediaUrl)}"></video>
-    </div>` : ''}
-    ${sub.eyeContactPercent != null || sub.lookAwayCount != null || sub.mediaUrl ? `<div class="speak-metrics">
-      ${sub.mediaUrl ? `<a class="btn btn-xs ghost speak-watch" href="${esc(sub.mediaUrl)}" target="_blank" rel="noopener">${ico('video', 13)} ${t("Videoni ko'rish")}</a>` : ''}
+    </div>
+    <button type="button" class="btn btn-xs ghost speak-video-toggle" data-act="speak-video-toggle" data-vid="${vid}" aria-expanded="false">
+      ${ico('video', 13)} <span>${t("Videoni ko'rish")}</span>
+    </button>` : ''}
+    ${sub.eyeContactPercent != null || sub.lookAwayCount != null ? `<div class="speak-metrics">
       ${sub.eyeContactPercent != null ? `<span class="speak-metric${sub.eyeContactPercent < 60 ? ' is-low' : ''}">${ico('eye', 13)} ${t('Kameraga qarash')}: ${sub.eyeContactPercent}%</span>` : ''}
       ${sub.lookAwayCount != null ? `<span class="speak-metric${sub.lookAwayCount >= 3 ? ' is-low' : ''}">${ico('alert', 13)} ${t('Chetga qarash')}: ${sub.lookAwayCount}</span>` : ''}
       ${sub.durationSec != null ? `<span class="speak-metric">${ico('clock', 13)} ${Math.floor(sub.durationSec / 60)}:${String(sub.durationSec % 60).padStart(2, '0')}</span>` : ''}
@@ -10721,6 +10729,16 @@ document.addEventListener('click', function (e) {
     'do-del-sub': function () { doDeleteSubmission(btn.getAttribute('data-sub')); },
     'run-diagnostics': function () { openDiagnostics(); },
     'diag-rerun': function () { fillDiagnostics(); },
+    'speak-video-toggle': function () {
+      const vid = btn.getAttribute('data-vid');
+      const wrap = document.querySelector('.speak-video-wrap[data-vid="' + String(vid).replace(/"/g, '') + '"]');
+      if (!wrap) return;
+      const open = !wrap.classList.contains('is-expanded');
+      wrap.classList.toggle('is-expanded', open);
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      const label = btn.querySelector('span');
+      if (label) label.textContent = open ? t('Kichraytirish') : t("Videoni ko'rish");
+    },
     'sub-group': function () {
       const bar = $('#sub-filters');
       if (bar) state.subScroll = bar.scrollLeft || 0;

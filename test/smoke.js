@@ -1185,11 +1185,30 @@ win.localStorage.setItem('et_tg_subs', JSON.stringify([
 forceNav('speaking');
 check(qa('.audio-item').length >= 1, 'inbox: Telegram topshirik paydo bo\'ldi');
 check(text().includes('Jasur Karimov'), 'inbox: o\'quvchi ismi ko\'rinadi');
-check(text().includes('Video') && !!q('.audio-item__meta svg'),
+check(text().includes('Video') && !!q('.speak-card-meta svg'),
   'inbox: media turi (video) SVG ikonka bilan ko\'rinadi');
+check(!!q('.speak-card-head .speak-card-name') && !!q('.speak-card-head .speak-card-grade'),
+  'inbox: ism + Grade badge alohida, toza qatorda');
+{
+  const metaTxt = q('.speak-card-meta').textContent.replace(/\s+/g, ' ').trim();
+  check(!/·\s*$/.test(metaTxt) && !/·\s*·/.test(metaTxt),
+    'inbox: meta qatorida ortiqcha “•” nuqtalar yo‘q');
+  const spCss = fs.readFileSync(path.join(root, 'css', 'styles.css'), 'utf8');
+  check(/\.speak-video\s*\{[^}]*max-height:\s*210px/.test(spCss) &&
+        /\.speak-video\s*\{[^}]*max-width:\s*280px/.test(spCss) &&
+        /\.speak-video\s*\{[^}]*object-fit:\s*cover/.test(spCss),
+    'inbox: inline video ixcham (210px balandlik, 280px kenglik)');
+}
 check(text().includes('Kameraga qarash: 87%') && text().includes('Chetga qarash: 2'),
   'inbox: ko‘z kontakti foizi va chetga qarashlar ko‘rinadi');
-check(!!q('.speak-watch'), 'inbox: yozilgan videoni ko‘rish havolasi bor');
+check(!!q('[data-act="speak-video-toggle"]'), 'inbox: videoni kattalashtirish tugmasi bor');
+{
+  const vwrap = q('.speak-video-wrap');
+  click('[data-act="speak-video-toggle"]');
+  check(vwrap.classList.contains('is-expanded'), 'inbox: video kattalashtiriladi');
+  click('[data-act="speak-video-toggle"]');
+  check(!vwrap.classList.contains('is-expanded'), 'inbox: video yana ixcham holatga qaytadi');
+}
 check(qa('[data-act="tg-grade"]').length === 10, 'inbox: 10 ta ball tugmasi');
 check(q('[data-act="tg-feedback"]'), 'inbox: izoh maydoni mavjud');
 check(!q('[data-act="rec-start"]') && !q('#recorder'), 'recorder: brauzer yozgich olib tashlangan');
