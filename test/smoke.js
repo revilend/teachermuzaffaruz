@@ -1060,8 +1060,11 @@ check(text().includes('Jasur Karimov'), "guruh turi: Jasur qayta kirdi (keyingi 
 forceNav('home');
 check(!!q('[data-act="student-view"][data-view="mock"]'), 'mock: kabinetda “Mock testlar” kartasi bor');
 openStudentView('mock');
+check(qa('[data-act="mock-cat-open"]').length === 6, 'mock: o‘quvchida 6 ta kategoriya kartasi');
+click('[data-act="mock-cat-open"][data-cat="reading"]');
 check(qa('[data-act="mock-start"]').length === 0 && text().includes('biriktirilmagan'),
   'mock: biriktirilgan test yo‘q — bo‘sh holat ko‘rinadi');
+click('[data-act="mock-cat-back"]');
 check(!text().includes('Buyuk Barer') && !text().includes('Reading — 1-qism'),
   'mock: hardcoded/demo testlar butunlay olib tashlangan');
 
@@ -1069,6 +1072,7 @@ check(!text().includes('Buyuk Barer') && !text().includes('Reading — 1-qism'),
 const mockOpts = function () { return ['To describe the reef', 'To advertise tours', 'To explain coral growing']; };
 win.__mock.saveDef({
   id: 'md_read', title: 'Reading Practice 1', category: 'reading', groupIds: ['g2'], cefr: 'B1',
+  cefrThresholds: { A1: 1, A2: 2, B1: 3 },
   parts: [{ id: 'p1', title: 'Part 1', cefr: 'B1',
     passage: 'The Great Barrier Reef is the world\'s largest coral reef system. Rising sea temperatures have caused mass coral bleaching.',
     questions: [
@@ -1104,13 +1108,16 @@ win.__mock.saveDef({
 }, true);
 closeStudentView();
 openStudentView('mock');
-check(qa('[data-act="mock-start"]').length === 4, 'mock: faqat biriktirilgan 4 ta test ko‘rinadi');
-check(text().includes('Reading Practice 1') && text().includes('Writing Task 1') &&
-      text().includes('Vocabulary Check') && text().includes('Speaking Practice'),
-  'mock: ustoz yaratgan testlar ro‘yxati ko‘rinadi');
+check(qa('[data-act="mock-cat-open"]').length === 6, 'mock: 6 kartali grid o‘quvchida ham bir xil');
+click('[data-act="mock-cat-open"][data-cat="reading"]');
+check(qa('[data-act="mock-start"]').length === 1, 'mock: reading bo‘limida faqat biriktirilgan test');
+check(!!q('.mock-start-btn') && text().includes('Boshlash'), 'mock: yashil “Boshlash” tugmasi');
+check(text().includes('Reading Practice 1') && text().includes('General English'),
+  'mock: test nomi va biriktirilgan guruh badge’i');
 
 /* Reading — matn + savollar, avtomatik baholash va izohlar */
 click('[data-act="mock-start"][data-id="md_read"]');
+check((q('#mock-timer') || {}).textContent === '60:00', 'mock reading: 60 daqiqalik taymer boshlandi');
 check(!!q('.mock-passage') && qa('[data-act="mock-pick"]').length === 12,
   'mock reading: matn va 12 ta variant ko‘rinadi');
 check(q('[data-act="mock-submit"]').disabled === true, 'mock reading: javobsiz “Yuborish” bloklangan');
@@ -1121,6 +1128,11 @@ check(q('[data-act="mock-submit"]').disabled === false, 'mock reading: barcha ja
 clickAct('mock-submit');
 check(!!q('.mock-score-card') && /4\/4/.test(text()) && text().includes('100%') && !!q('.mock-cefr'),
   'mock reading: ball, foiz va CEFR badge hisoblandi');
+check(qa('.mock-cefr-scale .mock-cefr-lvl.is-amber').length === 3 &&
+      qa('.mock-cefr-scale .mock-cefr-lvl.is-green').length === 3,
+  'mock reading: A1–B1 amber, B2–C2 yashil katta CEFR shkalasi');
+check((q('.mock-cefr-scale .is-active') || {}).textContent === 'B1',
+  'mock reading: chegara mantiqi — 4 ball bilan B1 (A2=2, B1=3)');
 check(!!q('[data-act="mock-review"]'), 'mock reading: “Javoblarni ko‘rib chiqish” tugmasi bor');
 clickAct('mock-review');
 check(text().includes('Sizning javobingiz') && text().includes('To‘g‘ri javob') && text().includes('Izoh'),
@@ -1128,6 +1140,8 @@ check(text().includes('Sizning javobingiz') && text().includes('To‘g‘ri javo
 
 /* Writing — matn yuboriladi, ustoz tekshiruvi kutiladi */
 clickAct('mock-home');
+click('[data-act="mock-cat-back"]');
+click('[data-act="mock-cat-open"][data-cat="writing"]');
 click('[data-act="mock-start"][data-id="md_write"]');
 const mockEssay = 'I agree that children should start learning a second language at primary school. ' +
   'Young learners remember new sounds quickly and they are not afraid of making mistakes. ' +
@@ -1140,6 +1154,8 @@ check(text().includes('Baholanmoqda'), 'mock writing: yuborilgach ustoz tekshiru
 
 /* Vocabulary — avtomatik baholash */
 clickAct('mock-home');
+click('[data-act="mock-cat-back"]');
+click('[data-act="mock-cat-open"][data-cat="vocabulary"]');
 click('[data-act="mock-start"][data-id="md_voc"]');
 ['v1', 'v2', 'v3', 'v4', 'v5'].forEach(function (qid) {
   click('[data-act="mock-pick"][data-mq="' + qid + '"][data-mopt="0"]');
@@ -1149,6 +1165,8 @@ check(/5\/5/.test(text()), 'mock vocabulary: avtomatik baholandi (5/5)');
 
 /* Speaking — rasm, savol bo‘yicha video va avtomatik o‘tish */
 clickAct('mock-home');
+click('[data-act="mock-cat-back"]');
+click('[data-act="mock-cat-open"][data-cat="speaking"]');
 click('[data-act="mock-start"][data-id="md_speak"]');
 check(!!q('.mock-q-img'), 'mock speaking: 1-savolda o‘rta o‘lchamdagi rasm bor');
 check(qa('.mock-dot').length === 4, 'mock speaking: 4 savol progressi');
@@ -1167,6 +1185,24 @@ check(!!spSaved && spSaved.videos.length === 1 && spSaved.videos[0].url.indexOf(
   'mock speaking: video savol bo‘yicha R2 havolasi bilan saqlandi');
 clickAct('mock-speak-finish');
 check(text().includes('Baholanmoqda'), 'mock speaking: yakunlangach ustoz tekshiruvi kutilmoqda');
+
+/* Listening — “Boshlash” bosilishi bilan avtomatik ijro, pauza/seek yo‘q */
+win.__mock.saveDef({
+  id: 'md_listen', title: 'Listening Practice 1', category: 'listening', groupIds: ['g2'],
+  tasks: [{ id: 'tk1', title: 'Task 1', audioUrl: 'https://pub-836df3817ab64cee9075b55d51fe6061.r2.dev/mock/demo.mp3',
+    questions: [{ id: 'l1', text: 'Where is the speaker?', opts: ['At a station', 'At school', 'At home'], ans: 0 }] }]
+}, true);
+clickAct('mock-home');
+click('[data-act="mock-cat-back"]');
+click('[data-act="mock-cat-open"][data-cat="listening"]');
+click('[data-act="mock-start"][data-id="md_listen"]');
+const listenAudio = q('.mock-audio');
+check(!!listenAudio && !listenAudio.hasAttribute('controls'),
+  'mock listening: audio pleyeri boshqaruvsiz (pauza/seek yo‘q)');
+check(!!q('.mock-listen-locknote') && text().includes('bir marta'),
+  'mock listening: bir martalik ijro ogohlantirishi ko‘rinadi');
+clickAct('mock-exit');
+click('[data-act="mock-cat-back"]');
 closeStudentView();
 
 /* ================= 11. O'QUVCHI: PAROLNI O'ZGARTIRISH ================= */
@@ -1207,7 +1243,15 @@ await loginAs('m_amirov', '123');
 check(!!q('.quick-grid [data-act="nav"][data-screen="mock"]'),
   'mock ustoz: TEZ AMALLAR ichida “Mock testlar” tezkor kartasi');
 forceNav('mock');
-check(qa('[data-act="mock-tab"]').length === 6, 'mock ustoz: 6 ta kategoriya tabi');
+check(qa('[data-act="mock-cat-open"]').length === 6, 'mock ustoz: 6 ta kategoriya kartasi');
+check(!!q('#mock-sec-rl') && !q('#mock-sec-rl').hidden &&
+      text().includes('Reading va Listening javoblari'),
+  'mock ustoz: grid ostida Reading/Listening natija bo‘limi');
+check(!!q('#mock-sec-writing') && !!q('#mock-sec-speaking') && !!q('#mock-sec-vg'),
+  'mock ustoz: Writing, Speaking, Vocabulary+Grammar natija bo‘limlari');
+check(text().includes('Jasur Karimov') && /4\/4/.test(text()) && !!q('#mock-sec-rl .mock-cefr'),
+  'mock ustoz: o‘quvchi natijasi, ball va CEFR');
+click('[data-act="mock-cat-open"][data-cat="reading"]');
 check(!!q('[data-act="mock-add"]') && text().includes("Yangi Mock qo'shish"),
   'mock ustoz: “+ Yangi Mock qo‘shish” tugmasi');
 check(!!q('.mock-def[data-def="md_read"]'), 'mock ustoz: yaratilgan reading test ro‘yxati ko‘rinadi');
@@ -1221,6 +1265,12 @@ check(!!q('.mock-build') && !!q('[data-mb="title"]'), 'mock builder: forma ochil
 check(qa('[data-mb="parts.0.passage"], [data-mb="parts.1.passage"]').length === 2,
   'mock builder reading: Part 1 va Part 2 matn maydonlari');
 check(qa('[data-act="mock-b-step"]').length === 4, 'mock builder reading: Matn→Savollar→Javoblar→Izoh tablari');
+check(qa('.mock-cefr-col .mock-cefr-row').length === 6 &&
+      qa('.mock-cefr-col .mock-cefr-lvl.is-amber').length === 3 &&
+      qa('.mock-cefr-col .mock-cefr-lvl.is-green').length === 3,
+  'mock builder reading: mock darajasidagi yagona A1–C2 CEFR ustuni');
+check(!q('[data-mb="parts.0.cefr"]'), 'mock builder reading: Part ichida alohida CEFR yo‘q');
+setVal('[data-mb="cefrThresholds.A2"]', '1');
 setVal('[data-mb="title"]', 'Builder Reading Test');
 setVal('[data-mb="parts.0.passage"]', 'A short passage for the builder test.');
 setCheck('[data-mb="group"][data-gid="g1"]', true);
@@ -1234,8 +1284,9 @@ setVal('[data-mb="parts.0.questions.0.izoh"]', 'The passage is about a builder t
 clickAct('mock-save');
 const builtDef = (JSON.parse(win.localStorage.getItem('et_mock_defs')) || [])
   .filter(d => d.title === 'Builder Reading Test')[0];
-check(!!builtDef && builtDef.groupIds.indexOf('g1') >= 0 && !!builtDef.parts[0].questions[0].izoh,
-  'mock builder: reading matn + savol + javob + izoh bilan saqlandi');
+check(!!builtDef && builtDef.groupIds.indexOf('g1') >= 0 && !!builtDef.parts[0].questions[0].izoh &&
+      builtDef.cefrThresholds.A2 === 1,
+  'mock builder: reading matn + savol + javob + izoh + CEFR chegarasi bilan saqlandi');
 
 /* Guruhlarga biriktirish */
 click('[data-act="mock-assign"][data-id="' + builtDef.id + '"]');
@@ -1274,8 +1325,8 @@ check(/4\/4/.test(text()) && !!q('#mock-sec-rl .mock-cefr'), 'mock ustoz: ball v
 clickAct('mock-review');
 check(text().includes('Izoh') && text().includes('To‘g‘ri javob'), 'mock ustoz: to‘liq javoblar tahlili');
 
-click('[data-act="mock-tab"][data-cat="writing"]');
-check(!q('#mock-sec-writing').hidden && !!q('#mock-sec-writing .mock-ta'),
+click('[data-act="mock-cat-back"]');
+check(!!q('#mock-sec-writing') && !q('#mock-sec-writing').hidden && !!q('#mock-sec-writing .mock-ta'),
   'mock ustoz: Writing bo‘limi va tahrirlanadigan matn');
 const mwRow = q('#mock-sec-writing .mock-person');
 const mwId = mwRow.getAttribute('data-mockrow');
@@ -1288,16 +1339,14 @@ check(mwSaved.teacherText === 'Teacher edited version of the essay.' &&
       mwSaved.feedback === 'Good ideas — add one more example.' && mwSaved.teacherGrade === '8',
   'mock ustoz: tahrir + izoh + erkin baho (teacher_grade) saqlandi');
 
-click('[data-act="mock-tab"][data-cat="speaking"]');
-check(!q('#mock-sec-speaking').hidden && qa('#mock-sec-speaking video').length >= 1,
+check(!!q('#mock-sec-speaking') && qa('#mock-sec-speaking video').length >= 1,
   'mock ustoz: speaking videolari ijro uchun ko‘rinadi');
 setVal('#mock-t-grade-' + spAttemptId, '7');
 click('[data-act="mock-save-grade"][data-id="' + spAttemptId + '"]');
 check(JSON.parse(win.localStorage.getItem('et_mock_results')).filter(a => a.id === spAttemptId)[0].teacherGrade === '7',
   'mock ustoz: speaking video bahosi saqlandi');
 
-click('[data-act="mock-tab"][data-cat="vocabulary"]');
-check(!q('#mock-sec-vg').hidden && text().includes('Vocabulary va Grammar'),
+check(!!q('#mock-sec-vg') && text().includes('Vocabulary va Grammar'),
   'mock ustoz: Vocabulary va Grammar birlashgan bo‘limi');
 logout();
 

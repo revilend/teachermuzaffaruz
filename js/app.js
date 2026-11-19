@@ -210,7 +210,9 @@ const state = {
   mockBStep: 'text',
   mockAssignId: '',
   mockAssignDraft: [],
-  mockDelId: ''
+  mockDelId: '',
+  mockCatView: '',
+  mockRole: ''
 };
 
 const AUTH_SCREENS = ['login'];
@@ -4036,6 +4038,19 @@ Object.assign(I18N_EN, {
   'Yuklanmoqda...': 'Uploading...',
   'Fayl yuklandi': 'File uploaded',
   'Bu testda audio yuklanmagan': 'No audio was uploaded for this test',
+  'Boshlash': 'Start',
+  'Bu bo‘limda sizga hali mock test biriktirilmagan. Ustoz test biriktirgach shu yerda ko‘rinadi.':
+    'No mock test has been assigned to you in this section yet. It will appear here once your teacher assigns one.',
+  'CEFR darajasi': 'CEFR level',
+  'CEFR darajalari': 'CEFR levels',
+  'Mock bo‘yicha minimal to‘g‘ri javob': 'minimum correct answers for the whole mock',
+  'Part qo‘shish': 'Add Part',
+  'Audio avtomatik boshlanadi': 'Audio starts automatically',
+  'Tinglandi': 'Played',
+  'Audio bir marta ijro etiladi — to‘xtatib yoki orqaga qaytarib bo‘lmaydi.':
+    'The audio plays once — it cannot be paused or rewound.',
+  'Bu audio faqat bir marta tinglanadi': 'This audio can be played only once',
+  'Vaqt tugadi': 'Time is up',
   'Biriktirilgan fayl': 'Attached file',
   'Hozircha guruh yo‘q': 'No groups yet'
 });
@@ -10480,6 +10495,12 @@ function mockNormalizeDef(def) {
   out.title = String(out.title || '').trim();
   out.groupIds = mockGroupIds(out);
   out.cefr = String(out.cefr || '').trim().toUpperCase();
+  const thRaw = out.cefrThresholds && typeof out.cefrThresholds === 'object' ? out.cefrThresholds : {};
+  out.cefrThresholds = {};
+  MOCK_CEFR_LEVELS.forEach(function (l) {
+    const v = Number(thRaw[l]);
+    out.cefrThresholds[l] = isFinite(v) && v > 0 ? Math.round(v) : '';
+  });
   out.createdAt = out.createdAt || new Date().toISOString();
   out.updatedAt = new Date().toISOString();
   if (cat === 'reading') {
@@ -10737,26 +10758,56 @@ function mockLastForDef(def, mine) {
     return String(a.mockId) === String(def.id);
   }))[0] || null;
 }
+/* Ikkala panelda bir xil 6 kartali grid */
+function mockCatGridHTML() {
+  return `<div class="mock-cats mock-cats-6">${MOCK_CATS.map(function (c) {
+    return `<button type="button" class="card mock-cat" data-act="mock-cat-open" data-cat="${c.key}">
+      <span class="mock-cat-ico">${ico(c.icon, 20)}</span>
+      <span class="mock-cat-body">
+        <span class="mock-cat-name">${esc(t(c.label))}</span>
+        <span class="mock-cat-desc">${esc(t(c.desc))}</span>
+      </span>
+      <span class="mock-cat-go">${ico('arrowRight', 14)}</span>
+    </button>`;
+  }).join('')}</div>`;
+}
 function mockStudentDefHTML(def) {
   const c = mockCat(def.category);
   const last = mockLastForDef(def);
   const total = mockDefQuestionCount(def);
-  const gid = mockGroupIds(def)[0];
-  const g = gid ? groupById(gid) : null;
-  const meta = c.kind === 'write'
-    ? (t('Yozma topshiriq'))
-    : (c.kind === 'speak' ? (total + ' ' + t('savol')) : (total + ' ' + t('savol')));
-  return `<button type="button" class="card mock-def-card" data-act="mock-start" data-id="${esc(def.id)}">
-    <span class="mock-cat-ico">${ico(c.icon, 20)}</span>
-    <span class="mock-cat-body">
-      <span class="mock-def-card-title">${esc(def.title || t(c.label))}</span>
-      <span class="mock-cat-desc">${esc(t(c.label))}${meta ? ' · ' + esc(meta) : ''}${g ? ' · ' + esc(g.name) : ''}</span>
-      <span class="mock-cat-state ${last ? (String(last.teacherGrade || '').trim() || c.kind === 'mcq' ? 'is-done' : 'is-wait') : 'is-new'}">
-        ${esc(last ? mockAttemptSummary(last) : t('Boshlanmagan'))}
-      </span>
-    </span>
-    <span class="mock-def-go">${ico('arrowRight', 15)}</span>
-  </button>`;
+  const groups = mockGroupIds(def).map(groupById).filter(function (g) { return !!g; });
+  const meta = c.kind === 'write' ? t('Yozma topshiriq') : (total + ' ' + t('savol'));
+  const stateCls = last
+    ? (String(last.teacherGrade || '').trim() || c.kind === 'mcq' ? 'is-done' : 'is-wait')
+    : 'is-new';
+  return `<div class="card mock-def-card mock-stu-row">
+    <span class="mock-cat-ico">${ico(c.icon, 18)}</span>
+    <div class="mock-stu-body">
+      <div class="mock-def-card-title">${esc(def.title || t(c.label))}</div>
+      <div class="mock-stu-meta">
+        ${groups.map(function (g) {
+          return `<span class="mock-def-group">${ico('groups', 12)} ${esc(g.name)}</span>`;
+        }).join('')}
+        <span>${esc(meta)}</span>
+      </div>
+      <div class="mock-cat-state ${stateCls}">${esc(last ? mockAttemptSummary(last) : t('Boshlanmagan'))}</div>
+    </div>
+    <button type="button" class="btn mock-start-btn" data-act="mock-start" data-id="${esc(def.id)}">
+      ${ico('arrowRight', 14)} ${t('Boshlash')}
+    </button>
+  </div>`;
+}
+function mockStudentCatHTML(key) {
+  const c = mockCat(key);
+  const st = linkedStudent();
+  const defs = mockAssignedDefs(st).filter(function (d) { return d.category === c.key; });
+  return `<div class="mock-run-head">
+    <button type="button" class="btn btn-xs ghost" data-act="mock-cat-back">${ico('arrowLeft', 14)} ${t('Orqaga')}</button>
+    <span class="mock-run-title">${esc(t(c.label))}</span>
+  </div>
+  ${defs.length
+    ? `<div class="mock-defs mock-stu-list">${defs.map(mockStudentDefHTML).join('')}</div>`
+    : `<div class="empty mock-empty"><span class="empty-ico">${ico(c.icon, 22)}</span>${t('Bu bo‘limda sizga hali mock test biriktirilmagan. Ustoz test biriktirgach shu yerda ko‘rinadi.')}</div>`}`;
 }
 function mockStudentHTML() {
   if (state.mockRun) return mockRunnerHTML();
@@ -10765,6 +10816,7 @@ function mockStudentHTML() {
     if (a) return mockResultHTML(a, 'student');
     state.mockResultId = '';
   }
+  if (state.mockCatView) return mockStudentCatHTML(state.mockCatView);
   const st = linkedStudent();
   const defs = mockAssignedDefs(st);
   return `
@@ -10775,10 +10827,9 @@ function mockStudentHTML() {
       <div class="muted small">${t('Ustoz biriktirgan mock testlar. Yakunida ball, CEFR va izohlar ko‘rinadi.')}</div>
     </div>
   </section>
-  ${defs.length
-    ? `<div class="section-title">${t('Biriktirilgan mock testlar')}</div>
-       <div class="mock-defs">${defs.map(mockStudentDefHTML).join('')}</div>`
-    : `<div class="empty mock-empty"><span class="empty-ico">${ico('clipboardCheck', 22)}</span>${t('Sizga hali mock test biriktirilmagan. Ustoz test biriktirgach shu yerda ko‘rinadi.')}</div>`}
+  <div class="section-title">${t('Bo‘limni tanlang')}</div>
+  ${mockCatGridHTML()}
+  ${defs.length ? '' : `<div class="empty mock-empty"><span class="empty-ico">${ico('clipboardCheck', 22)}</span>${t('Sizga hali mock test biriktirilmagan. Ustoz test biriktirgach shu yerda ko‘rinadi.')}</div>`}
   ${mockMyHistoryHTML()}`;
 }
 function mockMyHistoryHTML() {
@@ -10800,9 +10851,11 @@ function mockMyHistoryHTML() {
 
 /* --- O'quvchi: testni yechish --- */
 function mockRunHeadHTML(c, step) {
+  const run = state.mockRun;
   return `<div class="mock-run-head">
     <button type="button" class="btn btn-xs ghost" data-act="mock-exit">${ico('arrowLeft', 14)} ${t('Orqaga')}</button>
     <span class="mock-run-title">${esc(t(c.label))}${step ? ' · ' + step : ''}</span>
+    ${run && run.deadline ? `<span class="mock-timer" id="mock-timer">${mockFmtClock(mockTimerLeft(run))}</span>` : ''}
   </div>`;
 }
 function mockRunSections(def) {
@@ -10846,8 +10899,12 @@ function mockRunnerHTML() {
       ${sec.title ? `<div class="mock-passage-title">${ico(c.icon, 14)} ${esc(sec.title)}${mockCefrPill(sec.cefr)}</div>` : ''}
       ${sec.passage ? `<p>${esc(sec.passage)}</p>` : ''}
       ${sec.instruction ? `<div class="mock-hint">${ico('alert', 13)} <span>${esc(sec.instruction)}</span></div>` : ''}
-      ${sec.audioUrl ? `<audio id="mock-audio-${esc(sec.id)}" class="mock-audio" controls preload="metadata" src="${esc(sec.audioUrl)}"></audio>
-        <button type="button" class="btn btn-xs ghost" data-act="mock-play" data-aid="${esc(sec.id)}">${ico('headphones', 14)} ${t('Tinglash')}</button>` : ''}
+      ${sec.audioUrl ? `<div class="mock-listen-lock">
+        <div class="mock-listen-status">${ico('headphones', 14)} <span id="mock-audio-${esc(sec.id)}-status">${t('Audio avtomatik boshlanadi')}</span></div>
+        <audio id="mock-audio-${esc(sec.id)}" class="mock-audio" preload="auto" playsinline src="${esc(sec.audioUrl)}"></audio>
+        <button type="button" class="btn btn-xs ghost mock-audio-nudge" id="mock-audio-${esc(sec.id)}-nudge" hidden data-act="mock-play" data-aid="${esc(sec.id)}">${ico('headphones', 14)} ${t('Tinglash')}</button>
+        <div class="mock-listen-locknote">${ico('alert', 13)} <span>${t('Audio bir marta ijro etiladi — to‘xtatib yoki orqaga qaytarib bo‘lmaydi.')}</span></div>
+      </div>` : ''}
       ${sec.imageUrl ? `<img class="mock-q-img mock-listen-img" src="${esc(sec.imageUrl)}" alt="" />` : ''}
     </div>` : ''}
     <div class="mock-qs">${(sec.questions || []).map(function (q) { num++; return mockQCardHTML(q, num, run); }).join('')}</div>`;
@@ -10909,17 +10966,117 @@ function mockSpeakRunnerHTML() {
   }).join('')}</div>
   ${videos.length ? `<button type="button" class="btn btn-xs ghost btn-block mock-finish" data-act="mock-speak-finish">${ico('check', 14)} ${t('Yakunlash')}</button>` : ''}`;
 }
+/* --- Reading: 60 daqiqalik sanoq (60:00 → 00:00) --- */
+const MOCK_READING_MS = 60 * 60 * 1000;
+let mockTimerId = 0;
+function mockFmtClock(sec) {
+  const s = Math.max(0, Math.round(Number(sec) || 0));
+  return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+}
+function mockTimerLeft(run) {
+  if (!run || !run.deadline) return 0;
+  return Math.max(0, Math.round((run.deadline - Date.now()) / 1000));
+}
+function mockTimerStop() {
+  if (mockTimerId) { clearInterval(mockTimerId); mockTimerId = 0; }
+}
+function mockTimerTick() {
+  const run = state.mockRun;
+  if (!run || !run.deadline) { mockTimerStop(); return; }
+  const left = mockTimerLeft(run);
+  const el = document.getElementById('mock-timer');
+  if (el) {
+    el.textContent = mockFmtClock(left);
+    el.classList.toggle('is-low', left <= 300);
+  }
+  if (left <= 0) {
+    run.deadline = 0;
+    mockTimerStop();
+    if (state.mockRun === run) { toast(t('Vaqt tugadi')); mockSubmitRun(); }
+  }
+}
+function mockTimerEnsure() {
+  const run = state.mockRun;
+  if (!run || !run.deadline) { mockTimerStop(); return; }
+  mockTimerTick();
+  if (!mockTimerId) mockTimerId = setInterval(mockTimerTick, 1000);
+}
+
+/* --- Listening: avtomatik ijro, pauza/seek/qayta ijro taqiqlangan --- */
+function mockAudioStatus(el, text) {
+  const node = el && el.id ? document.getElementById(el.id + '-status') : null;
+  if (node) node.textContent = text;
+}
+function mockAudioNudge(el) {
+  const btn = el && el.id ? document.getElementById(el.id + '-nudge') : null;
+  if (btn) btn.hidden = false;
+}
+function mockAudioPlay(el) {
+  if (!el) return null;
+  try {
+    const p = el.play();
+    if (p && p.catch) p.catch(function () { mockAudioNudge(el); });
+    return p;
+  } catch (e) {
+    mockAudioNudge(el);
+    return null;
+  }
+}
+function mockAudioLock(el) {
+  if (!el || el.__mockLock) return;
+  el.__mockLock = true;
+  el.controls = false;
+  el.setAttribute('controlslist', 'nodownload noplaybackrate nofullscreen');
+  el.setAttribute('disablepictureinpicture', '');
+  el.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  el.addEventListener('play', function () { el.__started = true; mockAudioStatus(el, t('Audio ijro etilmoqda...')); });
+  el.addEventListener('pause', function () {
+    if (el.__allowPause || el.__ended) return;
+    mockAudioPlay(el);
+  });
+  el.addEventListener('seeking', function () {
+    if (el.__ended) return;
+    const max = Number(el.__maxTime) || 0;
+    if (Math.abs((Number(el.currentTime) || 0) - max) > 1.5) {
+      try { el.currentTime = max; } catch (e) { /* ijro etilmayapti */ }
+    }
+  });
+  el.addEventListener('timeupdate', function () {
+    if (!el.seeking) el.__maxTime = Number(el.currentTime) || 0;
+  });
+  el.addEventListener('ended', function () {
+    el.__ended = true;
+    mockAudioStatus(el, t('Tinglandi'));
+    if (el.__mockNext) mockAudioPlay(el.__mockNext);
+  });
+}
+function mockListenAutoplay() {
+  const run = state.mockRun;
+  if (!run || run.cat !== 'listening') return;
+  const els = $$('.mock-audio').filter(function (el) { return !!el.getAttribute('src'); });
+  els.forEach(function (el, i) {
+    mockAudioLock(el);
+    el.__mockNext = els[i + 1] || null;
+  });
+  const first = els.filter(function (el) { return !el.__ended && !el.__started; })[0];
+  if (first) mockAudioPlay(first);
+}
 function mockStart(id) {
   const def = mockDefById(id);
   if (!def) { toast(t('Mock test topilmadi'), 'error'); return; }
+  mockTimerStop();
   state.mockResultId = '';
   state.mockRun = {
     defId: def.id, def: JSON.parse(JSON.stringify(def)), cat: def.category,
-    answers: {}, idx: 0, text: '', attemptId: ''
+    answers: {}, idx: 0, text: '', attemptId: '',
+    deadline: def.category === 'reading' ? Date.now() + MOCK_READING_MS : 0
   };
   render();
   const el = $('#screen');
   if (el) el.scrollTop = 0;
+  if (def.category === 'reading') mockTimerEnsure();
+  /* "Boshlash" klikining o'zida — mobil brauzerlar avtomatik ijroga ruxsat beradi */
+  if (def.category === 'listening') mockListenAutoplay();
 }
 function mockPick(qid, opt) {
   if (!state.mockRun) return;
@@ -10939,6 +11096,17 @@ function mockPick(qid, opt) {
   const title = $('.mock-run-title');
   if (title) title.textContent = t(mockCat(state.mockRun.cat).label) + ' · ' + done + '/' + total;
 }
+/* Mock bo'yicha yagona CEFR chegaralari: eng yuqori daraja, uning
+   minimal to'g'ri javob soni ballga yetgan bo'lsa beriladi. */
+function mockCefrByThresholds(def, score) {
+  const th = (def && def.cefrThresholds) || {};
+  let best = '';
+  MOCK_CEFR_LEVELS.forEach(function (l) {
+    const v = Number(th[l]);
+    if (isFinite(v) && v > 0 && Number(score) >= v) best = l;
+  });
+  return best;
+}
 function mockGrade(def, answers) {
   const qs = mockAllQuestions(def);
   let score = 0;
@@ -10947,7 +11115,17 @@ function mockGrade(def, answers) {
   });
   const total = qs.length;
   const percent = total ? Math.round(score * 100 / total) : 0;
-  return { score: score, total: total, percent: percent, cefr: mockCefr(percent) };
+  return {
+    score: score, total: total, percent: percent,
+    cefr: mockCefrByThresholds(def, score) || mockCefr(percent)
+  };
+}
+function mockCefrScaleHTML(level) {
+  const lvl = String(level || '').toUpperCase();
+  return `<div class="mock-cefr-scale">${MOCK_CEFR_LEVELS.map(function (l) {
+    const band = ['A1', 'A2', 'B1'].indexOf(l) >= 0 ? 'is-amber' : 'is-green';
+    return `<span class="mock-cefr-lvl ${band}${l === lvl ? ' is-active' : ''}">${l}</span>`;
+  }).join('')}</div>`;
 }
 function mockStudentMeta(st) {
   const g = st ? groupById(st.groupId) : null;
@@ -10961,6 +11139,7 @@ function mockStudentMeta(st) {
 function mockSubmitRun() {
   const run = state.mockRun;
   if (!run) return;
+  mockTimerStop();
   const st = linkedStudent();
   if (!st) { toast(t('Avval tizimga kiring'), 'error'); return; }
   const def = run.def;
@@ -11092,6 +11271,10 @@ function mockResultHTML(a, who) {
       <span class="mock-run-title">${esc(t('Natija'))}</span>
     </div>` : ''}
   <section class="card mock-score-card">
+    ${isMcq ? `<div class="mock-result-cefr">
+      <div class="mock-result-cefr-label">${t('CEFR darajasi')}</div>
+      ${mockCefrScaleHTML(a.cefr || mockCefr(a.percent || 0))}
+    </div>` : ''}
     <div class="mock-score-top">
       <span class="mock-cat-ico">${ico(c.icon, 20)}</span>
       <div class="col">
@@ -11127,12 +11310,13 @@ function mockVideosHTML(a) {
 }
 function mockPlayListening(aid) {
   const el = aid ? document.getElementById('mock-audio-' + aid) : document.querySelector('.mock-audio');
-  if (el && typeof el.play === 'function' && el.getAttribute('src')) {
-    const p = el.play();
-    if (p && p.catch) p.catch(function () { toast(t('Audioni ijro etib bo‘lmadi'), 'error'); });
+  if (!el || !el.getAttribute('src')) {
+    toast(t('Bu testda audio yuklanmagan'), 'error');
     return;
   }
-  toast(t('Bu testda audio yuklanmagan'), 'error');
+  if (el.__ended) { toast(t('Bu audio faqat bir marta tinglanadi'), 'error'); return; }
+  mockAudioLock(el);
+  mockAudioPlay(el);
 }
 async function submitMockSpeakRecording() {
   if (!speakRec || !speakRec.blob || !speakRec.mock) return;
@@ -11170,13 +11354,6 @@ const MOCK_SECTIONS = [
   { key: 'speaking', cats: ['speaking'], title: 'Speaking Answers', uz: 'Speaking javoblari', icon: 'mic' },
   { key: 'vg', cats: ['grammar', 'vocabulary'], title: 'Vocabulary and Grammar', uz: 'Vocabulary va Grammar', icon: 'star' }
 ];
-function mockTeacherTabsHTML() {
-  const tab = state.mockTab || 'reading';
-  return `<div class="mock-tabs">${MOCK_CATS.map(function (c) {
-    return `<button type="button" class="mock-tab${tab === c.key ? ' is-active' : ''}" data-act="mock-tab" data-cat="${c.key}">
-      ${ico(c.icon, 15)} <span>${esc(t(c.label))}</span></button>`;
-  }).join('')}</div>`;
-}
 function mockGroupBadgesHTML(def) {
   const ids = mockGroupIds(def);
   if (!ids.length) return `<span class="mock-def-group is-none">${t('Guruh tanlanmagan')}</span>`;
@@ -11269,11 +11446,37 @@ function mockTeacherGradeForm(a) {
     </div>
   </div>`;
 }
+function mockResultSectionHTML(sec, rows) {
+  return `<section class="mock-sec" id="mock-sec-${sec.key}">
+    <div class="mock-sec-head">
+      <span class="mock-sec-ico">${ico(sec.icon, 16)}</span>
+      <span class="mock-sec-title">${esc(t(sec.uz))}</span>
+      <span class="mock-sec-count">${rows.length}</span>
+    </div>
+    ${rows.length ? rows.map(mockTeacherRowHTML).join('')
+      : `<div class="empty"><span class="empty-ico">${ico(sec.icon, 22)}</span>${t('Hozircha natija yo‘q')}</div>`}
+  </section>`;
+}
+/* Ustoz: kategoriya kartasi ochilganda — yaratish/tahrirlash/guruhlash */
+function mockTeacherCatScreen(key) {
+  const c = mockCat(key);
+  const defs = mockSortDefs(mockDefs().filter(function (d) { return d.category === c.key; }));
+  const sec = MOCK_SECTIONS.filter(function (s) { return s.cats.indexOf(c.key) >= 0; })[0] || MOCK_SECTIONS[0];
+  const rows = mockSortResults(mockResults().filter(function (a) { return sec.cats.indexOf(a.category) >= 0; }));
+  return `<div class="mock-run-head">
+    <button type="button" class="btn btn-xs ghost" data-act="mock-cat-back">${ico('arrowLeft', 14)} ${t('Orqaga')}</button>
+    <span class="mock-run-title">${esc(t(c.label))}</span>
+  </div>
+  <button type="button" class="btn btn-primary btn-block mock-add-btn" data-act="mock-add">${ico('plus', 16)} ${t("Yangi Mock qo'shish")}</button>
+  <div class="section-title">${esc(t(c.label))} · ${t('Yaratilgan mock testlar')}</div>
+  <div class="mock-defs">${defs.length ? defs.map(mockDefRowHTML).join('')
+    : `<div class="empty mock-empty"><span class="empty-ico">${ico(c.icon, 20)}</span>${t('Bu bo‘limda hali mock test yaratilmagan')}</div>`}</div>
+  <div class="section-title">${t('O‘quvchilar natijalari')}</div>
+  ${mockResultSectionHTML(sec, rows)}`;
+}
 function mockTeacherScreen() {
   if (state.mockBuilder) return mockBuilderHTML();
-  const tab = state.mockTab || 'reading';
-  const active = MOCK_SECTIONS.filter(function (s) { return s.cats.indexOf(tab) >= 0; })[0] || MOCK_SECTIONS[0];
-  const defs = mockSortDefs(mockDefs().filter(function (d) { return d.category === tab; }));
+  if (state.mockCatView) return mockTeacherCatScreen(state.mockCatView);
   const all = mockSortResults(mockResults());
   return `
   <div class="card mock-hero">
@@ -11283,24 +11486,11 @@ function mockTeacherScreen() {
       <div class="muted small">${t('Test yarating, guruhlarga biriktiring va o‘quvchilar natijalarini tekshiring.')}</div>
     </div>
   </div>
-  <button type="button" class="btn btn-primary btn-block mock-add-btn" data-act="mock-add">${ico('plus', 16)} ${t("Yangi Mock qo'shish")}</button>
-  ${mockTeacherTabsHTML()}
-  <div class="section-title">${esc(t(mockCat(tab).label))} · ${t('Yaratilgan mock testlar')}</div>
-  <div class="mock-defs">${defs.length ? defs.map(mockDefRowHTML).join('')
-    : `<div class="empty mock-empty"><span class="empty-ico">${ico('clipboardCheck', 20)}</span>${t('Bu bo‘limda hali mock test yaratilmagan')}</div>`}</div>
+  <div class="section-title">${t('Bo‘limni tanlang')}</div>
+  ${mockCatGridHTML()}
   <div class="section-title">${t('O‘quvchilar natijalari')}</div>
   <div class="mock-sections">${MOCK_SECTIONS.map(function (sec) {
-    const rows = mockSortResults(all.filter(function (a) { return sec.cats.indexOf(a.category) >= 0; }));
-    const visible = sec.key === active.key;
-    return `<section class="mock-sec${visible ? ' is-active' : ''}" id="mock-sec-${sec.key}"${visible ? '' : ' hidden'}>
-      <div class="mock-sec-head">
-        <span class="mock-sec-ico">${ico(sec.icon, 16)}</span>
-        <span class="mock-sec-title">${esc(t(sec.uz))}</span>
-        <span class="mock-sec-count">${rows.length}</span>
-      </div>
-      ${rows.length ? rows.map(mockTeacherRowHTML).join('')
-        : `<div class="empty"><span class="empty-ico">${ico(sec.icon, 22)}</span>${t('Hozircha natija yo‘q')}</div>`}
-    </section>`;
+    return mockResultSectionHTML(sec, mockSortResults(all.filter(function (a) { return sec.cats.indexOf(a.category) >= 0; })));
   }).join('')}</div>`;
 }
 function mockSaveTeacherGrade(id) {
@@ -11332,7 +11522,10 @@ function mockNewTask(index, cefr) {
 }
 function mockNewDraft(cat) {
   const c = mockCat(cat);
-  const base = { id: mockNewId('md'), kind: 'mock', category: c.key, title: '', groupIds: [], cefr: 'B1' };
+  const base = {
+    id: mockNewId('md'), kind: 'mock', category: c.key, title: '', groupIds: [], cefr: 'B1',
+    cefrThresholds: { A1: '', A2: '', B1: '', B2: '', C1: '', C2: '' }
+  };
   if (c.key === 'reading') base.parts = [mockNewPart(0), mockNewPart(1)];
   else if (c.key === 'listening') base.tasks = [mockNewTask(0)];
   else if (c.key === 'writing') return Object.assign(base, { prompt: '', instruction: '', fileUrl: '', fileName: '' });
@@ -11368,11 +11561,21 @@ function mockBInput(path, ph, cls) {
 function mockBTextarea(path, rows, ph) {
   return `<textarea class="input mock-ta" data-mb="${esc(path)}" rows="${rows || 4}" placeholder="${esc(ph || '')}">${esc(mockBGet(path))}</textarea>`;
 }
-function mockBCefr(path) {
-  const val = String(mockBGet(path) || 'B1');
-  return `<select class="input" data-mb="${esc(path)}">${MOCK_CEFR_LEVELS.map(function (l) {
-    return `<option value="${l}"${l === val ? ' selected' : ''}>${l}</option>`;
-  }).join('')}</select>`;
+/* Mock darajasidagi yagona CEFR ustuni: har bir daraja uchun minimal to'g'ri javob */
+function mockThresholdsHTML(def) {
+  const th = (def && def.cefrThresholds) || {};
+  const total = mockDefQuestionCount(def);
+  return `<div class="mock-cefr-col">
+    <div class="mock-build-sub">${t('CEFR darajalari')} · ${t('Mock bo‘yicha minimal to‘g‘ri javob')} (${total} ${t('savol')})</div>
+    ${MOCK_CEFR_LEVELS.map(function (l) {
+      const band = ['A1', 'A2', 'B1'].indexOf(l) >= 0 ? 'is-amber' : 'is-green';
+      const val = th[l] == null ? '' : th[l];
+      return `<label class="mock-cefr-row">
+        <span class="mock-cefr-lvl ${band}">${l}</span>
+        <input class="input" type="number" inputmode="numeric" min="0" step="1" data-mb="cefrThresholds.${l}" value="${esc(val)}" placeholder="0" />
+      </label>`;
+    }).join('')}
+  </div>`;
 }
 function mockBAnswerSelect(path, val, optCount) {
   const n = Math.max(2, Math.min(4, optCount || 4));
@@ -11388,7 +11591,6 @@ function mockBQFields(base, q, idx) {
   const parent = base.slice(0, base.lastIndexOf('.'));
   return `<div class="mock-build-q">
     <div class="mock-build-q-head"><span class="mock-q-num">${idx + 1}</span>
-      ${mockBCefr(base + '.cefr')}
       <button type="button" class="btn btn-xs ghost mock-danger" data-act="mock-b-del-q" data-path="${esc(parent)}" data-idx="${idx}">${ico('trash', 12)}</button>
     </div>
     ${mockBInput(base + '.text', t('Savol matni'))}
@@ -11448,14 +11650,14 @@ function mockBuilderBodyHTML(def, c, step) {
     return `<div class="mock-tabs mock-step-tabs">${steps.map(function (s) {
       return `<button type="button" class="mock-tab${step === s[0] ? ' is-active' : ''}" data-act="mock-b-step" data-step="${s[0]}">${t(s[1])}</button>`;
     }).join('')}</div>
+    ${mockThresholdsHTML(def)}
     ${(def.parts || []).map(function (p, i) {
       const base = 'parts.' + i;
       const head = (p.title || 'Part ' + (i + 1));
       if (step === 'text') {
         return `<div class="mock-build-part">
           <div class="mock-build-part-head"><b>${esc(head)}</b>
-            <span class="mock-build-part-tools">${mockBCefr(base + '.cefr')}
-              ${mockBRemove('mock-b-del-part', String(i))}</span></div>
+            <span class="mock-build-part-tools">${mockBRemove('mock-b-del-part', String(i))}</span></div>
           ${mockBInput(base + '.title', t('Qism nomi'))}
           ${mockBTextarea(base + '.passage', 6, t('Matnni kiriting'))}
         </div>`;
@@ -11487,14 +11689,14 @@ function mockBuilderBodyHTML(def, c, step) {
         }).join('')}
       </div>`;
     }).join('')}
-    <button type="button" class="btn btn-xs ghost mock-add-task" data-act="mock-b-add-part">${ico('plus', 13)} ${t('Add Task')}</button>`;
+    <button type="button" class="btn btn-xs ghost mock-add-task" data-act="mock-b-add-part">${ico('plus', 13)} ${t('Part qo‘shish')}</button>`;
   }
   if (c.key === 'listening') {
-    return (def.tasks || []).map(function (tk, i) {
+    return mockThresholdsHTML(def) + (def.tasks || []).map(function (tk, i) {
       const base = 'tasks.' + i;
       return `<div class="mock-build-part">
         <div class="mock-build-part-head"><b>${esc(tk.title || 'Task ' + (i + 1))}</b>
-          <span class="mock-build-part-tools">${mockBCefr(base + '.cefr')}${mockBRemove('mock-b-del-task', String(i))}</span></div>
+          <span class="mock-build-part-tools">${mockBRemove('mock-b-del-task', String(i))}</span></div>
         <label class="mock-field-label">${t('Audio (R2)')}</label>
         <div class="mock-file-row">
           <input type="file" accept="audio/*" data-mb-file="${esc(base + '.audioUrl')}" data-mb-name="${esc(base + '.audioName')}" data-mb-folder="mock/audio" />
@@ -11539,7 +11741,7 @@ function mockBuilderBodyHTML(def, c, step) {
       </div>`;
     }).join('') + `<button type="button" class="btn btn-xs ghost mock-add-task" data-act="mock-b-add-speak">${ico('plus', 13)} ${t('Savol qo‘shish')}</button>`;
   }
-  return mockBQuestionsBlock('questions', t('Savollar')) +
+  return mockThresholdsHTML(def) + mockBQuestionsBlock('questions', t('Savollar')) +
     `<button type="button" class="btn btn-xs ghost mock-add-task" data-act="mock-b-add-q" data-path="questions">${ico('plus', 13)} ${t('Savol qo‘shish')}</button>`;
 }
 function mockOpenBuilder(def) {
@@ -11548,7 +11750,7 @@ function mockOpenBuilder(def) {
   state.mockDelId = '';
   state.mockBStep = 'text';
   state.mockBuilder = {
-    draft: def ? JSON.parse(JSON.stringify(def)) : mockNewDraft(state.mockTab || 'reading'),
+    draft: def ? JSON.parse(JSON.stringify(def)) : mockNewDraft(state.mockCatView || state.mockTab || 'reading'),
     isNew: !def
   };
   render();
@@ -11572,6 +11774,7 @@ function mockBuilderSave() {
   mockSaveDef(def);
   state.mockBuilder = null;
   state.mockTab = def.category;
+  state.mockCatView = def.category;
   render();
   toast(t('Mock test saqlandi'));
 }
@@ -11628,6 +11831,16 @@ function render() {
   if (!currentUser()) scr = 'login';
   else if (!canAccess(scr)) scr = 'home';
   state.screen = scr;
+  /* Rol almashganda mock ko'rinish holati qolib ketmasin */
+  const mockRole = isTeacher() ? 'teacher' : 'student';
+  if (state.mockRole !== mockRole) {
+    state.mockRole = mockRole;
+    mockTimerStop();
+    state.mockRun = null;
+    state.mockResultId = '';
+    state.mockCatView = '';
+    state.mockOpen = {};
+  }
 
   document.body.classList.toggle('auth-mode', AUTH_SCREENS.indexOf(scr) >= 0);
   $('#app-header').innerHTML = renderHeader();
@@ -11657,6 +11870,8 @@ function render() {
   if (scr === 'grades') ensureGradeState();
   if (scr === 'attendance') ensureAttState();
   if (scr === 'speaking') ensureSpeakState();
+  if (state.mockRun && (scr === 'mock' || (scr === 'home' && state.studentView === 'mock'))) mockTimerEnsure();
+  else mockTimerStop();
   if (scr === 'home' && !isTeacher()) refreshChat();
   syncLoginLock();
   applyCurrentLang();
@@ -12465,8 +12680,10 @@ document.addEventListener('click', function (e) {
       state.chatEditId = null;
       state.chatDelId = null;
       if (prevView !== state.studentView) {
+        mockTimerStop();
         state.mockRun = null;
         state.mockResultId = '';
+        state.mockCatView = '';
         state.mockOpen = {};
       }
       if (state.studentView === 'chat') {
@@ -12481,17 +12698,20 @@ document.addEventListener('click', function (e) {
       }
     },
     'student-back': function () {
-      if (state.studentView === 'mock' && state.mockRun) { state.mockRun = null; render(); return; }
+      if (state.studentView === 'mock' && state.mockRun) { mockTimerStop(); state.mockRun = null; render(); return; }
       if (state.studentView === 'mock' && state.mockResultId) { state.mockResultId = ''; render(); return; }
+      if (state.studentView === 'mock' && state.mockCatView) { state.mockCatView = ''; render(); return; }
       state.studentView = '';
+      mockTimerStop();
       state.mockRun = null;
       state.mockResultId = '';
+      state.mockCatView = '';
       render();
     },
     /* --- Mock testlar (o'quvchi) --- */
     'mock-start': function () { mockStart(btn.getAttribute('data-id')); },
-    'mock-exit': function () { state.mockRun = null; render(); },
-    'mock-home': function () { state.mockRun = null; state.mockResultId = ''; render(); },
+    'mock-exit': function () { mockTimerStop(); state.mockRun = null; render(); },
+    'mock-home': function () { mockTimerStop(); state.mockRun = null; state.mockResultId = ''; render(); },
     'mock-pick': function () { mockPick(btn.getAttribute('data-mq'), btn.getAttribute('data-mopt')); },
     'mock-submit': function () { mockSubmitRun(); },
     'mock-play': function () { mockPlayListening(btn.getAttribute('data-aid')); },
@@ -12516,8 +12736,15 @@ document.addEventListener('click', function (e) {
       map[id] = !map[id];
       render();
     },
-    'mock-tab': function () {
-      state.mockTab = btn.getAttribute('data-cat') || 'reading';
+    'mock-cat-open': function () {
+      state.mockCatView = btn.getAttribute('data-cat') || 'reading';
+      state.mockTab = state.mockCatView;
+      state.mockAssignId = '';
+      state.mockDelId = '';
+      render();
+    },
+    'mock-cat-back': function () {
+      state.mockCatView = '';
       state.mockAssignId = '';
       state.mockDelId = '';
       render();
