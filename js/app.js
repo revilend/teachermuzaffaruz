@@ -67,7 +67,8 @@ const K = {
   homeworkSubmissions: 'et_hw_submissions',
   hwCommentsSeen: 'et_hw_comments_seen',
   mock: 'et_mock_results',
-  mocks: 'et_mock_defs'
+  mocks: 'et_mock_defs',
+  support: 'et_support_teachers'
 };
 
 /* Toza start: demo guruh/o'quvchi seedlari YO'Q — barcha ma'lumot Supabase'dan keladi.
@@ -213,12 +214,15 @@ const state = {
   mockDelId: '',
   mockDelResultId: '',
   mockCatView: '',
-  mockRole: ''
+  mockRole: '',
+  supervise: false,
+  supportEditId: '',
+  supportDelId: ''
 };
 
 const AUTH_SCREENS = ['login'];
 /* Faqat ustoz ruxsat beradigan ekranlar */
-const TEACHER_SCREENS = ['groups', 'students', 'homework', 'submissions', 'debtors', 'payments', 'grades', 'attendance', 'speaking', 'mock'];
+const TEACHER_SCREENS = ['groups', 'students', 'homework', 'submissions', 'debtors', 'payments', 'grades', 'attendance', 'speaking', 'mock', 'support'];
 
 
 function initials(name) {
@@ -931,6 +935,22 @@ const CloudSync = (function () {
     }
   }
 
+  /* --- Support teacherlar ro'yxati (bot_settings: support_teachers) --- */
+  async function pullSupportTeachers() {
+    const raw = await getSetting('support_teachers');
+    if (!raw) return false;
+    try {
+      const list = JSON.parse(raw);
+      if (!Array.isArray(list)) return false;
+      store.set(K.support, list);
+      return true;
+    } catch (e) { return false; }
+  }
+  async function pushSupportTeachers(list) {
+    const res = await setSettingChecked('support_teachers', JSON.stringify(list || []));
+    return !!(res && res.ok);
+  }
+
   /* --- Bulutdan tortib olish ---
      Ustoz: barcha jadvallar. O'quvchi: FAQAT o'z ma'lumotlari —
      boshqa o'quvchilarning parollari/ma'lumotlari brauzerga tushmaydi. --- */
@@ -1048,6 +1068,7 @@ const CloudSync = (function () {
       await fetchMessages(null);
       try { await pullSlots(null); } catch (e) { /* speaking_slots yo'q */ }
       try { await pullMonthlyFees(); } catch (e) { /* monthly_fees yo'q */ }
+      try { await pullSupportTeachers(); } catch (e) { /* support ro'yxati yo'q */ }
       try { await pullHomework(); } catch (e) { /* homework jadvali yo'q */ }
       try { await pullSubmissions(); } catch (e) { /* homework_submissions yo'q */ }
       try { await pullCardSettings(); } catch (e) { /* bot_settings yo'q */ }
@@ -2399,6 +2420,8 @@ const CloudSync = (function () {
     deleteSlot: deleteSlot,
     pullTeacherPassword: pullTeacherPassword,
     pushTeacherPassword: pushTeacherPassword,
+    pullSupportTeachers: pullSupportTeachers,
+    pushSupportTeachers: pushSupportTeachers,
     sendMessage: sendMessage,
     deleteSubmissionComment: deleteSubmissionComment,
     editMessage: editMessage,
@@ -2895,6 +2918,123 @@ function linkedStudent() {
   if (!u || !u.studentId) return null;
   return studentById(u.studentId);
 }
+
+/* ==================== SUPPORT TEACHER (yordamchi o'qituvchi) ====================
+   Asosiy o'qituvchi support teacher qo'shadi, unga guruhlar biriktiradi va
+   ruxsatlarni belgilaydi. Support teacher faqat o'z guruhlari va ruxsat
+   etilgan bo'limlarda ishlaydi. Ro'yxat bulutda bot_settings orqali saqlanadi. */
+const SUPPORT_PERM_LIST = [
+  { key: 'students', label: "O'quvchilar paneli", hint: "Biriktirilgan guruh o'quvchilari" },
+  { key: 'speaking', label: 'Speaking slotlari', hint: 'Slot yaratish va baholash' },
+  { key: 'attendance', label: 'Davomat', hint: 'Davomat belgilash' },
+  { key: 'homework', label: 'Uyga vazifa kiritish', hint: 'Vazifa berish va tahrirlash' },
+  { key: 'grades', label: 'Baholar kiritish', hint: 'Baholar jurnaliga yozish' },
+  { key: 'mock', label: 'Mock test kiritish', hint: 'Mock test yaratish va baholash' },
+  { key: 'submissions', label: 'Topshiriqlar', hint: "Bajarilgan ishlarni ko'rish va izoh yozish" }
+];
+const SUPPORT_SCREEN_PERM = {
+  groups: 'students',
+  students: 'students',
+  homework: 'homework',
+  submissions: 'submissions',
+  grades: 'grades',
+  attendance: 'attendance',
+  speaking: 'speaking',
+  mock: 'mock'
+};
+function isSupport() {
+  const u = currentUser();
+  return !!u && u.role === 'support';
+}
+function isStaff() { return isTeacher() || isSupport(); }
+function supportTeachers() {
+  const list = store.get(K.support, []);
+  return Array.isArray(list) ? list : [];
+}
+function persistSupportTeachers(list) {
+  store.set(K.support, Array.isArray(list) ? list : []);
+  try { if (CloudSync && CloudSync.pushSupportTeachers) CloudSync.pushSupportTeachers(list); } catch (e) {}
+}
+function supportTeacherByLogin(login) {
+  const l = String(login || '').trim().toLowerCase();
+  if (!l) return null;
+  return supportTeachers().filter(function (r) {
+    return String(r.login || '').trim().toLowerCase() === l;
+  })[0] || null;
+}
+function supportTeacherById(id) {
+  return supportTeachers().filter(function (r) { return String(r.id) === String(id); })[0] || null;
+}
+function supportPermsOf(rec) {
+  const perms = {};
+  SUPPORT_PERM_LIST.forEach(function (p) {
+    perms[p.key] = !rec || !rec.perms ? true : rec.perms[p.key] !== false;
+  });
+  return perms;
+}
+function supportRecord() {
+  if (!isSupport()) return null;
+  const u = currentUser() || {};
+  return supportTeacherByLogin(u.login);
+}
+function supportPerm(key) {
+  if (isTeacher()) return true;
+  const rec = supportRecord();
+  if (!rec) return false;
+  return supportPermsOf(rec)[key] === true;
+}
+/* Ekran/bo'lim ruxsati: asosiy ustoz hamma joyda, support — ruxsat bo'lsa */
+function canStaff(permKey) {
+  if (isTeacher()) return true;
+  if (!isSupport()) return false;
+  return permKey ? supportPerm(permKey) : true;
+}
+function supportRecordGroupIds(rec) {
+  return (rec && Array.isArray(rec.groupIds) ? rec.groupIds : []).map(String);
+}
+function supportGroupIdsAll() {
+  const out = {};
+  supportTeachers().forEach(function (r) {
+    supportRecordGroupIds(r).forEach(function (id) { out[id] = 1; });
+  });
+  return out;
+}
+function supportTeacherOfGroup(gid) {
+  const id = String(gid == null ? '' : gid);
+  if (!id) return null;
+  return supportTeachers().filter(function (r) {
+    return supportRecordGroupIds(r).indexOf(id) >= 0;
+  })[0] || null;
+}
+/* Ko'rinadigan guruhlar: support — faqat o'z guruhlari; asosiy ustoz —
+   support guruhlari faqat "Support teacherni nazorat qilish" rejimida. */
+function scopedGroups() {
+  const all = getGroups();
+  if (isSupport()) {
+    const ids = supportRecordGroupIds(supportRecord());
+    return all.filter(function (g) { return ids.indexOf(String(g.id)) >= 0; });
+  }
+  if (state.supervise) return all;
+  const hidden = supportGroupIdsAll();
+  return all.filter(function (g) { return !hidden[String(g.id)]; });
+}
+function scopedStudents() {
+  if (isSupport()) {
+    const ids = supportRecordGroupIds(supportRecord());
+    return getStudents().filter(function (s) { return ids.indexOf(String(s.groupId)) >= 0; });
+  }
+  if (state.supervise) return getStudents();
+  const hidden = supportGroupIdsAll();
+  return getStudents().filter(function (s) { return !hidden[String(s.groupId)]; });
+}
+function supportGroupsText(rec) {
+  const ids = supportRecordGroupIds(rec);
+  if (!ids.length) return t('Guruh biriktirilmagan');
+  return ids.map(function (id) {
+    const g = groupById(id);
+    return g ? g.name : id;
+  }).join(', ');
+}
 function startSession(userObj) {
   const sess = typeof userObj === 'object' ? userObj : {
     login: userObj,
@@ -3305,6 +3445,52 @@ function ico(name, size) {
 /* ==================== Header / Bottom nav ==================== */
 /* ==================== I18N (UZ/EN) VA REJIM (Light/Dark) ==================== */
 const I18N_EN = {
+  'Support teacherlar': 'Support teachers',
+  "Support teacher qo'shish": 'Add support teacher',
+  'Support teacherni tahrirlash': 'Edit support teacher',
+  'Support teacherni nazorat qilish': 'Supervise support teacher',
+  "O'chirilganda support guruhlari Guruhlar va O'quvchilar bo'limlarida ko'rinmaydi.":
+    'When off, support groups are hidden from the Groups and Students sections.',
+  "Nazorat rejimi yoniq — support guruhlari ko'rinadi.": 'Supervision is on — support groups are visible.',
+  "Hozircha support teacher qo'shilmagan": 'No support teachers yet',
+  "Hozircha support teacher qo'shilmagan — «Support teacher qo'shish» tugmasini bosing":
+    'No support teachers yet — press “Add support teacher”',
+  'Ruxsatlar': 'Permissions',
+  'guruh': 'groups',
+  'Guruh biriktirilmagan': 'No group assigned',
+  "Guruh biriktirilmagan — asosiy o'qituvchiga murojaat qiling": 'No group assigned — contact the main teacher',
+  'Biriktirilgan guruhlar': 'Assigned groups',
+  "o'quvchi": 'students',
+  'Tez amallar': 'Quick actions',
+  'Support teacher nazorati': 'Support teacher supervision',
+  'Mock natijalari': 'Mock results',
+  'Baholanmagan': 'Not graded',
+  'Baholar jurnalini ochish': 'Open gradebook',
+  "Hozircha vazifa yo'q": 'No homework yet',
+  "Davomat yozuvi yo'q": 'No attendance record',
+  "Hozircha natija yo'q": 'No results yet',
+  'Mock test': 'Mock test',
+  'Qanday ishlaydi': 'How it works',
+  "O'quvchilar paneli": 'Students panel',
+  "Biriktirilgan guruh o'quvchilari": 'Assigned group students',
+  'Slot yaratish va baholash': 'Create and grade slots',
+  'Davomat belgilash': 'Mark attendance',
+  'Uyga vazifa kiritish': 'Add homework',
+  'Vazifa berish va tahrirlash': 'Assign and edit homework',
+  'Baholar kiritish': 'Enter grades',
+  'Baholar jurnaliga yozish': 'Write to the gradebook',
+  'Mock test kiritish': 'Create mock tests',
+  'Mock test yaratish va baholash': 'Create and grade mock tests',
+  'Topshiriqlar': 'Submissions',
+  "Bajarilgan ishlarni ko'rish va izoh yozish": 'Review submissions and comment',
+  "Guruhlar (support faqat shu guruhlarni ko'radi)": 'Groups (support sees only these)',
+  "Support teacherni o'chirish": 'Delete support teacher',
+  "Support teacher faqat shu yerda biriktirilgan guruhlar va belgilangan ruxsatlar bilan ishlaydi. Uning guruhlari Guruhlar va O'quvchilar bo'limlarida faqat «Support teacherni nazorat qilish» rejimi yoniq bo'lganda ko'rinadi.":
+    'A support teacher works only with the groups and permissions assigned here. Their groups appear in the Groups and Students sections only while “Supervise support teacher” mode is on.',
+  'Kamida 3 ta belgi': 'At least 3 characters',
+  "Bo'sh qoldirsangiz o'zgarmaydi": 'Leave empty to keep unchanged',
+  'Masalan: Dilshod Karimov': 'e.g. Dilshod Karimov',
+  "Support teacherlar boshqaruvi": 'Support teacher management',
   "To'lov": "Payments",
   "To'lovlar": "Payments",
   'Bosh sahifa': 'Home', 'Bosh': 'Home', 'Guruhlar': 'Groups',
@@ -4332,11 +4518,23 @@ function renderHeader() {
       <span class="brand"><img class="brand-logo" src="logo.png" alt="" width="36" height="36" />English Teacher</span>
       <span class="brand-sub">${esc(t(scrLabel(scr)))}</span>
     </div>
-    <span class="role-badge ${u.role === 'teacher' ? 'is-teacher' : 'is-student'}">${u.role === 'teacher' ? 'Muzaffar Amirov' : "O'quvchi"}</span>
+      <span class="role-badge ${u.role === 'teacher' || u.role === 'support' ? 'is-teacher' : 'is-student'}">${u.role === 'teacher' ? 'Muzaffar Amirov' : u.role === 'support' ? 'Support teacher' : "O'quvchi"}</span>
     ${headerControlsHTML()}
   </div>`;
 }
 function navItems() {
+  if (isSupport()) {
+    const items = [['home', t('Bosh'), ICON.home]];
+    if (supportPerm('students')) items.push(['students', t("O'quvchi"), ICON.students]);
+    if (supportPerm('homework')) items.push(['homework', t('Uyga vazifalar'), ICON.bookOpen]);
+    if (supportPerm('submissions')) items.push(['submissions', t('Topshiriqlar'), ICON.clipboardCheck]);
+    if (supportPerm('mock')) items.push(['mock', t('Mock testlar'), ICON.gradCap]);
+    if (supportPerm('grades')) items.push(['grades', t('Baholar'), ICON.grades]);
+    if (supportPerm('attendance')) items.push(['attendance', t('Davomat'), ICON.cal]);
+    if (supportPerm('speaking')) items.push(['speaking', t('Speaking'), ICON.mic]);
+    items.push(['profile', t('Profil'), ICON.profile]);
+    return items;
+  }
   if (isTeacher()) {
     return [
       ['home', t('Bosh'), ICON.home],
@@ -5185,8 +5383,8 @@ function homeworkListHTML(list) {
 }
 
 function openHwModal(hid, preGroup) {
-  if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
-  const groups = getGroups();
+  if (!canStaff('homework')) { toast("Ruxsat yo'q", 'error'); return; }
+  const groups = scopedGroups();
   if (!groups.length) { toast("Avval guruh yarating", 'error'); return; }
   const cur = hid != null ? getHomework().filter(x => String(x.id) === String(hid))[0] : null;
   if (hid != null && !cur) return;
@@ -5392,7 +5590,7 @@ function removeHwAttachment(kind, idx) {
 }
 
 function saveHomework() {
-  if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+  if (!canStaff('homework')) { toast("Ruxsat yo'q", 'error'); return; }
   const gid = $('#hw-group') ? $('#hw-group').value : '';
   const title = $('#hw-title') ? $('#hw-title').value.trim() : '';
   const desc = $('#hw-desc') ? $('#hw-desc').value.trim() : '';
@@ -5546,10 +5744,49 @@ function payHistoryHTML(st) {
   }).join('')}</div>`;
 }
 
+/* Asosiy ustoz: support teacherlarni boshqarish va nazorat paneli */
+function supportWatchPanelHTML() {
+  const list = supportTeachers();
+  const on = !!state.supervise;
+  const rows = list.map(function (rec) {
+    const groups = supportRecordGroupIds(rec).map(function (id) { return groupById(id); }).filter(Boolean);
+    return `<div class="sup-watch-row">
+      <div class="row between">
+        <div class="col">
+          <strong>${esc(rec.name)}</strong>
+          <div class="muted small">${esc(rec.login || '')} · ${groups.length} ${t('guruh')}</div>
+        </div>
+        <button type="button" class="btn btn-xs ghost" data-act="support-edit" data-id="${esc(rec.id)}">${ico('brush', 13)} ${t('Ruxsatlar')}</button>
+      </div>
+      ${groups.length
+        ? `<div class="sup-watch-groups">${groups.map(function (g) {
+            return `<button type="button" class="chip-btn" data-act="support-watch-group" data-gid="${esc(g.id)}">${esc(g.name)}</button>`;
+          }).join('')}</div>`
+        : `<div class="muted small">${t('Guruh biriktirilmagan')}</div>`}
+    </div>`;
+  }).join('');
+  return `
+  <div class="section-title">${ico('profile', 15)} Support teacherlar</div>
+  <div class="card sup-watch">
+    <div class="row between">
+      <div class="col">
+        <div class="strong-label">${t('Support teacherni nazorat qilish')}</div>
+        <div class="muted small">${on
+          ? t("Nazorat rejimi yoniq — support guruhlari ko'rinadi.")
+          : t("O'chirilganda support guruhlari Guruhlar va O'quvchilar bo'limlarida ko'rinmaydi.")}</div>
+      </div>
+      <button type="button" class="switch${on ? ' on' : ''}" data-act="toggle-supervise" role="switch"
+              aria-checked="${on}" aria-label="${t('Support teacherni nazorat qilish')}"></button>
+    </div>
+    <div class="sup-watch-list">${list.length ? rows : `<div class="muted small">${t("Hozircha support teacher qo'shilmagan")}</div>`}</div>
+    <button type="button" class="btn btn-primary btn-block" data-act="nav" data-screen="support">${ico('userPlus', 16)} ${t("Support teacher qo'shish")}</button>
+  </div>`;
+}
+
 function teacherHome() {
   applyMonthlyFees();
-  const groups = getGroups();
-  const students = getStudents();
+  const groups = scopedGroups();
+  const students = scopedStudents();
   const classSet = {};
   students.forEach(s => { classSet[s.schoolClass] = 1; });
   const u = currentUser() || {};
@@ -5586,6 +5823,8 @@ function teacherHome() {
     <button type="button" class="card quick" data-act="open-add-student"><span class="quick-ico tint-slate">${ICON.userPlus}</span><span>O'quvchi qo'shish</span></button>
     <button type="button" class="card quick" data-act="nav" data-screen="mock"><span class="quick-ico tint-violet">${ICON.gradCap}</span><span>${t('Mock testlar')}${navBadgeHTML('mock')}</span></button>
   </div>
+
+  ${supportWatchPanelHTML()}
 
   <button type="button" class="btn btn-primary btn-block" data-act="open-hw">${ico('bookOpen', 16)} Uyga vazifa berish</button>
   <div class="muted small" style="margin-top:6px;text-align:center">${t("Berilgan vazifalar «Uyga vazifalar» bo'limida ko'rinadi.")}</div>
@@ -5904,7 +6143,59 @@ function studentPortal() {
   `;
 }
 
-function homeScreen() { return isTeacher() ? teacherHome() : studentPortal(); }
+/* Support teacher bosh sahifasi: faqat ruxsat etilgan bo'limlar */
+function supportHome() {
+  const u = currentUser() || {};
+  const rec = supportRecord();
+  const groups = scopedGroups();
+  const students = scopedStudents();
+  const perms = supportPermsOf(rec);
+  const quick = [];
+  if (perms.students) quick.push(['students', ICON.students, "O'quvchilar", 'tint-amber']);
+  if (perms.homework) quick.push(['homework', ICON.bookOpen, 'Uyga vazifalar', 'tint-blue']);
+  if (perms.attendance) quick.push(['attendance', ICON.cal, 'Davomat', 'tint-emerald']);
+  if (perms.speaking) quick.push(['speaking', ICON.mic, 'Speaking', 'tint-sky']);
+  if (perms.grades) quick.push(['grades', ICON.grades, 'Baholar', 'tint-indigo']);
+  if (perms.mock) quick.push(['mock', ICON.gradCap, 'Mock testlar', 'tint-violet']);
+  if (perms.submissions) quick.push(['submissions', ICON.clipboardCheck, 'Topshiriqlar', 'tint-rose']);
+  return `
+  <section class="card hero-card">
+    <div class="greet-main">
+      <div class="avatar avatar-lg">${esc(initials(u.name || 'Support'))}</div>
+      <div class="col">
+        <div class="greet-hi">Xush kelibsiz,</div>
+        <div class="greet-name">${esc(u.name || 'Support teacher')}</div>
+        <span class="role-badge is-teacher">Support teacher</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="stat-grid">
+    <button type="button" class="card stat" data-act="nav" data-screen="students"><span class="stat-ico">${ICON.groups}</span><span class="stat-num">${groups.length}</span><span class="stat-label">Guruhlar</span></button>
+    <button type="button" class="card stat" data-act="nav" data-screen="students"><span class="stat-ico">${ICON.students}</span><span class="stat-num">${students.length}</span><span class="stat-label">O'quvchilar</span></button>
+  </div>
+
+  <div class="section-title">${t('Biriktirilgan guruhlar')}</div>
+  ${groups.length
+    ? `<div class="card sup-my-groups">${groups.map(function (g) {
+        const cnt = students.filter(function (s) { return s.groupId === g.id; }).length;
+        return `<div class="list-row"><span>${ico('groups', 14)} ${esc(g.name)}</span><span class="muted small">${cnt} ${t('o\'quvchi')}</span></div>`;
+      }).join('')}</div>`
+    : `<div class="card">${emptyState(t('Guruh biriktirilmagan — asosiy o\'qituvchiga murojaat qiling'), 'groups')}</div>`}
+
+  <div class="section-title">${t('Tez amallar')}</div>
+  <div class="quick-grid">
+    ${quick.map(function (q) {
+      return `<button type="button" class="card quick" data-act="nav" data-screen="${q[0]}"><span class="quick-ico ${q[3]}">${q[1]}</span><span>${esc(t(q[2]))}${q[0] === 'submissions' ? navBadgeHTML('submissions') : ''}</span></button>`;
+    }).join('')}
+  </div>`;
+}
+
+function homeScreen() {
+  if (isTeacher()) return teacherHome();
+  if (isSupport()) return supportHome();
+  return studentPortal();
+}
 
 /* ==================== BAJARILGAN TOPSHIRIQLAR (ustoz paneli) ==================== */
 function submissionsList() {
@@ -5983,9 +6274,14 @@ function submissionCardHTML(s) {
 }
 
 function submissionsScreen() {
-  if (!isTeacher()) return '';
-  const groups = getGroups();
-  const all = submissionsList();
+  if (!canStaff('submissions')) return '';
+  const groups = scopedGroups();
+  const visibleGroups = {};
+  groups.forEach(function (g) { visibleGroups[String(g.id)] = 1; });
+  const all = submissionsList().filter(function (s) {
+    const hw = submissionHomework(s);
+    return !!hw && !!visibleGroups[String(hw.groupId)];
+  });
   const list = all.filter(function (s) {
     if (!state.subGroup || state.subGroup === 'all') return true;
     const hw = submissionHomework(s);
@@ -6004,7 +6300,7 @@ function submissionsScreen() {
 
 /* Saqlangan komentariyani tahrirlash (Supabase + lokal kesh) */
 async function saveSubmissionCommentEdit(id) {
-  if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+  if (!canStaff('submissions')) { toast("Ruxsat yo'q", 'error'); return; }
   const box = $('#sub-edit-' + id);
   const text = String((box && box.value) || '').trim();
   if (!text) { toast('Avval komentariyani yozing', 'error'); return; }
@@ -6020,7 +6316,7 @@ async function saveSubmissionCommentEdit(id) {
 
 /* Komentariyani o'chirish (tasdiqdan keyin) */
 async function removeSubmissionComment(id) {
-  if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+  if (!canStaff('submissions')) { toast("Ruxsat yo'q", 'error'); return; }
   state.subDelId = null;
   try {
     await CloudSync.deleteSubmissionComment(id);
@@ -6033,7 +6329,7 @@ async function removeSubmissionComment(id) {
 
 /* Ustoz komentariyasi: bazaga + o'quvchining Telegramiga */
 async function sendSubmissionComment(btn) {
-  if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+  if (!canStaff('submissions')) { toast("Ruxsat yo'q", 'error'); return; }
   const id = btn ? btn.getAttribute('data-sub') : '';
   const sub = submissionsList().filter(function (x) { return String(x.id) === String(id); })[0];
   if (!sub) return;
@@ -6105,6 +6401,7 @@ function groupCard(g, students, opts) {
       <h3 class="card-h">${esc(g.name)}</h3>
       <span class="pill">${tGrpCnt(cnt)}</span>
     </div>
+    ${supportTeacherOfGroup(g.id) && isStaff() ? `<div class="sup-group-badge">${ico('profile', 12)} ${esc(supportTeacherOfGroup(g.id).name)} (Support)</div>` : ''}
     <div class="gc-type ${tutoring ? 'is-tutoring' : 'is-school'}">${tutoring ? ico('gradCap', 14) + ' Repetitor guruhi' : ico('building', 14) + ' Maktab guruhi'}</div>
     <div class="meta-rows">
       ${sched
@@ -6315,6 +6612,75 @@ function groupDebtStudentRow(s) {
   </div>`;
 }
 
+/* Asosiy ustoz: support teacher boshqarayotgan guruh ichida uning kiritgan
+   vazifalari, davomati, baholari va mock natijalari ko'rinadi. */
+function supportGroupWatchHTML(g) {
+  if (!isTeacher()) return '';
+  const rec = supportTeacherOfGroup(g.id);
+  if (!rec) return '';
+  const list = getStudents().filter(function (s) { return s.groupId === g.id; });
+  const hw = getHomework().filter(function (h) { return h.groupId === g.id; })
+    .slice().sort(function (a, b) {
+      return String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
+    }).slice(0, 3);
+  const att = getAttendance();
+  const attDates = Object.keys(att).sort().reverse().slice(0, 3);
+  const mockRows = mockSortResults(mockResults().filter(function (a) {
+    const st = studentById(a.sid);
+    return !!st && st.groupId === g.id;
+  })).slice(0, 3);
+  return `
+  <div class="card sup-group-watch">
+    <div class="row between">
+      <div class="col">
+        <div class="strong-label">${ico('profile', 15)} ${t('Support teacher nazorati')}</div>
+        <div class="muted small">${esc(rec.name)} · ${esc(rec.login || '')}</div>
+      </div>
+      <span class="chip-class">Support</span>
+    </div>
+
+    <div class="sup-block">
+      <div class="row between">
+        <span class="sup-block-title">${ico('bookOpen', 14)} ${t('Uyga vazifalar')}</span>
+        <button type="button" class="btn btn-xs ghost" data-act="hw-group" data-gid="${esc(g.id)}">${t('Ochish')}</button>
+      </div>
+      ${hw.length
+        ? `<div class="sup-list">${hw.map(function (h) {
+            return `<div class="sup-list-row"><span>${esc(h.title || '—')}</span><span class="muted small">${h.dueDate ? fmtDM(h.dueDate) : ''}</span></div>`;
+          }).join('')}</div>`
+        : `<div class="muted small">${t("Hozircha vazifa yo'q")}</div>`}
+    </div>
+
+    <div class="sup-block">
+      <div class="row between">
+        <span class="sup-block-title">${ico('cal', 14)} ${t('Davomat')}</span>
+        <button type="button" class="btn btn-xs ghost" data-act="open-attendance" data-group="${esc(g.id)}">${t('Ochish')}</button>
+      </div>
+      ${attDates.length
+        ? `<div class="sup-list">${attDates.map(function (dk) {
+            const c = { present: 0, absent: 0, excused: 0 };
+            list.forEach(function (s) { const v = att[dk] && att[dk][s.id]; if (v) c[v] = (c[v] || 0) + 1; });
+            return `<div class="sup-list-row"><span>${fmtDM(dk)}</span><span class="muted small">✓ ${c.present} · ✕ ${c.absent} · ? ${c.excused}</span></div>`;
+          }).join('')}</div>`
+        : `<div class="muted small">${t("Davomat yozuvi yo'q")}</div>`}
+    </div>
+
+    <div class="sup-block">
+      <div class="row between">
+        <span class="sup-block-title">${ico('gradCap', 14)} ${t('Mock natijalari')}</span>
+        <button type="button" class="btn btn-xs ghost" data-act="nav" data-screen="mock">${t('Ochish')}</button>
+      </div>
+      ${mockRows.length
+        ? `<div class="sup-list">${mockRows.map(function (a) {
+            return `<div class="sup-list-row"><span>${esc(a.studentName || '—')} · ${esc(a.mockTitle || t('Mock test'))}</span><span class="muted small">${a.teacherGrade ? esc(a.teacherGrade) + '/10' : t('Baholanmagan')}</span></div>`;
+          }).join('')}</div>`
+        : `<div class="muted small">${t("Hozircha natija yo'q")}</div>`}
+    </div>
+
+    <button type="button" class="btn btn-primary btn-block" data-act="grade-group-go" data-group="${esc(g.id)}">${ico('grades', 15)} ${t('Baholar jurnalini ochish')}</button>
+  </div>`;
+}
+
 function groupDebtDetailScreen(g, students) {
   const list = students.filter(function (s) { return s.groupId === g.id; });
   return `
@@ -6324,10 +6690,11 @@ function groupDebtDetailScreen(g, students) {
   </div>
   <div class="screen-head">
     <div>
-      <h2 class="screen-title">${ico('groups', 16)} ${t('Guruh o\'quvchilari')}</h2>
+      <h2 class="screen-title">${ico('groups', 16)} ${t("Guruh o'quvchilari")}</h2>
       <div class="muted small">${tGrpCnt(list.length)}</div>
     </div>
   </div>
+  ${supportGroupWatchHTML(g)}
   ${list.length
     ? `<div class="group-debt-list">${list.map(groupDebtStudentRow).join('')}</div>`
     : emptyState(t("Hozircha guruhda o'quvchi yo'q"), 'students')}
@@ -6335,9 +6702,9 @@ function groupDebtDetailScreen(g, students) {
 }
 
 function groupsScreen() {
-  if (!isTeacher()) return blockedScreen("Bu bo'lim faqat Muzaffar Amirov uchun");
-  const all = getGroups();
-  const students = getStudents();
+  if (!canStaff('students')) return blockedScreen("Bu bo'limga ruxsat yo'q");
+  const all = scopedGroups();
+  const students = scopedStudents();
   const detail = state.groupDetail ? all.filter(function (g) { return g.id === state.groupDetail; })[0] : null;
   if (detail) return groupDebtDetailScreen(detail, students);
   const typeF = state.groupTypeFilter === 'school' || state.groupTypeFilter === 'tutoring'
@@ -6356,6 +6723,10 @@ function groupsScreen() {
     </div>
     <button type="button" class="btn btn-primary btn-sm" data-act="open-add-group">+ Guruh</button>
   </div>
+  ${isTeacher() && state.supervise ? `<div class="card supervise-banner">
+    <span>${ico('eye', 15)} ${t("Support teacherni nazorat qilish rejimi yoniq — support guruhlari ko'rinadi.")}</span>
+    <button type="button" class="btn btn-xs ghost" data-act="toggle-supervise">${t("O'chirish")}</button>
+  </div>` : ''}
   <div class="chips groups-type-chips">
     ${typeChips.map(c => `<button type="button" class="chip-btn${typeF === c.key ? ' active' : ''}" data-act="filter-group-type" data-type="${c.key}" aria-pressed="${typeF === c.key ? 'true' : 'false'}">${ico(c.icon, 13)} ${c.label}</button>`).join('')}
   </div>
@@ -6383,8 +6754,8 @@ function hwGroupCard(g) {
 }
 
 function homeworkScreen() {
-  if (!isTeacher()) return blockedScreen("Bu bo'lim faqat Muzaffar Amirov uchun");
-  const groups = getGroups();
+  if (!canStaff('homework')) return blockedScreen("Bu bo'limga ruxsat yo'q");
+  const groups = scopedGroups();
   const sel = state.hwGroup ? groups.filter(function (g) { return g.id === state.hwGroup; })[0] : null;
 
   if (sel) {
@@ -6430,6 +6801,7 @@ function homeworkScreen() {
 /* ==================== O'QUVCHILAR (faqat ustoz) ==================== */
 function studentCard(s) {
   const g = groupById(s.groupId);
+  const full = isTeacher();
   const debt = Math.max(0, Number(s.paymentDebt) || 0);
   /* Pul/to'lov faqat repetitorlik guruhlarida (maktab guruhi — bepul) */
   const showMoney = !!g && !isSchoolGroup(g);
@@ -6472,7 +6844,7 @@ function studentCard(s) {
         <button type="button" class="switch${s.homeworkUploadAllowed === true ? ' on' : ''}" data-act="hw-upload-toggle" data-sid="${s.id}"
                 role="switch" aria-checked="${s.homeworkUploadAllowed === true}" aria-label="${t('Uyga vazifa yuklashga ruxsat')}"></button>
       </div>
-      ${showMoney ? `<div class="pay-line">
+      ${showMoney && full ? `<div class="pay-line">
         <span class="pay-status ${debt > 0 ? 'due' : 'ok'}">${debt > 0 ? `To'lov qarzi: ${fmtSom(debt)} so'm` : "To'langan"}</span>
       </div>
       <div class="pay-actions">
@@ -6483,16 +6855,16 @@ function studentCard(s) {
     </div>
     <div class="st-actions">
       <button type="button" class="btn btn-xs ghost" data-act="open-chat" data-sid="${s.id}">${ico('message', 14)} ${t('Xabar yozish')}</button>
-      <button type="button" class="btn btn-xs ghost" data-act="reset-pwd" data-sid="${s.id}">${ico('key', 14)} ${t('Parol')}</button>
+      ${full ? `<button type="button" class="btn btn-xs ghost" data-act="reset-pwd" data-sid="${s.id}">${ico('key', 14)} ${t('Parol')}</button>
       <button type="button" class="btn btn-xs ghost" data-act="edit-student" data-sid="${s.id}">${ico('brush', 14)} ${t('Tahrirlash')}</button>
-      <button type="button" class="btn btn-xs danger" data-act="del-student" data-sid="${s.id}">${ico('trash', 14)} ${t("O'chirish")}</button>
+      <button type="button" class="btn btn-xs danger" data-act="del-student" data-sid="${s.id}">${ico('trash', 14)} ${t("O'chirish")}</button>` : ''}
     </div>
   </div>`;
 }
 
 function filteredStudents() {
   const q = state.search.trim().toLowerCase();
-  return getStudents().filter(s => {
+  return scopedStudents().filter(s => {
     const byClass = state.filterClass === 'Barchasi' || s.schoolClass === state.filterClass;
     const byGroup = !state.filterGroup || s.groupId === state.filterGroup;
     const byQuery = !q || String(s.fullName).toLowerCase().indexOf(q) >= 0;
@@ -6512,11 +6884,11 @@ function refreshStudentList() {
 }
 
 function studentsScreen() {
-  if (!isTeacher()) return blockedScreen("Bu bo'lim faqat Muzaffar Amirov uchun");
+  if (!canStaff('students')) return blockedScreen("Bu bo'limga ruxsat yo'q");
   const chips = ['Barchasi'].concat(APP_DATA.classes);
   const gf = state.filterGroup ? groupById(state.filterGroup) : null;
-  const allGroups = getGroups();
-  const allStudents = getStudents();
+  const allGroups = scopedGroups();
+  const allStudents = scopedStudents();
   /* Maktab guruhi bepul — qarzdorlik tugmalari umuman kerak emas */
   const showDebtTools = !gf || groupTypeOf(gf) !== 'school';
   return `
@@ -6525,7 +6897,7 @@ function studentsScreen() {
       <h2 class="screen-title">${t("O'quvchilar")}</h2>
       <div class="muted small" id="students-count"></div>
     </div>
-    <button type="button" class="btn btn-primary btn-sm" data-act="open-add-student">+ Qo'shish</button>
+    ${isTeacher() ? `<button type="button" class="btn btn-primary btn-sm" data-act="open-add-student">+ Qo'shish</button>` : ''}
   </div>
 
   ${gf ? `<div class="card row between" style="margin-bottom:9px">
@@ -6540,7 +6912,7 @@ function studentsScreen() {
     <input class="input" id="s-search" type="search" placeholder="${t("O'quvchi ismini kiriting...")}" value="${esc(state.search)}" />
   </div>
 
-  ${showDebtTools ? `<button type="button" class="btn btn-primary btn-block debtors-btn" data-act="remind-debtors">
+  ${(showDebtTools && isTeacher()) ? `<button type="button" class="btn btn-primary btn-block debtors-btn" data-act="remind-debtors">
     <span class="debtors-ico">${ico('megaphone', 18)}</span> Barcha qarzdorlarga eslatma yuborish
   </button>
   <button type="button" class="btn btn-ghost btn-block" data-act="nav" data-screen="debtors">${ico('creditCard', 16)} Qarzdorlar ro'yxati</button>` : ''}
@@ -6794,7 +7166,7 @@ function profileScreen() {
     <div class="profile-name">${esc(st ? st.fullName : (u.name || ''))}</div>
     <div class="muted">${esc(u.login || '')}</div>
     <div style="margin-top:9px">
-      <span class="role-badge ${isTeacher() ? 'is-teacher' : 'is-student'}">${isTeacher() ? 'Muzaffar Amirov' : "O'quvchi"}</span>
+      <span class="role-badge ${isStaff() ? 'is-teacher' : 'is-student'}">${isTeacher() ? 'Muzaffar Amirov' : isSupport() ? 'Support teacher' : "O'quvchi"}</span>
       ${st ? `<span class="pill" style="margin-left:6px">${esc(tClass(st.schoolClass))}</span>` : ''}
     </div>
   </div>
@@ -6803,7 +7175,7 @@ function profileScreen() {
   <div class="card list-card">
     <div class="list-row"><span>Login</span><span class="login-val">${esc(u.login || '')}</span></div>
     <div class="list-row"><span>${t('Parol')}</span><span class="muted">••••</span></div>
-    <div class="list-row"><span>${t("Ko'rinish")}</span><span class="muted">${isTeacher() ? 'Muzaffar Amirov' : t("O'quvchi")}</span></div>
+    <div class="list-row"><span>${t("Ko'rinish")}</span><span class="muted">${isTeacher() ? 'Muzaffar Amirov' : isSupport() ? 'Support teacher' : t("O'quvchi")}</span></div>
   </div>
   <button type="button" class="btn btn-ghost btn-block" data-act="open-change-pwd">${ico('key', 16)} ${t("Parolni o'zgartirish")}</button>
 
@@ -7285,7 +7657,7 @@ function openEditStudent(sid) {
 
 /* Ustoz ruxsati: students.homework_upload_allowed */
 function toggleHwUploadAllowed(sid) {
-  if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+  if (!canStaff('students')) { toast("Ruxsat yo'q", 'error'); return; }
   const list = getStudents();
   const st = list.filter(function (x) { return x.id === sid; })[0];
   if (!st) return;
@@ -7373,11 +7745,19 @@ function saveChangePwd() {
   const oldP = ($('#cp-old') ? $('#cp-old').value : '');
   const n1 = ($('#cp-new') ? $('#cp-new').value : '');
   const n2 = ($('#cp-new2') ? $('#cp-new2').value : '');
-  if (!passwordMatches(oldP, u.password)) { toast("Joriy parol noto'g'ri", 'error'); return; }
+  const supRec = isSupport() ? supportRecord() : null;
+  const storedPw = supRec ? (supRec.passwordHash || supRec.password || '') : u.password;
+  if (!passwordMatches(oldP, storedPw)) { toast("Joriy parol noto'g'ri", 'error'); return; }
   if (n1.length < 3) { toast("Yangi parol kamida 3 ta belgi bo'lsin", 'error'); return; }
   if (n1 !== n2) { toast("Parollar mos kelmadi", 'error'); return; }
-  const newPw = u.role === 'student' ? hashPasswordSync(n1) : n1;
+  const newPw = (u.role === 'student' || supRec) ? hashPasswordSync(n1) : n1;
   u.password = newPw;
+  if (supRec) {
+    persistSupportTeachers(supportTeachers().map(function (r) {
+      return String(r.id) === String(supRec.id)
+        ? Object.assign({}, r, { passwordHash: newPw, password: '' }) : r;
+    }));
+  }
   /* currentUser() nusxa qaytaradi — haqiqiy hisob yozuvini ham yangilaymiz,
      aks holda pushStudent eski parolni yuboradi */
   const acc = accounts[u.login];
@@ -7981,7 +8361,7 @@ async function doRestoreBackup() {
 
 /* ==================== 10 BALLIK BAHOLAR JURNALI (faqat ustoz) ==================== */
 function ensureGradeState() {
-  const groups = getGroups();
+  const groups = scopedGroups();
   if (!groups.some(g => g.id === state.gradeGroup)) {
     state.gradeGroup = groups.length ? groups[0].id : '';
   }
@@ -8001,9 +8381,9 @@ function gradeCellHTML(sid, dkey) {
 }
 
 function gradesScreen() {
-  if (!isTeacher()) return blockedScreen("Bu bo'lim faqat Muzaffar Amirov uchun");
+  if (!canStaff('grades')) return blockedScreen("Bu bo'limga ruxsat yo'q");
   ensureGradeState();
-  const groups = getGroups();
+  const groups = scopedGroups();
   if (!groups.length) {
     return `<div class="screen-head"><h2 class="screen-title">${t('Baholar')}</h2></div>` + emptyState("Avval guruh yarating", 'grades');
   }
@@ -8143,7 +8523,7 @@ function renderGradeEditor() {
 }
 
 function openGradeEditor(sid, dkey) {
-  if (!isTeacher()) { toast("Bahani faqat Muzaffar Amirov qo'yadi", 'error'); return; }
+  if (!canStaff('grades')) { toast("Baholash uchun ruxsat yo'q", 'error'); return; }
   const rec = (getGrades()[sid] || {})[dkey];
   state.gradeDate = dkey;
   state.editor = {
@@ -8169,7 +8549,7 @@ function persistEditor(silent) {
 
 /* ==================== TEZKOR DAVOMAT (faqat ustoz) ==================== */
 function ensureAttState() {
-  const groups = getGroups();
+  const groups = scopedGroups();
   if (!groups.some(g => g.id === state.attGroup)) {
     state.attGroup = groups.length ? groups[0].id : '';
   }
@@ -8181,14 +8561,14 @@ function ensureAttState() {
 }
 
 function attendanceScreen() {
-  if (!isTeacher()) return blockedScreen("Bu bo'lim faqat Muzaffar Amirov uchun");
+  if (!canStaff('attendance')) return blockedScreen("Bu bo'limga ruxsat yo'q");
   ensureAttState();
-  const groups = getGroups();
+  const groups = scopedGroups();
   if (!groups.length) {
     return `<div class="screen-head"><h2 class="screen-title">${t('Davomat')}</h2></div>` + emptyState("Avval guruh yarating", 'cal');
   }
 
-  const students = getStudents().filter(s => s.groupId === state.attGroup);
+  const students = scopedStudents().filter(s => s.groupId === state.attGroup);
   const draft = state.attDraft || {};
   const cnt = { present: 0, absent: 0, excused: 0 };
   students.forEach(s => { if (draft[s.id]) cnt[draft[s.id]]++; });
@@ -8272,10 +8652,12 @@ function speakRowHTML(x) {
 }
 
 function speakingScreen() {
-  if (!isTeacher()) return blockedScreen("Bu bo'lim faqat Muzaffar Amirov uchun");
+  if (!canStaff('speaking')) return blockedScreen("Bu bo'limga ruxsat yo'q");
   ensureSpeakState();
+  const scopeIds = {};
+  scopedStudents().forEach(function (s) { scopeIds[s.id] = 1; });
   const list = getSpeaking()
-    .filter(x => x.date === state.speakDate)
+    .filter(x => x.date === state.speakDate && (!x.studentId || scopeIds[x.studentId]))
     .sort((a, b) => a.start.localeCompare(b.start));
 
   return `
@@ -9093,7 +9475,9 @@ function webSpeakCard(sub, st, archived) {
 }
 function renderTgInbox() {
   /* Faqat saytdan topshirilganlar. Botdan kelganlar ustozga botda keladi. */
-  const all = getTgSubs().filter(function (x) { return isWebSubmission(x); });
+  const scopeIds = {};
+  scopedStudents().forEach(function (s) { scopeIds[s.id] = 1; });
+  const all = getTgSubs().filter(function (x) { return isWebSubmission(x) && scopeIds[x.sid]; });
   const isDone = function (x) {
     return x.status === 'baholandi' || x.status === 'graded' || x.status === 'rad_etildi';
   };
@@ -9167,11 +9551,11 @@ function doDeleteSpeaking(tid) {
 
 /* ---- Slot yaratish / tayinlash ---- */
 function openSlotModal(mode, id) {
-  if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+  if (!canStaff('speaking')) { toast("Ruxsat yo'q", 'error'); return; }
   ensureSpeakState();
   state.slotMode = mode;
   state.slotId = id || '';
-  const students = getStudents();
+  const students = scopedStudents();
   const cur = id ? getSpeaking().filter(x => x.id === id)[0] : null;
   const assignOnly = mode === 'assign';
 
@@ -9249,7 +9633,7 @@ function saveSlot() {
 
 /* ---- Slotni baholash → jurnalga sync ---- */
 function openScoreSlot(id) {
-  if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+  if (!canStaff('speaking')) { toast("Ruxsat yo'q", 'error'); return; }
   const x = getSpeaking().filter(s => s.id === id)[0];
   if (!x || !x.studentId) { toast("Avval o'quvchi tayinlang", 'error'); return; }
   const st = studentById(x.studentId);
@@ -9490,6 +9874,41 @@ async function doLogin() {
     return;
   }
 
+  /* 1b. Support teacher (yordamchi o'qituvchi) kirishi */
+  let supRec = supportTeacherByLogin(login);
+  if (!supRec && CloudSync.ready()) {
+    try { await CloudSync.pullSupportTeachers(); } catch (e) {}
+    supRec = supportTeacherByLogin(login);
+  }
+  if (supRec) {
+    setBusy(true);
+    try {
+      const tsVerify = tsPromise ? await tsPromise : { ok: true, skip: true };
+      if (tsPromise && (!tsVerify || !tsVerify.ok)) {
+        resetTurnstile('login');
+        const detail = tsVerify && tsVerify.detail ? ' (' + tsVerify.detail + ')' : '';
+        restoreBtn();
+        fail("Tekshiruv tasdiqlanmadi — qayta urinib ko'ring" + detail);
+        return;
+      }
+      const stored = supRec.passwordHash || supRec.password || '';
+      if (!passwordMatches(pass, stored)) { restoreBtn(); onFail(); return; }
+      if (CloudSync.ready()) {
+        try { await CloudSync.pullAll(TEACHER_LOGIN); } catch (e) { /* lokal ma'lumot bilan davom */ }
+      }
+      accounts[login] = { login: login, role: 'support', name: supRec.name, studentId: null };
+      store.del(K.loginFails);
+      state.loginError = '';
+      startSession({ login: login, role: 'support', name: supRec.name, studentId: null });
+      toast('Xush kelibsiz!');
+      restoreBtn();
+    } catch (e) {
+      restoreBtn();
+      onFail();
+    }
+    return;
+  }
+
   /* 2. O'quvchi kirishi */
   if (CloudSync.ready()) {
     setBusy(true);
@@ -9581,6 +10000,10 @@ function logout() {
   state.pending2fa = null;
   state.studentView = '';
   state.attOpen = false;
+  state.supervise = false;
+  state.groupDetail = '';
+  state.supportEditId = '';
+  state.supportDelId = '';
   state.resetCtx = null;
   state.resetMode = 'password';
   state.resetContact = '';
@@ -10665,6 +11088,8 @@ function mockNormalizeDef(def) {
 function mockSaveDef(def, skipCloud) {
   if (!def) return null;
   const row = mockNormalizeDef(def);
+  /* Support teacher yaratgan mock — o'z guruhlariga tegishli ekanini bilish uchun */
+  if (isSupport()) row.createdBy = String((currentUser() || {}).login || '');
   const list = mockDefs();
   const i = list.map(function (d) { return String(d.id); }).indexOf(String(row.id));
   if (i >= 0) list[i] = row; else list.push(row);
@@ -10696,7 +11121,7 @@ function mockMyResults() {
   return mockResults().filter(function (a) { return a.sid === st.id; });
 }
 function mockPendingCount() {
-  return mockResults().filter(function (a) {
+  return scopedMockResults().filter(function (a) {
     return (a.category === 'writing' || a.category === 'speaking') &&
       !String(a.teacherGrade == null ? '' : a.teacherGrade).trim();
   }).length;
@@ -11616,9 +12041,9 @@ function mockResultSectionHTML(sec, rows) {
 /* Ustoz: kategoriya kartasi ochilganda — yaratish/tahrirlash/guruhlash */
 function mockTeacherCatScreen(key) {
   const c = mockCat(key);
-  const defs = mockSortDefs(mockDefs().filter(function (d) { return d.category === c.key; }));
+  const defs = mockSortDefs(scopedMockDefs().filter(function (d) { return d.category === c.key; }));
   const sec = MOCK_SECTIONS.filter(function (s) { return s.cats.indexOf(c.key) >= 0; })[0] || MOCK_SECTIONS[0];
-  const rows = mockSortResults(mockResults().filter(function (a) { return sec.cats.indexOf(a.category) >= 0; }));
+  const rows = mockSortResults(scopedMockResults().filter(function (a) { return sec.cats.indexOf(a.category) >= 0; }));
   return `<div class="mock-run-head">
     <button type="button" class="btn btn-xs ghost" data-act="mock-cat-back">${ico('arrowLeft', 14)} ${t('Orqaga')}</button>
     <span class="mock-run-title">${esc(t(c.label))}</span>
@@ -11630,10 +12055,29 @@ function mockTeacherCatScreen(key) {
   <div class="section-title">${t('O‘quvchilar natijalari')}</div>
   ${mockResultSectionHTML(sec, rows)}`;
 }
+/* Mock ma'lumotlari: support teacher faqat o'z guruhlarini ko'radi */
+function scopedMockResults() {
+  const ids = {};
+  scopedStudents().forEach(function (s) { ids[String(s.id)] = 1; });
+  return mockResults().filter(function (a) { return !!ids[String(a.sid)]; });
+}
+function scopedMockDefs() {
+  const list = mockDefs();
+  if (!isSupport()) return list;
+  const rec = supportRecord();
+  const gids = supportRecordGroupIds(rec);
+  const myLogin = String((currentUser() || {}).login || '');
+  return list.filter(function (d) {
+    const ids = mockGroupIds(d);
+    if (!ids.length) return String(d.createdBy || '') === myLogin;
+    return ids.some(function (id) { return gids.indexOf(String(id)) >= 0; });
+  });
+}
 function mockTeacherScreen() {
+  if (!canStaff('mock')) return blockedScreen("Bu bo'limga ruxsat yo'q");
   if (state.mockBuilder) return mockBuilderHTML();
   if (state.mockCatView) return mockTeacherCatScreen(state.mockCatView);
-  const all = mockSortResults(mockResults());
+  const all = mockSortResults(scopedMockResults());
   return `
   <div class="card mock-hero">
     <span class="mock-hero-ico">${ico('clipboardCheck', 22)}</span>
@@ -11651,7 +12095,7 @@ function mockTeacherScreen() {
 }
 /* Natijani o'chirish: R2 videolar + lokal holat + Supabase (mock_attempts) */
 async function mockDeleteResult(id) {
-  if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+  if (!canStaff('mock')) { toast("Ruxsat yo'q", 'error'); return; }
   const a = mockResultById(id);
   if (!a) return;
   const urls = (a.videos || []).map(function (v) { return v && v.url; }).filter(function (u) { return !!u; });
@@ -11667,7 +12111,7 @@ async function mockDeleteResult(id) {
   toast(t('Natija o‘chirildi'));
 }
 function mockSaveTeacherGrade(id) {
-  if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+  if (!canStaff('mock')) { toast("Ruxsat yo'q", 'error'); return; }
   const a = mockResultById(id);
   if (!a) return;
   const tEl = document.getElementById('mock-t-text-' + id);
@@ -11815,7 +12259,7 @@ function mockBQuestionsBlock(path, label) {
   </div>`;
 }
 function mockGroupChecksHTML(selected, act) {
-  const groups = getGroups();
+  const groups = scopedGroups();
   if (!groups.length) return `<div class="muted small">${t('Hozircha guruh yo‘q')}</div>`;
   const set = (selected || []).map(String);
   return groups.map(function (g) {
@@ -11949,7 +12393,7 @@ function mockBuilderBodyHTML(def, c, step) {
     `<button type="button" class="btn btn-xs ghost mock-add-task" data-act="mock-b-add-q" data-path="questions">${ico('plus', 13)} ${t('Savol qo‘shish')}</button>`;
 }
 function mockOpenBuilder(def) {
-  if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+  if (!canStaff('mock')) { toast("Ruxsat yo'q", 'error'); return; }
   state.mockAssignId = '';
   state.mockDelId = '';
   state.mockBStep = 'text';
@@ -11962,7 +12406,7 @@ function mockOpenBuilder(def) {
   if (el) el.scrollTop = 0;
 }
 function mockBuilderSave() {
-  if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+  if (!canStaff('mock')) { toast("Ruxsat yo'q", 'error'); return; }
   const draft = state.mockBuilder && state.mockBuilder.draft;
   if (!draft) return;
   if (!String(draft.title || '').trim()) { toast(t('Mock nomini kiriting'), 'error'); return; }
@@ -12030,6 +12474,184 @@ window.__mock = {
   pending: mockPendingCount
 };
 
+/* ==================== SUPPORT TEACHERLAR (faqat asosiy o'qituvchi) ==================== */
+function supportPermChipsHTML(rec) {
+  const perms = supportPermsOf(rec);
+  return SUPPORT_PERM_LIST.map(function (p) {
+    return `<span class="sup-perm${perms[p.key] ? ' on' : ''}">${perms[p.key] ? ico('check', 11) : ico('close', 11)} ${esc(t(p.label))}</span>`;
+  }).join('');
+}
+function supportCardHTML(rec) {
+  const groups = supportRecordGroupIds(rec).map(function (id) { return groupById(id); }).filter(Boolean);
+  return `<div class="card sup-card">
+    <div class="sup-card-head">
+      <div class="avatar">${esc(initials(rec.name))}</div>
+      <div class="col">
+        <div class="s-name">${esc(rec.name)}</div>
+        <div class="muted small">Login: <span class="login-val">${esc(rec.login || '')}</span></div>
+      </div>
+      <span class="chip-class">Support</span>
+    </div>
+    <div class="sup-card-groups">${groups.length
+      ? groups.map(function (g) { return `<span class="sup-group-pill">${ico('groups', 11)} ${esc(g.name)}</span>`; }).join('')
+      : `<span class="muted small">${t('Guruh biriktirilmagan')}</span>`}</div>
+    <div class="sup-card-perms">${supportPermChipsHTML(rec)}</div>
+    <div class="st-actions">
+      <button type="button" class="btn btn-xs ghost" data-act="support-edit" data-id="${esc(rec.id)}">${ico('brush', 14)} ${t('Tahrirlash')}</button>
+      <button type="button" class="btn btn-xs danger" data-act="support-del" data-id="${esc(rec.id)}">${ico('trash', 14)} ${t("O'chirish")}</button>
+    </div>
+  </div>`;
+}
+function supportScreen() {
+  if (!isTeacher()) return blockedScreen("Bu bo'lim faqat asosiy o'qituvchi uchun");
+  const list = supportTeachers();
+  return `
+  <div class="screen-head">
+    <div>
+      <h2 class="screen-title">${ico('profile', 16)} ${t('Support teacherlar')}</h2>
+      <div class="muted small">${list.length} ta support teacher</div>
+    </div>
+    <button type="button" class="btn btn-primary btn-sm" data-act="support-add">+ ${t("Support teacher qo'shish")}</button>
+  </div>
+  <div class="card sup-info">
+    <div class="strong-label">${ico('alert', 14)} ${t('Qanday ishlaydi')}</div>
+    <div class="muted small">Support teacher faqat shu yerda biriktirilgan guruhlar va belgilangan ruxsatlar bilan ishlaydi. Uning guruhlari <b>Guruhlar</b> va <b>O'quvchilar</b> bo'limlarida faqat <b>«Support teacherni nazorat qilish»</b> rejimi yoniq bo'lganda ko'rinadi.</div>
+  </div>
+  ${list.length
+    ? list.map(supportCardHTML).join('')
+    : emptyState("Hozircha support teacher qo'shilmagan — «Support teacher qo'shish» tugmasini bosing", 'profile')}
+  `;
+}
+
+function openSupportModal(id) {
+  if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+  const rec = id ? supportTeacherById(id) : null;
+  const sel = supportRecordGroupIds(rec);
+  const perms = supportPermsOf(rec);
+  const groups = getGroups();
+  state.supportEditId = rec ? String(rec.id) : '';
+  openModal(`
+    <div class="modal-head">
+      <h3>${rec ? 'Support teacherni tahrirlash' : "Support teacher qo'shish"}</h3>
+      <button type="button" class="icon-btn" data-act="close-modal" aria-label="Yopish">✕</button>
+    </div>
+    <label class="field-label" for="sup-name">Ism familiya</label>
+    <input class="input" id="sup-name" type="text" placeholder="Masalan: Dilshod Karimov" value="${rec ? esc(rec.name) : ''}" />
+    <div class="row g8">
+      <div class="col">
+        <label class="field-label" for="sup-login">Login</label>
+        <input class="input" id="sup-login" type="text" autocomplete="off" placeholder="support1" value="${rec ? esc(rec.login || '') : ''}" />
+      </div>
+      <div class="col">
+        <label class="field-label" for="sup-pass">Parol</label>
+        <input class="input" id="sup-pass" type="password" autocomplete="new-password" placeholder="${rec ? "Bo'sh qoldirsangiz o'zgarmaydi" : 'Kamida 3 ta belgi'}" />
+      </div>
+    </div>
+
+    <div class="field-label">${t("Guruhlar (support faqat shu guruhlarni ko'radi)")}</div>
+    <div class="sup-check-list" id="sup-groups">
+      ${groups.length ? groups.map(function (g) {
+        return `<label class="sup-check"><input type="checkbox" class="sup-group-check" value="${esc(g.id)}"${sel.indexOf(String(g.id)) >= 0 ? ' checked' : ''} /><span>${esc(g.name)}</span></label>`;
+      }).join('') : `<div class="muted small">${t("Hozircha guruh yo'q")}</div>`}
+    </div>
+
+    <div class="field-label">${t('Ruxsatlar')}</div>
+    <div class="sup-check-list" id="sup-perms">
+      ${SUPPORT_PERM_LIST.map(function (p) {
+        return `<label class="sup-check"><input type="checkbox" class="sup-perm-check" value="${p.key}"${perms[p.key] ? ' checked' : ''} /><span><b>${esc(t(p.label))}</b><span class="muted small sup-check-hint">${esc(t(p.hint))}</span></span></label>`;
+      }).join('')}
+    </div>
+
+    <div class="field-error" id="sup-error"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" data-act="close-modal">Bekor qilish</button>
+      <button type="button" class="btn btn-primary" data-act="support-save">${ico('save', 15)} Saqlash</button>
+    </div>
+  `);
+}
+
+function saveSupportTeacher() {
+  if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+  const errEl = $('#sup-error');
+  const showErr = function (msg) {
+    if (errEl) { errEl.textContent = msg; errEl.classList.add('show'); }
+    toast(msg, 'error');
+  };
+  const nameEl = $('#sup-name');
+  const loginEl = $('#sup-login');
+  const passEl = $('#sup-pass');
+  const name = String((nameEl && nameEl.value) || '').trim();
+  const login = String((loginEl && loginEl.value) || '').trim().toLowerCase();
+  const pass = String((passEl && passEl.value) || '');
+  const cur = state.supportEditId ? supportTeacherById(state.supportEditId) : null;
+
+  if (name.length < 3) { showErr('Ism familiyani kiriting'); return; }
+  if (!/^[a-z0-9_]{3,24}$/.test(login)) { showErr('Login 3–24 belgi: faqat lotin harflari, raqam va _'); return; }
+  if (login === TEACHER_LOGIN) { showErr("Bu login asosiy o'qituvchiga tegishli"); return; }
+  if (getStudents().some(function (s) { return String(loginOfStudent(s.id, s) || '').toLowerCase() === login; })) {
+    showErr("Bu login o'quvchiga band — boshqa login tanlang"); return;
+  }
+  if (supportTeachers().some(function (r) {
+    return String(r.login || '').toLowerCase() === login && (!cur || String(r.id) !== String(cur.id));
+  })) { showErr('Bu login boshqa support teacherda band'); return; }
+  if (!cur && pass.length < 3) { showErr("Parol kamida 3 ta belgi bo'lsin"); return; }
+  if (pass && pass.length < 3) { showErr("Parol kamida 3 ta belgi bo'lsin"); return; }
+
+  const groupIds = $$('.sup-group-check').filter(function (el) { return el.checked; })
+    .map(function (el) { return String(el.value); });
+  if (!groupIds.length) { showErr('Kamida bitta guruhni tanlang'); return; }
+  const perms = {};
+  SUPPORT_PERM_LIST.forEach(function (p) { perms[p.key] = false; });
+  $$('.sup-perm-check').forEach(function (el) { perms[el.value] = !!el.checked; });
+
+  const rec = {
+    id: cur ? cur.id : ('sup' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5)),
+    name: name,
+    login: login,
+    groupIds: groupIds,
+    perms: perms,
+    createdAt: cur ? cur.createdAt : new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+  if (pass) rec.passwordHash = hashPasswordSync(pass);
+  else if (cur) rec.passwordHash = cur.passwordHash || '';
+
+  const list = supportTeachers();
+  const i = list.map(function (r) { return String(r.id); }).indexOf(String(rec.id));
+  if (i >= 0) list[i] = rec; else list.push(rec);
+  persistSupportTeachers(list);
+  closeModal();
+  render();
+  toast(cur ? 'Support teacher yangilandi ✓' : "Support teacher qo'shildi ✓");
+}
+
+function openDeleteSupport(id) {
+  if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+  const rec = supportTeacherById(id);
+  if (!rec) return;
+  state.supportDelId = String(rec.id);
+  openModal(`
+    <div class="modal-head">
+      <h3>Support teacherni o'chirish</h3>
+      <button type="button" class="icon-btn" data-act="close-modal" aria-label="Yopish">✕</button>
+    </div>
+    <p>Haqiqatan ham <b>${esc(rec.name)}</b>ni o'chirmoqchimisiz? Uning kirish hisobi o'chadi, guruhlari yana asosiy o'qituvchi panelida ko'rinadi.</p>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" data-act="close-modal">Bekor qilish</button>
+      <button type="button" class="btn btn-danger" data-act="support-do-del" data-id="${esc(rec.id)}">Ha, o'chirish</button>
+    </div>
+  `);
+}
+
+function doDeleteSupport(id) {
+  if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+  persistSupportTeachers(supportTeachers().filter(function (r) { return String(r.id) !== String(id); }));
+  state.supportDelId = '';
+  closeModal();
+  render();
+  toast("Support teacher o'chirildi");
+}
+
 /* ==================== Render ==================== */
 const SCREENS = {
   'login': loginScreen,
@@ -12044,14 +12666,22 @@ const SCREENS = {
   'speaking': speakingScreen,
   'submissions': submissionsScreen,
   'profile': profileScreen,
-  'mock': mockTeacherScreen
+  'mock': mockTeacherScreen,
+  'support': supportScreen
 };
 
 /* Xavfsizlik chegarasi: noto'g'ri rol o'ziga tegishli ekranlara kira olmaydi */
 function canAccess(scr) {
   if (scr === 'login') return true;
   if (scr === 'home' || scr === 'profile') return true;
-  if (TEACHER_SCREENS.indexOf(scr) >= 0) return isTeacher();
+  if (scr === 'support') return isTeacher();
+  if (TEACHER_SCREENS.indexOf(scr) >= 0) {
+    if (isTeacher()) return true;
+    if (!isSupport()) return false;
+    /* Support teacher faqat ruxsat berilgan bo'limlarga kiradi */
+    const p = SUPPORT_SCREEN_PERM[scr];
+    return !!p && supportPerm(p);
+  }
   return false;
 }
 
@@ -12190,7 +12820,7 @@ function refreshChat() {
   return CloudSync.fetchMessages(c.sid).then(function () { updateChatView(); return true; });
 }
 function openChat(sid) {
-  if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+  if (!canStaff('students')) { toast("Ruxsat yo'q", 'error'); return; }
   const st = studentById(sid);
   if (!st) return;
   state.chatSid = sid;
@@ -12493,6 +13123,38 @@ document.addEventListener('click', function (e) {
   if (!btn) return;
   const act = btn.getAttribute('data-act');
 
+  /* Support teacher: faqat asosiy ustoz ruxsat bergan amallar bajariladi */
+  if (isSupport()) {
+    const permForAct = {
+      'open-hw': 'homework', 'save-hw': 'homework', 'edit-hw': 'homework',
+      'del-hw': 'homework', 'do-del-hw': 'homework', 'hw-group': 'homework',
+      'open-slot': 'speaking', 'save-slot': 'speaking', 'slot-assign': 'speaking',
+      'slot-score': 'speaking', 'slot-del': 'speaking', 'slot-del-yes': 'speaking',
+      'edit-grade': 'grades', 'grade-set': 'grades', 'grade-cat': 'grades',
+      'grade-clear': 'grades', 'group-detail': 'students'
+    };
+    let need = permForAct[act] || '';
+    if (!need && /^mock-/.test(act)) need = 'mock';
+    if (!need && /^att-/.test(act)) need = 'attendance';
+    if (!need && /^grade-/.test(act)) need = 'grades';
+    if (need && !supportPerm(need)) {
+      toast('Bu amal uchun ruxsat berilmagan', 'error');
+      return;
+    }
+    const teacherOnly = [
+      'open-add-group', 'save-group', 'edit-group', 'save-edit-group', 'del-group', 'do-del-group',
+      'open-add-student', 'save-student', 'edit-student', 'save-edit-student', 'del-student', 'do-del-student',
+      'reset-pwd', 'save-reset', 'pay-student', 'save-pay', 'debt-add', 'save-add-debt',
+      'remind-student', 'remind-debtors', 'backup-dl', 'backup-pick', 'do-restore',
+      'start-cleanup', 'do-cleanup', 'run-diagnostics', 'support-add', 'support-edit',
+      'support-save', 'support-del', 'support-do-del', 'toggle-supervise', 'support-watch-group'
+    ];
+    if (teacherOnly.indexOf(act) >= 0) {
+      toast("Bu amal faqat asosiy o'qituvchi uchun", 'error');
+      return;
+    }
+  }
+
   const actions = {
     /* --- Kirish --- */
     'do-login': doLogin,
@@ -12525,20 +13187,20 @@ document.addEventListener('click', function (e) {
 
     /* --- Dashboard stat kartalari (bosiladigan) --- */
     'stat-groups': function () {
-      if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+      if (!canStaff('students')) { toast("Ruxsat yo'q", 'error'); return; }
       state.groupTypeFilter = 'all';
       state.groupDetail = '';
       go('groups');
     },
     'stat-students': function () {
-      if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+      if (!canStaff('students')) { toast("Ruxsat yo'q", 'error'); return; }
       state.filterGroup = null;
       state.filterClass = 'Barchasi';
       state.search = '';
       go('students');
     },
     'stat-classes': function () {
-      if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+      if (!canStaff('students')) { toast("Ruxsat yo'q", 'error'); return; }
       state.filterGroup = null;
       state.filterClass = 'Barchasi';
       state.search = '';
@@ -12567,7 +13229,7 @@ document.addEventListener('click', function (e) {
 
     /* --- Guruhlar bo'limida guruh ichiga kirish: faqat ism + speaking qarzi --- */
     'group-detail': function () {
-      if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+      if (!canStaff('students')) { toast("Ruxsat yo'q", 'error'); return; }
       state.groupDetail = btn.getAttribute('data-gid') || '';
       render();
     },
@@ -12576,9 +13238,27 @@ document.addEventListener('click', function (e) {
       render();
     },
 
+    /* --- Support teacherlarni boshqarish va nazorat qilish --- */
+    'support-add': function () { openSupportModal(''); },
+    'support-edit': function () { openSupportModal(btn.getAttribute('data-id')); },
+    'support-save': saveSupportTeacher,
+    'support-del': function () { openDeleteSupport(btn.getAttribute('data-id')); },
+    'support-do-del': function () { doDeleteSupport(btn.getAttribute('data-id')); },
+    'toggle-supervise': function () {
+      state.supervise = !state.supervise;
+      if (!state.supervise) state.groupDetail = '';
+      render();
+      toast(state.supervise ? 'Support nazorat rejimi yoniq' : "Support nazorat rejimi o'chirildi");
+    },
+    'support-watch-group': function () {
+      state.supervise = true;
+      state.groupDetail = btn.getAttribute('data-gid') || '';
+      go('groups');
+    },
+
     /* --- O'quvchilar bo'limida guruh kartasi → to'liq o'quvchi boshqaruvi --- */
     'filter-group': function () {
-      if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+      if (!canStaff('students')) { toast("Ruxsat yo'q", 'error'); return; }
       state.filterGroup = btn.getAttribute('data-gid');
       state.filterClass = 'Barchasi';
       state.search = '';
@@ -12593,7 +13273,7 @@ document.addEventListener('click', function (e) {
 
     /* --- Uyga vazifalar bo'limi: guruh tanlash --- */
     'hw-group': function () {
-      if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+      if (!canStaff('homework')) { toast("Ruxsat yo'q", 'error'); return; }
       state.hwGroup = btn.getAttribute('data-gid');
       render();
     },
@@ -12810,7 +13490,7 @@ document.addEventListener('click', function (e) {
 
     /* --- Ovozli topshirishga ruxsat (voice_allowed) --- */
     'voice-toggle': function () {
-      if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+      if (!canStaff('students')) { toast("Ruxsat yo'q", 'error'); return; }
       const list = getStudents();
       const st = list.filter(x => x.id === btn.getAttribute('data-sid'))[0];
       if (!st) return;
@@ -12823,7 +13503,7 @@ document.addEventListener('click', function (e) {
 
     /* --- Saytda speaking topshirishga ruxsat (web_speaking_allowed) --- */
     'web-speaking-toggle': async function () {
-      if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+      if (!canStaff('students')) { toast("Ruxsat yo'q", 'error'); return; }
       const sid = btn.getAttribute('data-sid');
       /* Bitta o'quvchi uchun bir vaqtda bitta update: tez ikki marta bosilsa
          ikkinchi so'rov tashlanadi, update'lar tartibi buzilmaydi. */
@@ -13118,7 +13798,7 @@ document.addEventListener('click', function (e) {
       render();
     },
     'att-save': function () {
-      if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+      if (!canStaff('attendance')) { toast("Ruxsat yo'q", 'error'); return; }
       const all = getAttendance();
       const beforeIds = Object.keys(all[state.attDate] || {});
       all[state.attDate] = Object.assign({}, state.attDraft || {});
@@ -13134,7 +13814,7 @@ document.addEventListener('click', function (e) {
     'slot-assign': function () { openSlotModal('assign', btn.getAttribute('data-id')); },
     'slot-score': function () { openScoreSlot(btn.getAttribute('data-id')); },
     'slot-del': function () {
-      if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+      if (!canStaff('speaking')) { toast("Ruxsat yo'q", 'error'); return; }
       const id = btn.getAttribute('data-id');
       const cur = getSpeaking().filter(x => x.id === id)[0];
       store.set(K.speaking, getSpeaking().filter(x => x.id !== id));

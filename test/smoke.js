@@ -4109,6 +4109,127 @@ await (async () => {
     (i18nMissed.length ? ' — qoldi: ' + i18nMissed.slice(0, 25).join(' | ') : ''));
   win.localStorage.setItem('app_lang', JSON.stringify('uz'));
 
+  /* ============ 35b. SUPPORT TEACHER (yordamchi o'qituvchi) ============ */
+  /* Seansni to'g'ridan-to'g'ri o'rnatamiz: login oqimi yuqorida alohida sinalgan */
+  const applySession = (sess) => {
+    win.localStorage.setItem('et_session', JSON.stringify(sess));
+    forceNav('home');
+  };
+  applySession({ login: 'm_amirov', role: 'teacher', name: 'Muzaffar Amirov', studentId: null });
+  check(!!q('[data-act="nav"][data-screen="profile"]') && /Xush kelibsiz/.test(text()),
+    'support: asosiy ustoz sessiyasi faol');
+  /* Joriy (oldingi testlardan qolgan) guruh/o'quvchilar holatiga moslashamiz */
+  const curGroups = JSON.parse(win.localStorage.getItem('et_groups') || '[]');
+  const curStudents = JSON.parse(win.localStorage.getItem('et_students') || '[]');
+  const sGroup = curGroups[0] || null;
+  const sGroupId = sGroup ? String(sGroup.id) : '';
+  const sGroupStudents = curStudents.filter(s => String(s.groupId) === sGroupId);
+  const otherStudents = curStudents.filter(s => String(s.groupId) !== sGroupId);
+  const firstSupStudent = sGroupStudents[0] || null;
+
+  forceNav('support');
+  check(!!q('[data-act="support-add"]') && /Support teacherlar/.test(text()),
+    'support: boshqaruv paneli va "Support teacher qo\'shish" tugmasi mavjud');
+  clickAct('support-add');
+  check(!!q('#sup-name') && !!q('#sup-login') && !!q('#sup-pass'),
+    'support: qo\'shish formasi (ism, login, parol) ochildi');
+  check(qa('.sup-group-check').length === curGroups.length && qa('.sup-perm-check').length === 7,
+    'support: barcha guruhlar va ruxsatlar ro\'yxati formada');
+  setVal('#sup-name', 'Dilshod Karimov');
+  setVal('#sup-login', 'sup_dilshod');
+  setVal('#sup-pass', '1234');
+  q('.sup-group-check[value="' + sGroupId + '"]').checked = true;
+  q('.sup-perm-check[value="mock"]').checked = false;
+  clickAct('support-save');
+  const supSaved = JSON.parse(win.localStorage.getItem('et_support_teachers') || '[]');
+  check(supSaved.length === 1 && supSaved[0].login === 'sup_dilshod' && supSaved[0].name === 'Dilshod Karimov',
+    'support: yangi support teacher ro\'yxatga saqlandi');
+  check(supSaved[0].groupIds.indexOf(sGroupId) >= 0 && supSaved[0].perms.mock === false && supSaved[0].perms.attendance === true,
+    'support: guruh biriktirildi va mock ruxsati o\'chirilgan holda saqlandi');
+  check(!!q('.sup-card') && /Dilshod Karimov/.test(text()),
+    'support: qo\'shilgach amaldagi support teacherlar ro\'yxati ko\'rinadi');
+
+  /* Asosiy ustoz: support guruhi odatda yashirin, nazorat rejimida ko'rinadi */
+  forceNav('groups');
+  check(qa('.group-card').length === curGroups.length - 1 &&
+        (!sGroup || !text().includes(sGroup.name)),
+    'support: biriktirilgan guruh asosiy ustozning Guruhlar bo\'limida yashirin');
+  forceNav('home');
+  clickAct('stat-students');
+  check(studentCards() === otherStudents.length,
+    'support: support guruhi o\'quvchilari O\'quvchilar bo\'limida yashirin (' +
+    studentCards() + '/' + curStudents.length + ')');
+  forceNav('home');
+  clickAct('toggle-supervise');
+  forceNav('groups');
+  check(qa('.group-card').length === curGroups.length && /Dilshod Karimov/.test(text()),
+    'support: "Support teacherni nazorat qilish" yoniq — guruh va support ismi ko\'rinadi');
+  const g1Card = qa('.group-card').filter(c => c.getAttribute('data-gid') === sGroupId)[0];
+  click(g1Card);
+  check(/Support teacher nazorati/.test(text()) && /Uyga vazifalar/.test(text()) &&
+        /Davomat/.test(text()) && /Mock natijalari/.test(text()),
+    'support: guruh ichida support vazifalari, davomat va mock bo\'limlari ko\'rinadi');
+  forceNav('home');
+  clickAct('toggle-supervise');
+  forceNav('groups');
+  check(qa('.group-card').length === curGroups.length - 1,
+    'support: nazorat rejimi o\'chirilganda guruh yana yashirinadi');
+
+  /* Support teacher sifatida kirish */
+  logout();
+  await new Promise(r => setTimeout(r, 120));
+  await loginAs('sup_dilshod', '1234');
+  check(await until(() => /Dilshod Karimov/.test(text()) && qa('.nav-item').length > 0, 8000),
+    'support: support teacher o\'z logini/paroli bilan kirdi va panelini ko\'rdi');
+  const supNav = navLabels().join(' | ');
+  check(/Davomat/.test(supNav) && /Speaking/.test(supNav) && /Uyga vazifalar/.test(supNav) &&
+        !/To'lov/.test(supNav) && !/Mock testlar/.test(supNav),
+    'support: navigatsiyada faqat ruxsat etilgan bo\'limlar (to\'lov va mock yo\'q)');
+  forceNav('students');
+  check(studentCards() === sGroupStudents.length &&
+        (firstSupStudent ? text().includes(firstSupStudent.fullName) : true),
+    'support: faqat o\'z guruhi o\'quvchilarini ko\'radi');
+  check(!q('[data-act="open-add-student"]') && !q('[data-act="edit-student"]') && !q('[data-act="del-student"]'),
+    'support: o\'quvchi qo\'shish/tahrirlash/o\'chirish tugmalari yo\'q (faqat asosiy ustoz)');
+  forceNav('mock');
+  check(/Xush kelibsiz/.test(text()) && !q('[data-act="mock-add"]'),
+    'support: ruxsat berilmagan Mock bo\'limiga kirib bo\'lmaydi');
+  forceNav('payments');
+  check(/Xush kelibsiz/.test(text()), 'support: to\'lov bo\'limi support teacher uchun yopiq');
+  forceNav('support');
+  check(/Xush kelibsiz/.test(text()), 'support: support teacherlar boshqaruvi faqat asosiy ustozda');
+  forceNav('attendance');
+  check(qa('[data-act="att-group"]').length === 1,
+    'support: davomatda faqat biriktirilgan guruh tanlanadi');
+
+  /* Support teacher uyga vazifa kiritadi */
+  forceNav('homework');
+  if (q('[data-act="hw-group"]')) click(q('[data-act="hw-group"]'));
+  clickAct('open-hw');
+  check(!!q('#hw-group') && q('#hw-group').options.length === 1 && q('#hw-group').options[0].value === sGroupId,
+    'support: uyga vazifa formasi faqat o\'z guruhini taklif qiladi');
+  setVal('#hw-title', 'Support vazifasi');
+  setVal('#hw-desc', 'Matn ustida ishlash');
+  clickAct('save-hw');
+  await new Promise(r => setTimeout(r, 300));
+  const hwSaved = JSON.parse(win.localStorage.getItem('et_homework') || '[]');
+  check(hwSaved.some(h => h.title === 'Support vazifasi' && String(h.groupId) === sGroupId),
+    'support: uyga vazifa muvaffaqiyatli kiritildi');
+
+  /* O'quvchi vazifani ko'radi, lekin kim berganini ko'rmaydi */
+  if (firstSupStudent) {
+    applySession({ login: firstSupStudent.login, role: 'student', name: firstSupStudent.fullName, studentId: firstSupStudent.id });
+    check(!!q('[data-act="student-view"][data-view="homework"]'),
+      'support: o\'quvchi kabineti ochildi');
+    openStudentView('homework');
+    const hwStudentText = text();
+    check(/Support vazifasi/.test(hwStudentText),
+      'support: o\'quvchi o\'z guruhi vazifasini ko\'radi');
+    check(!/Dilshod Karimov/.test(hwStudentText) && !/Support teacher/.test(hwStudentText),
+      'support: o\'quvchida vazifani bergan o\'qituvchi ismi ko\'rinmaydi');
+    closeStudentView();
+  }
+
   /* ============ 36. CLOUDFLARE TURNSTILE ============ */
   logout();
   const prevFetchTs = win.fetch;
