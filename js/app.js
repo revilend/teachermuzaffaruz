@@ -2925,6 +2925,8 @@ function linkedStudent() {
    etilgan bo'limlarda ishlaydi. Ro'yxat bulutda bot_settings orqali saqlanadi. */
 const SUPPORT_PERM_LIST = [
   { key: 'students', label: "O'quvchilar paneli", hint: "Biriktirilgan guruh o'quvchilari" },
+  { key: 'add_student', label: "O'quvchi qo'shish", hint: "Biriktirilgan guruhlarga yangi o'quvchi qo'shish" },
+  { key: 'edit_group', label: 'Guruhni tahrirlash', hint: 'Guruh nomi, kunlari va vaqtini tahrirlash' },
   { key: 'speaking', label: 'Speaking slotlari', hint: 'Slot yaratish va baholash' },
   { key: 'attendance', label: 'Davomat', hint: 'Davomat belgilash' },
   { key: 'homework', label: 'Uyga vazifa kiritish', hint: 'Vazifa berish va tahrirlash' },
@@ -2988,6 +2990,16 @@ function canStaff(permKey) {
   if (isTeacher()) return true;
   if (!isSupport()) return false;
   return permKey ? supportPerm(permKey) : true;
+}
+/* O'quvchi qo'shish / guruhni tahrirlash — asosiy ustoz ruxsat bergan bo'lsa */
+function supportCanAddStudent() {
+  return isTeacher() || (isSupport() && supportPerm('add_student'));
+}
+function supportCanEditGroup() {
+  return isTeacher() || (isSupport() && supportPerm('edit_group'));
+}
+function supportCanGroups() {
+  return isTeacher() || (isSupport() && (supportPerm('students') || supportPerm('edit_group')));
 }
 function supportRecordGroupIds(rec) {
   return (rec && Array.isArray(rec.groupIds) ? rec.groupIds : []).map(String);
@@ -3460,6 +3472,12 @@ const I18N_EN = {
   'Guruh biriktirilmagan': 'No group assigned',
   "Guruh biriktirilmagan — asosiy o'qituvchiga murojaat qiling": 'No group assigned — contact the main teacher',
   'Biriktirilgan guruhlar': 'Assigned groups',
+  'Sinflar': 'Classes',
+  "O'quvchi qo'shish": 'Add student',
+  "Biriktirilgan guruhlarga yangi o'quvchi qo'shish": 'Add a new student to assigned groups',
+  'Guruhni tahrirlash': 'Edit group',
+  'Guruh nomi, kunlari va vaqtini tahrirlash': 'Edit group name, days and time',
+  'Uyga vazifa berish': 'Assign homework',
   "o'quvchi": 'students',
   'Tez amallar': 'Quick actions',
   'Support teacher nazorati': 'Support teacher supervision',
@@ -4525,6 +4543,7 @@ function renderHeader() {
 function navItems() {
   if (isSupport()) {
     const items = [['home', t('Bosh'), ICON.home]];
+    if (supportCanGroups()) items.push(['groups', t('Sinflar'), ICON.groups]);
     if (supportPerm('students')) items.push(['students', t("O'quvchi"), ICON.students]);
     if (supportPerm('homework')) items.push(['homework', t('Uyga vazifalar'), ICON.bookOpen]);
     if (supportPerm('submissions')) items.push(['submissions', t('Topshiriqlar'), ICON.clipboardCheck]);
@@ -4604,7 +4623,8 @@ function renderTopNavTabs() {
   };
   el.innerHTML = navItems().map(it => {
     const active = state.screen === it[0] ? ' active' : '';
-    return `<button type="button" class="top-nav-item${active}" data-act="nav" data-screen="${it[0]}">${esc(t(labels[it[0]] || it[1]))}${navBadgeHTML(it[0])}</button>`;
+    const lbl = it[0] === 'groups' && isSupport() ? 'Sinflar' : (labels[it[0]] || it[1]);
+    return `<button type="button" class="top-nav-item${active}" data-act="nav" data-screen="${it[0]}">${esc(t(lbl))}${navBadgeHTML(it[0])}</button>`;
   }).join('');
 }
 
@@ -6151,13 +6171,16 @@ function supportHome() {
   const students = scopedStudents();
   const perms = supportPermsOf(rec);
   const quick = [];
-  if (perms.students) quick.push(['students', ICON.students, "O'quvchilar", 'tint-amber']);
-  if (perms.homework) quick.push(['homework', ICON.bookOpen, 'Uyga vazifalar', 'tint-blue']);
-  if (perms.attendance) quick.push(['attendance', ICON.cal, 'Davomat', 'tint-emerald']);
-  if (perms.speaking) quick.push(['speaking', ICON.mic, 'Speaking', 'tint-sky']);
-  if (perms.grades) quick.push(['grades', ICON.grades, 'Baholar', 'tint-indigo']);
-  if (perms.mock) quick.push(['mock', ICON.gradCap, 'Mock testlar', 'tint-violet']);
-  if (perms.submissions) quick.push(['submissions', ICON.clipboardCheck, 'Topshiriqlar', 'tint-rose']);
+  if (supportCanGroups()) quick.push({ act: 'nav', screen: 'groups', icon: ICON.groups, label: 'Sinflar', tint: 'tint-amber' });
+  if (perms.students) quick.push({ act: 'nav', screen: 'students', icon: ICON.students, label: "O'quvchilar", tint: 'tint-amber' });
+  if (perms.homework) quick.push({ act: 'nav', screen: 'homework', icon: ICON.bookOpen, label: 'Uyga vazifa berish', tint: 'tint-blue' });
+  if (perms.add_student) quick.push({ act: 'open-add-student', screen: '', icon: ico('plus', 20), label: "O'quvchi qo'shish", tint: 'tint-emerald' });
+  if (perms.edit_group) quick.push({ act: 'nav', screen: 'groups', icon: ico('brush', 20), label: 'Guruhni tahrirlash', tint: 'tint-sky' });
+  if (perms.attendance) quick.push({ act: 'nav', screen: 'attendance', icon: ICON.cal, label: 'Davomat', tint: 'tint-emerald' });
+  if (perms.speaking) quick.push({ act: 'nav', screen: 'speaking', icon: ICON.mic, label: 'Speaking', tint: 'tint-sky' });
+  if (perms.grades) quick.push({ act: 'nav', screen: 'grades', icon: ICON.grades, label: 'Baholar', tint: 'tint-indigo' });
+  if (perms.mock) quick.push({ act: 'nav', screen: 'mock', icon: ICON.gradCap, label: 'Mock testlar', tint: 'tint-violet' });
+  if (perms.submissions) quick.push({ act: 'nav', screen: 'submissions', icon: ICON.clipboardCheck, label: 'Topshiriqlar', tint: 'tint-rose' });
   return `
   <section class="card hero-card">
     <div class="greet-main">
@@ -6171,22 +6194,14 @@ function supportHome() {
   </section>
 
   <div class="stat-grid">
-    <button type="button" class="card stat" data-act="nav" data-screen="students"><span class="stat-ico">${ICON.groups}</span><span class="stat-num">${groups.length}</span><span class="stat-label">Guruhlar</span></button>
+    <button type="button" class="card stat" data-act="nav" data-screen="groups"><span class="stat-ico">${ICON.groups}</span><span class="stat-num">${groups.length}</span><span class="stat-label">Sinflar</span></button>
     <button type="button" class="card stat" data-act="nav" data-screen="students"><span class="stat-ico">${ICON.students}</span><span class="stat-num">${students.length}</span><span class="stat-label">O'quvchilar</span></button>
   </div>
-
-  <div class="section-title">${t('Biriktirilgan guruhlar')}</div>
-  ${groups.length
-    ? `<div class="card sup-my-groups">${groups.map(function (g) {
-        const cnt = students.filter(function (s) { return s.groupId === g.id; }).length;
-        return `<div class="list-row"><span>${ico('groups', 14)} ${esc(g.name)}</span><span class="muted small">${cnt} ${t('o\'quvchi')}</span></div>`;
-      }).join('')}</div>`
-    : `<div class="card">${emptyState(t('Guruh biriktirilmagan — asosiy o\'qituvchiga murojaat qiling'), 'groups')}</div>`}
 
   <div class="section-title">${t('Tez amallar')}</div>
   <div class="quick-grid">
     ${quick.map(function (q) {
-      return `<button type="button" class="card quick" data-act="nav" data-screen="${q[0]}"><span class="quick-ico ${q[3]}">${q[1]}</span><span>${esc(t(q[2]))}${q[0] === 'submissions' ? navBadgeHTML('submissions') : ''}</span></button>`;
+      return `<button type="button" class="card quick" data-act="${q.act}"${q.screen ? ` data-screen="${q.screen}"` : ''}><span class="quick-ico ${q.tint}">${q.icon}</span><span>${esc(t(q.label))}${q.screen === 'submissions' ? navBadgeHTML('submissions') : ''}</span></button>`;
     }).join('')}
   </div>`;
 }
@@ -6416,8 +6431,8 @@ function groupCard(g, students, opts) {
     <div class="gc-actions">
       <button type="button" class="btn btn-ghost btn-sm" data-act="grade-group-go" data-group="${g.id}">${ico('grades', 15)} Baholar</button>
       <button type="button" class="btn btn-ghost btn-sm" data-act="open-attendance" data-group="${g.id}">${ico('cal', 15)} Davomat</button>
-      <button type="button" class="btn btn-ghost btn-sm" data-act="edit-group" data-gid="${g.id}">${ico('brush', 15)} Tahrirlash</button>
-      <button type="button" class="btn btn-danger btn-sm" data-act="del-group" data-gid="${g.id}">${ico('trash', 15)} O'chirish</button>
+      ${supportCanEditGroup() ? `<button type="button" class="btn btn-ghost btn-sm" data-act="edit-group" data-gid="${g.id}">${ico('brush', 15)} Tahrirlash</button>` : ''}
+      ${isTeacher() ? `<button type="button" class="btn btn-danger btn-sm" data-act="del-group" data-gid="${g.id}">${ico('trash', 15)} O'chirish</button>` : ''}
     </div>
   </div>`;
 }
@@ -6702,7 +6717,7 @@ function groupDebtDetailScreen(g, students) {
 }
 
 function groupsScreen() {
-  if (!canStaff('students')) return blockedScreen("Bu bo'limga ruxsat yo'q");
+  if (!supportCanGroups()) return blockedScreen("Bu bo'limga ruxsat yo'q");
   const all = scopedGroups();
   const students = scopedStudents();
   const detail = state.groupDetail ? all.filter(function (g) { return g.id === state.groupDetail; })[0] : null;
@@ -6718,10 +6733,10 @@ function groupsScreen() {
   return `
   <div class="screen-head">
     <div>
-      <h2 class="screen-title">${t('Guruhlar')}</h2>
-      <div class="muted small">${groups.length} ta guruh${typeF === 'all' ? '' : typeF === 'school' ? ' · maktab' : ' · repetitorlik'}</div>
+      <h2 class="screen-title">${isSupport() ? t('Sinflar') : t('Guruhlar')}</h2>
+      <div class="muted small">${groups.length} ta ${isSupport() ? 'sinf' : 'guruh'}${typeF === 'all' ? '' : typeF === 'school' ? ' · maktab' : ' · repetitorlik'}</div>
     </div>
-    <button type="button" class="btn btn-primary btn-sm" data-act="open-add-group">+ Guruh</button>
+    ${isTeacher() ? `<button type="button" class="btn btn-primary btn-sm" data-act="open-add-group">+ Guruh</button>` : ''}
   </div>
   ${isTeacher() && state.supervise ? `<div class="card supervise-banner">
     <span>${ico('eye', 15)} ${t("Support teacherni nazorat qilish rejimi yoniq — support guruhlari ko'rinadi.")}</span>
@@ -6897,7 +6912,7 @@ function studentsScreen() {
       <h2 class="screen-title">${t("O'quvchilar")}</h2>
       <div class="muted small" id="students-count"></div>
     </div>
-    ${isTeacher() ? `<button type="button" class="btn btn-primary btn-sm" data-act="open-add-student">+ Qo'shish</button>` : ''}
+    ${supportCanAddStudent() ? `<button type="button" class="btn btn-primary btn-sm" data-act="open-add-student">+ Qo'shish</button>` : ''}
   </div>
 
   ${gf ? `<div class="card row between" style="margin-bottom:9px">
@@ -7350,8 +7365,8 @@ function syncGroupFeeField() {
 }
 
 function openAddStudent() {
-  if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
-  const groups = getGroups();
+  if (!supportCanAddStudent()) { toast("Ruxsat yo'q", 'error'); return; }
+  const groups = isSupport() ? scopedGroups() : getGroups();
   openModal(`
     <div class="modal-head">
       <h3>O'quvchi qo'shish</h3>
@@ -7420,7 +7435,11 @@ function saveGroup() {
 
 /* --- Guruhni tahrirlash: har bir kun uchun alohida vaqt (qo'shish modali bilan bir xil UI) --- */
 function openEditGroup(gid) {
-  if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+  if (!supportCanEditGroup()) { toast("Ruxsat yo'q", 'error'); return; }
+  if (isSupport() && !scopedGroups().some(function (x) { return String(x.id) === String(gid); })) {
+    toast("Bu guruh sizga biriktirilmagan", 'error');
+    return;
+  }
   const g = groupById(gid);
   if (!g) return;
   const short = ['Du', 'Se', 'Ch', 'Pa', 'Ju', 'Sh', 'Ya'];
@@ -7487,7 +7506,11 @@ function openEditGroup(gid) {
 }
 
 function saveEditGroup(gid) {
-  if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+  if (!supportCanEditGroup()) { toast("Ruxsat yo'q", 'error'); return; }
+  if (isSupport() && !scopedGroups().some(function (x) { return String(x.id) === String(gid); })) {
+    toast("Bu guruh sizga biriktirilmagan", 'error');
+    return;
+  }
   const name = (($('#f-gname') && $('#f-gname').value) || '').trim();
   const days = $$('input:checked', $('#f-days')).map(i => i.value);
   const times = {};
@@ -7519,6 +7542,7 @@ function saveEditGroup(gid) {
 }
 
 function saveStudent() {
+  if (!supportCanAddStudent()) { toast("Ruxsat yo'q", 'error'); return; }
   /* Bot honeypot: maydon to'ldirilgan bo'lsa — jimjimrad rad etiladi */
   if ($('#hp-student') && $('#hp-student').value) return;
   const name = ($('#f-sname').value || '').trim();
@@ -7530,6 +7554,9 @@ function saveStudent() {
   if (name.length < 3) { toast("Ism familiyani kiriting", 'error'); $('#f-sname').focus(); return; }
   if (!cls) { toast("Maktab sinfini tanlang", 'error'); return; }
   if (!gid) { toast("Guruhni tanlang", 'error'); return; }
+  if (isSupport() && !scopedGroups().some(function (g) { return String(g.id) === String(gid); })) {
+    toast("Bu guruh sizga biriktirilmagan", 'error'); return;
+  }
   if (!/^[a-z0-9_.]{3,20}$/.test(login)) { toast("Login 3–20 ta: harf, raqam, _ yoki .", 'error'); $('#f-slogin').focus(); return; }
   if (loginTaken(login)) { toast("Bu login allaqachon band", 'error'); $('#f-slogin').focus(); return; }
   if (pass.length < 3) { toast("Dastlabki parol kamida 3 ta belgi bo'lsin", 'error'); $('#f-spass').focus(); return; }
@@ -12675,6 +12702,8 @@ function canAccess(scr) {
   if (scr === 'login') return true;
   if (scr === 'home' || scr === 'profile') return true;
   if (scr === 'support') return isTeacher();
+  /* Sinflar: guruhlarni tahrirlash ruxsati ham yetarli */
+  if (scr === 'groups' && isSupport()) return supportCanGroups();
   if (TEACHER_SCREENS.indexOf(scr) >= 0) {
     if (isTeacher()) return true;
     if (!isSupport()) return false;
@@ -13128,6 +13157,8 @@ document.addEventListener('click', function (e) {
     const permForAct = {
       'open-hw': 'homework', 'save-hw': 'homework', 'edit-hw': 'homework',
       'del-hw': 'homework', 'do-del-hw': 'homework', 'hw-group': 'homework',
+      'open-add-student': 'add_student', 'save-student': 'add_student',
+      'edit-group': 'edit_group', 'save-edit-group': 'edit_group',
       'open-slot': 'speaking', 'save-slot': 'speaking', 'slot-assign': 'speaking',
       'slot-score': 'speaking', 'slot-del': 'speaking', 'slot-del-yes': 'speaking',
       'edit-grade': 'grades', 'grade-set': 'grades', 'grade-cat': 'grades',
@@ -13142,8 +13173,8 @@ document.addEventListener('click', function (e) {
       return;
     }
     const teacherOnly = [
-      'open-add-group', 'save-group', 'edit-group', 'save-edit-group', 'del-group', 'do-del-group',
-      'open-add-student', 'save-student', 'edit-student', 'save-edit-student', 'del-student', 'do-del-student',
+      'open-add-group', 'save-group', 'del-group', 'do-del-group',
+      'edit-student', 'save-edit-student', 'del-student', 'do-del-student',
       'reset-pwd', 'save-reset', 'pay-student', 'save-pay', 'debt-add', 'save-add-debt',
       'remind-student', 'remind-debtors', 'backup-dl', 'backup-pick', 'do-restore',
       'start-cleanup', 'do-cleanup', 'run-diagnostics', 'support-add', 'support-edit',

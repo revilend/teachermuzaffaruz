@@ -4133,7 +4133,7 @@ await (async () => {
   clickAct('support-add');
   check(!!q('#sup-name') && !!q('#sup-login') && !!q('#sup-pass'),
     'support: qo\'shish formasi (ism, login, parol) ochildi');
-  check(qa('.sup-group-check').length === curGroups.length && qa('.sup-perm-check').length === 7,
+  check(qa('.sup-group-check').length === curGroups.length && qa('.sup-perm-check').length === 9,
     'support: barcha guruhlar va ruxsatlar ro\'yxati formada');
   setVal('#sup-name', 'Dilshod Karimov');
   setVal('#sup-login', 'sup_dilshod');
@@ -4146,6 +4146,8 @@ await (async () => {
     'support: yangi support teacher ro\'yxatga saqlandi');
   check(supSaved[0].groupIds.indexOf(sGroupId) >= 0 && supSaved[0].perms.mock === false && supSaved[0].perms.attendance === true,
     'support: guruh biriktirildi va mock ruxsati o\'chirilgan holda saqlandi');
+  check(supSaved[0].perms.add_student === true && supSaved[0].perms.edit_group === true,
+    'support: o\'quvchi qo\'shish va guruh tahrirlash ruxsatlari saqlandi');
   check(!!q('.sup-card') && /Dilshod Karimov/.test(text()),
     'support: qo\'shilgach amaldagi support teacherlar ro\'yxati ko\'rinadi');
 
@@ -4185,12 +4187,60 @@ await (async () => {
   check(/Davomat/.test(supNav) && /Speaking/.test(supNav) && /Uyga vazifalar/.test(supNav) &&
         !/To'lov/.test(supNav) && !/Mock testlar/.test(supNav),
     'support: navigatsiyada faqat ruxsat etilgan bo\'limlar (to\'lov va mock yo\'q)');
+  check(/Sinflar/.test(supNav), 'support: navigatsiyada Sinflar bo\'limi bor');
+  const supHomeText = text();
+  check(/Tez amallar/.test(supHomeText) && /Uyga vazifa berish/.test(supHomeText) &&
+        !!q('[data-act="open-add-student"]') && /Guruhni tahrirlash/.test(supHomeText),
+    'support: tez amallarda uyga vazifa berish, o\'quvchi qo\'shish va guruh tahrirlash ko\'rinadi');
+  check(!/Biriktirilgan guruhlar/.test(supHomeText),
+    'support: "biriktirilgan o\'quvchilar/guruhlar" bo\'limi paneldan olib tashlangan');
+  forceNav('groups');
+  check(/Sinflar/.test(text()) && !!q('[data-act="edit-group"]') &&
+        !q('[data-act="del-group"]') && !q('[data-act="open-add-group"]'),
+    'support: Sinflar bo\'limi ochiladi, faqat tahrirlash mumkin (qo\'shish/o\'chirish yo\'q)');
+  clickAct('edit-group');
+  check(!!q('#f-gname') && !!q('.modal-head h3') && /Guruhni tahrirlash/.test(q('.modal-head h3').textContent),
+    'support: ruxsat bilan guruhni tahrirlash formasi ochiladi');
+  setVal('#f-gname', (sGroup ? sGroup.name : 'Guruh') + ' (sup)');
+  clickAct('save-edit-group');
+  await new Promise(r => setTimeout(r, 120));
+  const gAfter = JSON.parse(win.localStorage.getItem('et_groups') || '[]').filter(g => String(g.id) === sGroupId)[0];
+  check(!!gAfter && /\(sup\)$/.test(gAfter.name),
+    'support: ruxsat bilan guruh nomi o\'zgartirildi');
   forceNav('students');
   check(studentCards() === sGroupStudents.length &&
         (firstSupStudent ? text().includes(firstSupStudent.fullName) : true),
     'support: faqat o\'z guruhi o\'quvchilarini ko\'radi');
-  check(!q('[data-act="open-add-student"]') && !q('[data-act="edit-student"]') && !q('[data-act="del-student"]'),
-    'support: o\'quvchi qo\'shish/tahrirlash/o\'chirish tugmalari yo\'q (faqat asosiy ustoz)');
+  check(!!q('[data-act="open-add-student"]') && !q('[data-act="edit-student"]') && !q('[data-act="del-student"]'),
+    'support: o\'quvchi qo\'shish tugmasi bor, tahrirlash/o\'chirish faqat asosiy ustozda');
+  clickAct('open-add-student');
+  check(!!q('#f-sname') && q('#f-sgroup').options.length === 2,
+    'support: o\'quvchi qo\'shish formasi faqat biriktirilgan guruhni taklif qiladi');
+  setVal('#f-sname', 'Support Student');
+  q('#f-sclass').value = q('#f-sclass').options[1].value;
+  q('#f-sgroup').value = sGroupId;
+  setVal('#f-slogin', 'sup_student1');
+  setVal('#f-spass', '1234');
+  clickAct('save-student');
+  await new Promise(r => setTimeout(r, 120));
+  const supStudents = JSON.parse(win.localStorage.getItem('et_students') || '[]');
+  check(supStudents.some(s => s.fullName === 'Support Student' && String(s.groupId) === sGroupId),
+    'support: ruxsat bilan biriktirilgan guruhga o\'quvchi qo\'shildi');
+
+  /* Ruxsatlar o'chirilganda tugmalar yo'qoladi */
+  const supRecs = JSON.parse(win.localStorage.getItem('et_support_teachers') || '[]');
+  supRecs[0].perms.add_student = false;
+  supRecs[0].perms.edit_group = false;
+  win.localStorage.setItem('et_support_teachers', JSON.stringify(supRecs));
+  forceNav('home');
+  check(!q('[data-act="open-add-student"]') && !/Guruhni tahrirlash/.test(text()),
+    'support: ruxsat o\'chirilganda tez amallardan o\'quvchi qo\'shish va guruh tahrirlash yo\'qoladi');
+  forceNav('groups');
+  check(!q('[data-act="edit-group"]'),
+    'support: ruxsatsiz guruhni tahrirlash tugmasi ko\'rinmaydi');
+  supRecs[0].perms.add_student = true;
+  supRecs[0].perms.edit_group = true;
+  win.localStorage.setItem('et_support_teachers', JSON.stringify(supRecs));
   forceNav('mock');
   check(/Xush kelibsiz/.test(text()) && !q('[data-act="mock-add"]'),
     'support: ruxsat berilmagan Mock bo\'limiga kirib bo\'lmaydi');
