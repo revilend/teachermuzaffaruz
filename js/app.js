@@ -4065,7 +4065,10 @@ Object.assign(I18N_EN, {
   'Javobingizni yozing': 'Type your answer',
   'Kamida bitta savol va javob kiriting': 'Add at least one question and its answer',
   'Natija o‘chirildi': 'Result deleted',
-  'Bu natijani o‘chirishni tasdiqlaysizmi?': 'Delete this result?'
+  'Bu natijani o‘chirishni tasdiqlaysizmi?': 'Delete this result?',
+  'Kameraga qarang! {s}s...': 'Look at the camera! {s}s...',
+  '5 soniya ichida kameraga qaytmadingiz. Yozuv bekor qilindi — videoni qaytadan oling.':
+    'You did not return to the camera within 5 seconds. Recording cancelled — please record again.'
 });
 
 function t(s) {
@@ -4107,12 +4110,18 @@ const I18N_UZ = (function () {
   });
   return m;
 })();
-const I18N_SKIP_TAGS = ['script', 'style', 'noscript', 'svg', 'path'];
+/* textarea ichidagi matn — foydalanuvchi/ustoz yozgan ma'lumot, tarjima qilinmaydi */
+const I18N_SKIP_TAGS = ['script', 'style', 'noscript', 'svg', 'path', 'textarea'];
+/* Ustoz kiritgan mock kontenti (sarlavha, qism nomi, matn, shart, savol, variant,
+   javob, izoh) UZ/EN almashganda so'zma-so'z saqlanadi — faqat statik UI tarjima qilinadi. */
 const I18N_SKIP_SEL = '.s-name, .profile-name, .login-val, .brand, ' +
-  '.mock-def-card-title, .mock-def-title, .mock-def-group, .mock-passage p, .mock-speak-q, ' +
-  '.mock-q-head, .mock-opt, .mock-rev-q, .mock-rev-line, .mock-rev-why, .mock-written, ' +
-  '.mock-feedback, .mock-original, .mock-video-q, .mock-history-row b, .mock-score-title, ' +
-  '.mock-person-test, .mock-person-name, .mock-person-meta';
+  '.mock-def-card-title, .mock-def-title, .mock-def-group, .mock-def-groups, .mock-stu-meta, ' +
+  '.mock-passage, .mock-passage-title, .mock-hint, .mock-speak-q, .mock-ans-badge, ' +
+  '.mock-q-head, .mock-opt, .mock-opt-key, .mock-ans-input, .mock-rev, .mock-written, ' +
+  '.mock-feedback, .mock-original, .mock-video-q, .mock-video-meta, .mock-file-link, ' +
+  '.mock-history-row b, .mock-score-title, .mock-person-test, .mock-person-name, ' +
+  '.mock-person-meta, .mock-build-part-head, .mock-build-answer-row, .mock-build-izoh, ' +
+  '.mock-build-opt';
 function i18nNorm(s) { return String(s == null ? '' : s).replace(/\s+/g, ' ').trim(); }
 /* Sonlar bilan keladigan dinamik matnlar */
 function i18nPattern(s, lang) {
@@ -8332,6 +8341,8 @@ const SPEAK_DETECT_MS = 100;
 const SPEAK_AWAY_MS = 1000;
 const SPEAK_AWAY_COOLDOWN_MS = 300;
 const SPEAK_MAX_WARNINGS = 3;
+/* Har qanday ogohlantirishdan keyin: 5 s ichida yuz va ko'z qaytmasa yozuv darhol bekor qilinadi */
+const SPEAK_RETURN_MS = 5000;
 const SPEAK_BLINK_MS = 400;
 const SPEAK_BLINK_SCORE = 0.45;
 const SPEAK_GAZE_SCORE = 0.5;
@@ -8356,23 +8367,37 @@ function speakRecRing(state) {
   ring.classList.toggle('is-away', state === 'away');
   ring.classList.toggle('is-bad', state === 'bad');
 }
-function speakRecWarn(show, message, bad) {
+function speakRecWarn(show, message, bad, count) {
   const el = speakRecQ('#speak-rec-warn');
   const txt = speakRecQ('#speak-rec-warn-text');
   if (el) {
     el.hidden = !show;
     el.classList.toggle('is-bad', !!bad);
+    el.classList.toggle('is-count', !!count && !!show);
   }
   if (txt && message) txt.textContent = message;
 }
-/* 1/3 yoki 2/3: qizil halqa + aniq matn. 3/3 da yozuv darhol bekor qilinadi. */
+/* 5 s qaytish sanoqi matni: 5s, 4s, 3s, 2s, 1s */
+function speakCountdownText(ms) {
+  const left = Math.max(0, Math.ceil(Number(ms) / 1000));
+  return t('Kameraga qarang! {s}s...').replace('{s}', String(left));
+}
+/* Bekor qilish sababi: 3 ogohlantirish yoki 5 s ichida qaytmaslik */
+function speakInvalidText(reason) {
+  return reason === 'timeout'
+    ? t('5 soniya ichida kameraga qaytmadingiz. Yozuv bekor qilindi — videoni qaytadan oling.')
+    : t("Ko'zingiz 3 marta kameradan chetga qaradi. Yozuv to'xtatildi, videoni qaytadan oling.");
+}
+/* Ogohlantirish: qizil halqa + 5 s qaytish sanoqi. 3/3 da yozuv darhol bekor qilinadi. */
 function speakRecWarning(n) {
-  const msg = t('Kameraga qarang! Ogohlantirish: {n}/3').replace('{n}', String(n));
   speakRec.warningUntil = Date.now() + 2200;
-  speakRecWarn(true, msg, true);
+  /* Har qanday ogohlantirishdan keyin 5 s ichida yuz VA ko'z qaytishi shart */
+  speakRec.awayDeadline = Date.now() + SPEAK_RETURN_MS;
+  speakRecWarn(true, speakCountdownText(SPEAK_RETURN_MS), true, true);
   speakRecRing('bad');
   if (n >= SPEAK_MAX_WARNINGS) {
-    speakRecStatus(t("Ko'zingiz 3 marta kameradan chetga qaradi. Yozuv to'xtatildi, videoni qaytadan oling."), 'error');
+    speakRec.invalidReason = 'warnings';
+    speakRecStatus(speakInvalidText('warnings'), 'error');
   }
 }
 function speakRecTimer(ms) {
@@ -8409,7 +8434,7 @@ function speakRecMarkup() {
       <button type="button" class="speak-rec-btn cancel" data-act="speak-rec-cancel">${ICON.trash} ${t('Bekor qilish')}</button>
     </div>
     <div class="speak-rec-invalid" id="speak-rec-invalid" hidden>
-      <div class="speak-rec-invalid-note">${ICON.alert}<span>${t("Ko'zingiz 3 marta kameradan chetga qaradi. Yozuv to'xtatildi, videoni qaytadan oling.")}</span></div>
+      <div class="speak-rec-invalid-note">${ICON.alert}<span id="speak-rec-invalid-text">${speakInvalidText('warnings')}</span></div>
       <button type="button" class="speak-rec-btn retake" data-act="speak-rec-retake">${ICON.refresh} ${t('Qayta olish')}</button>
     </div>
   </div>`;
@@ -8431,7 +8456,7 @@ function openSpeakingRecorder(opts) {
     mode: 'idle', looking: false, away: true, lastGoodAt: 0,
     lookAwayCount: 0, eyeSamples: 0, eyeGood: 0, startedAt: 0, endedAt: 0,
     awaySince: 0, awayCooldownUntil: 0, strikeCounted: false, blinkStartedAt: 0,
-    warningUntil: 0, invalidated: false, lastSignals: null, mock: mockCtx,
+    warningUntil: 0, awayDeadline: 0, invalidReason: '', invalidated: false, lastSignals: null, mock: mockCtx,
     timerId: null, detectId: null, landmarker: null
   };
   document.body.classList.add('speak-rec-open');
@@ -8635,14 +8660,34 @@ function runSpeakDetection() {
         speakRec.lookAwayCount++;
         speakRecWarning(speakRec.lookAwayCount);
         if (speakRec.lookAwayCount >= SPEAK_MAX_WARNINGS) {
+          speakRec.invalidReason = 'warnings';
           stopSpeakRecording(true);
           return;
         }
+      }
+      /* 5 s qaytish talabi: sanoq davom etadi; 0 ga tushsa — darhol bekor qilinadi */
+      if (speakRec.awayDeadline) {
+        const left = speakRec.awayDeadline - now;
+        if (left <= 0) {
+          speakRec.invalidReason = 'timeout';
+          stopSpeakRecording(true);
+          return;
+        }
+        speakRec.warningUntil = now + 400;
+        speakRecWarn(true, speakCountdownText(left), true, true);
+        speakRecRing('bad');
       }
     } else {
       if (speakRec.awaySince) speakRec.awayCooldownUntil = now + SPEAK_AWAY_COOLDOWN_MS;
       speakRec.awaySince = 0;
       speakRec.strikeCounted = false;
+      /* 5 s ichida kameraga qaytdi: sanoq tozalanadi, ogohlantirish soni saqlanadi */
+      if (speakRec.awayDeadline) {
+        speakRec.awayDeadline = 0;
+        speakRec.warningUntil = 0;
+        speakRecWarn(false);
+        speakRecRing('good');
+      }
     }
   }
 
@@ -8716,6 +8761,8 @@ function startSpeakRecording() {
   speakRec.strikeCounted = false;
   speakRec.blinkStartedAt = 0;
   speakRec.warningUntil = 0;
+  speakRec.awayDeadline = 0;
+  speakRec.invalidReason = '';
   speakRec.invalidated = false;
   speakRecTimer(0);
   clearInterval(speakRec.timerId);
@@ -8747,6 +8794,7 @@ function stopSpeakRecording(invalidated) {
 /* 3/3: joriy yozuv butunlay tashlanadi — preview/submit ko'rsatilmaydi, faqat Retake. */
 function finishInvalidSpeakRecording() {
   if (!speakRec) return;
+  const reason = speakRec.invalidReason === 'timeout' ? 'timeout' : 'warnings';
   clearInterval(speakRec.timerId);
   clearInterval(speakRec.detectId);
   const hadChunks = speakRec.chunks && speakRec.chunks.length;
@@ -8773,8 +8821,9 @@ function finishInvalidSpeakRecording() {
   speakRec.strikeCounted = false;
   speakRecTimer(0);
   speakRecRing('bad');
-  speakRecWarn(true,
-    t('Kameraga qarang! Ogohlantirish: {n}/3').replace('{n}', String(SPEAK_MAX_WARNINGS)), true);
+  speakRecWarn(true, speakInvalidText(reason), true);
+  const note = speakRecQ('#speak-rec-invalid-text');
+  if (note) note.textContent = speakInvalidText(reason);
   const eye = speakRecQ('#speak-rec-eye');
   if (eye) eye.classList.add('is-away');
   const eyeText = speakRecQ('#speak-rec-eye-text');
@@ -8785,7 +8834,7 @@ function finishInvalidSpeakRecording() {
   if (preview) preview.hidden = true;
   const invalid = speakRecQ('#speak-rec-invalid');
   if (invalid) invalid.hidden = false;
-  speakRecStatus(t("Ko'zingiz 3 marta kameradan chetga qaradi. Yozuv to'xtatildi, videoni qaytadan oling."), 'error');
+  speakRecStatus(speakInvalidText(reason), 'error');
 }
 
 function finishSpeakRecording() {
@@ -8871,6 +8920,8 @@ function retakeSpeakRecording() {
   speakRec.strikeCounted = false;
   speakRec.blinkStartedAt = 0;
   speakRec.warningUntil = 0;
+  speakRec.awayDeadline = 0;
+  speakRec.invalidReason = '';
   speakRec.invalidated = false;
   speakRec.mode = 'idle';
   speakRecTimer(0);

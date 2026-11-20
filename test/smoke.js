@@ -1594,6 +1594,19 @@ check(/SPEAK_AWAY_MS\s*=\s*1000/.test(appJs) &&
       /SPEAK_MAX_WARNINGS\s*=\s*3/.test(appJs) &&
       /SPEAK_BLINK_MS\s*=\s*400/.test(appJs),
   'speaking: 1.0 s debounce, 3 warning va 400 ms blink qoidalari');
+check(/SPEAK_RETURN_MS\s*=\s*5000/.test(appJs) &&
+      /function speakCountdownText/.test(appJs) &&
+      /Kameraga qarang! \{s\}s\.\.\./.test(appJs) &&
+      /awayDeadline\s*=\s*Date\.now\(\)\s*\+\s*SPEAK_RETURN_MS/.test(appJs),
+  'speaking: ogohlantirishdan keyin 5 s qaytish sanoqi boshlanadi');
+check(/invalidReason\s*=\s*'timeout'/.test(appJs) &&
+      /awayDeadline\s*=\s*0;\s*\n\s*speakRec\.warningUntil\s*=\s*0;/.test(appJs) &&
+      /function speakInvalidText/.test(appJs),
+  'speaking: 5 s ichida qaytmasa darhol bekor, qaytsa sanoq tozalanadi');
+check(/I18N_SKIP_TAGS\s*=\s*\[[^\]]*'textarea'/.test(appJs) &&
+      /I18N_SKIP_SEL[\s\S]{0,700}mock-build-part-head/.test(appJs) &&
+      /\.mock-passage,/.test(appJs) && /\.mock-build-answer-row/.test(appJs),
+  'i18n: ustoz kiritgan mock kontenti so‘zma-so‘z saqlanadi (tarjima qilinmaydi)');
 check(/function speakFaceSignals/.test(appJs) && /468/.test(appJs) &&
       /irisAway/.test(appJs) && /gazeAway/.test(appJs) &&
       /stopSpeakRecording\(true\)/.test(appJs),

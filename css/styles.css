@@ -2786,6 +2786,21 @@ html[data-theme="dark"] .speak-status.is-done { background: rgba(16, 185, 129, .
   border-radius: 10px;
   padding: 7px 11px;
 }
+/* 5 s qaytish sanoqi: raqamlar sakramaydi, ogohlantirish belgisi pulsatsiya qiladi */
+.speak-rec-warn.is-count {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .01em;
+}
+.speak-rec-warn.is-count svg {
+  animation: speak-rec-pulse .9s ease-in-out infinite;
+}
+@keyframes speak-rec-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .45; transform: scale(.9); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .speak-rec-warn.is-count svg { animation: none; }
+}
 .speak-rec-invalid {
   display: flex;
   flex-direction: column;
