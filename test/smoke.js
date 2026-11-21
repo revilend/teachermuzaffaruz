@@ -1944,8 +1944,8 @@ await (async () => {
     "uyga vazifa: ko'rinadigan 'Fayl tanlash' tugmasi bor");
   check(!!q('#hw-media-clear') && q('#hw-media-clear').hidden === true,
     "uyga vazifa: [✕] tugmasi (fayl tanlanmaguncha yashirin)");
-  check(!!q('#hw-media-status') && q('#hw-media-status').textContent.includes('50MB'),
-    "uyga vazifa: 50MB chegara status matni");
+  check(!!q('#hw-media-status') && q('#hw-media-status').textContent.includes('100MB'),
+    "uyga vazifa: 100MB chegara status matni");
   /* Rasm tanlansa — nom, preview va ✕ ko'rinadi; ✕ bekor qiladi */
   const fImg = new win.File([new Uint8Array([1, 2, 3])], 'daftar.png', { type: 'image/png' });
   const fInput = q('#hw-media-input');
@@ -1961,7 +1961,7 @@ await (async () => {
   click('#hw-media-clear');
   check(q('#hw-media-clear').hidden === true &&
     !q('#hw-file-box').textContent.includes('daftar.png') &&
-    q('#hw-media-status').textContent.includes('50MB'),
+    q('#hw-media-status').textContent.includes('100MB'),
     "uyga vazifa: ✕ tanlangan faylni bekor qiladi");
   const acceptAttr = q('#hw-media-input').getAttribute('accept') || '';
   const needTypes = ['image/*', 'video/*', 'audio/*', '.mp3', '.wav', '.m4a', '.aac', '.ogg', '.opus',
@@ -2005,6 +2005,27 @@ await (async () => {
   check(q('#hw-media-status').textContent.includes('tanlandi') &&
     !q('#hw-media-status').classList.contains('err'),
     "uyga vazifa: .docx hujjat fayli qabul qilinadi (rad etilmaydi)");
+  click('#hw-media-clear');
+  pickHw('jadval.xlsx', '');
+  check(q('#hw-media-status').textContent.includes('jadval.xlsx') &&
+    !q('#hw-media-status').classList.contains('err'),
+    "uyga vazifa: .xlsx (Excel) fayl qabul qilinadi (rad etilmaydi)");
+  click('#hw-media-clear');
+  pickHw('dastur.exe', '');
+  check(q('#hw-media-status').classList.contains('err'),
+    "uyga vazifa: xavfli .exe fayl rad etiladi");
+  check(!q('#hw-file-box').textContent.includes('dastur.exe'),
+    "uyga vazifa: rad etilgan fayl navbatga qo'shilmaydi");
+  click('#hw-media-clear');
+  /* 100MB dan katta fayl: fayl nomi bilan aniq xabar */
+  const fBig = new win.File([new Uint8Array([1])], 'katta-video.mp4', { type: 'video/mp4' });
+  Object.defineProperty(fBig, 'size', { configurable: true, value: 150 * 1024 * 1024 });
+  Object.defineProperty(fInput, 'files', { configurable: true, value: [fBig] });
+  fInput.dispatchEvent(new win.Event('change'));
+  check(q('#hw-media-status').classList.contains('err') &&
+    q('#hw-media-status').textContent.includes('katta-video.mp4') &&
+    q('#hw-media-status').textContent.includes('100 MB'),
+    "uyga vazifa: 100MB dan katta fayl nomi va chegara bilan rad etiladi");
   click('#hw-media-clear');
   clickAct('save-hw');
   check(q('#hw-error').classList.contains('show'), "uyga vazifa: bo'sh mavzu rad etildi");
