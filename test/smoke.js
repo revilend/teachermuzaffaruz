@@ -2918,6 +2918,8 @@ await (async () => {
   check(appJs.indexOf('touchGuardPlyrMenus') >= 0 &&
         /speed: \{ selected: 1, options: \[0\.5, 0\.75, 1, 1\.25, 1\.5, 2\] \}/.test(appJs),
     'audio pleyer: tezlik 0.5–2x sozlamasi + menyu touch-guard (sahifa skroll bo\'lmaydi)');
+  check(/connect-src[^"]*https:\/\/cdn\.plyr\.io/.test(html),
+    "CSP: Plyr ikonka sprite'i (cdn.plyr.io) connect-src'da ruxsat etilgan — audio tugmalari ko'rinadi");
   check(cssSrc.indexOf('.auth') >= 0 && /\.auth \{[^}]*justify-content: flex-start/.test(cssSrc),
     'css: auth wrapper justify-content: flex-start');
   check(/\.recover-modes \{[^}]*grid/.test(cssSrc) && cssSrc.indexOf('.recover-opt') >= 0,
