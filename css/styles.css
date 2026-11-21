@@ -522,6 +522,14 @@ img.auth-logo {
 .stat:active { transform: scale(0.95); }
 
 /* --- Tez amallar: barcha 6 ta karta qat'iy 88px, bir xil qorizontalda --- */
+.quick-group-title {
+  margin: 14px 0 7px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
 .quick-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; grid-auto-rows: 88px; align-items: stretch; }
 @media (min-width: 768px) {
   .quick-grid { grid-template-columns: repeat(3, 1fr); gap: 12px; grid-auto-rows: auto; }
@@ -2500,8 +2508,8 @@ body.speak-rec-open { overflow: hidden; }
   box-shadow: 0 0 0 4px rgba(34, 197, 94, .16), 0 0 26px rgba(34, 197, 94, .45);
 }
 .speak-rec-ring.is-away {
-  border-color: #f59e0b;
-  box-shadow: 0 0 0 4px rgba(245, 158, 11, .18), 0 0 26px rgba(245, 158, 11, .5);
+  border-color: #ef4444;
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, .18), 0 0 26px rgba(239, 68, 68, .5);
 }
 .speak-rec-timer {
   position: absolute;
@@ -2521,7 +2529,7 @@ body.speak-rec-open { overflow: hidden; }
 .speak-rec-title { font-size: 17px; font-weight: 700; }
 .speak-rec-status { margin-top: 5px; font-size: 12.5px; color: #cbd5e1; }
 .speak-rec-status.is-error { color: #fca5a5; }
-.speak-rec-status.is-warn { color: #fbbf24; }
+.speak-rec-status.is-warn { color: #fca5a5; }
 .speak-rec-status.is-rec { color: #fecaca; }
 .speak-rec-eye {
   display: inline-flex;
@@ -2542,14 +2550,19 @@ body.speak-rec-open { overflow: hidden; }
   box-shadow: 0 0 8px rgba(34, 197, 94, .8);
 }
 .speak-rec-eye.is-away .speak-rec-dot {
-  background: #f59e0b;
-  box-shadow: 0 0 8px rgba(245, 158, 11, .8);
+  background: #ef4444;
+  box-shadow: 0 0 8px rgba(239, 68, 68, .8);
 }
+/* Ogohlantirish darhol qizil — sariq holat yo'q */
 .speak-rec-warn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: #fbbf24;
+  color: #fca5a5;
+  background: rgba(127, 29, 29, .62);
+  border: 1px solid rgba(248, 113, 113, .5);
+  border-radius: 10px;
+  padding: 7px 11px;
   font-size: 12.5px;
   font-weight: 600;
 }

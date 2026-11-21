@@ -1590,15 +1590,26 @@ check(/outputFaceBlendshapes:\s*true/.test(appJs) &&
       /'eyeLookInLeft'/.test(appJs) && /'eyeLookDownRight'/.test(appJs) &&
       /speakBlendMap/.test(appJs),
   'speaking: FaceLandmarker blendshapes yoqilgan (eyeLookIn/Out/Up/Down)');
-check(/SPEAK_AWAY_MS\s*=\s*1000/.test(appJs) &&
+check(/SPEAK_AWAY_MS\s*=\s*250/.test(appJs) &&
       /SPEAK_MAX_WARNINGS\s*=\s*3/.test(appJs) &&
-      /SPEAK_BLINK_MS\s*=\s*400/.test(appJs),
-  'speaking: 1.0 s debounce, 3 warning va 400 ms blink qoidalari');
-check(/SPEAK_RETURN_MS\s*=\s*5000/.test(appJs) &&
+      /SPEAK_BLINK_MS\s*=\s*200/.test(appJs) &&
+      /SPEAK_YAW_MAX\s*=\s*0\.10/.test(appJs) &&
+      /SPEAK_IRIS_X_MAX\s*=\s*0\.13/.test(appJs),
+  'speaking: 0.25 s debounce, 3 warning, 200 ms blink va qat\'iy yaw/iris chegaralari');
+check(/SPEAK_RETURN_MS\s*=\s*3000/.test(appJs) &&
       /function speakCountdownText/.test(appJs) &&
+      /function speakWarnText/.test(appJs) &&
       /Kameraga qarang! \{s\}s\.\.\./.test(appJs) &&
       /awayDeadline\s*=\s*Date\.now\(\)\s*\+\s*SPEAK_RETURN_MS/.test(appJs),
-  'speaking: ogohlantirishdan keyin 5 s qaytish sanoqi boshlanadi');
+  'speaking: ogohlantirishdan keyin 3 s qaytish sanoqi boshlanadi');
+check(/speakRecRing\(warningActive \|\| awayNow \? 'bad' : 'good'\)/.test(appJs) &&
+      /speakRecWarn\(awayNow, awayNow \?/.test(appJs),
+  'speaking: chetga qarashda darhol qizil ogohlantirish (sariq emas)');
+check(/function supportCanGradeSpeaking/.test(appJs) &&
+      /function staffCanGradeStudent/.test(appJs) &&
+      /supportCanGradeSpeaking\(\) \|\| !staffCanGradeStudent/.test(appJs) &&
+      /'tg-grade': 'speaking'/.test(appJs),
+  'support: biriktirilgan guruh o\'quvchilarini baholash va izoh yozish ruxsati');
 check(/invalidReason\s*=\s*'timeout'/.test(appJs) &&
       /awayDeadline\s*=\s*0;\s*\n\s*speakRec\.warningUntil\s*=\s*0;/.test(appJs) &&
       /function speakInvalidText/.test(appJs),
@@ -1620,6 +1631,10 @@ const speakCssSrc = fs.readFileSync(path.join(root, 'css', 'styles.css'), 'utf8'
 check(/\.speak-rec-ring\.is-bad\s*\{[^}]*#ef4444/.test(speakCssSrc) &&
       /\.speak-rec-invalid\s*\{/.test(speakCssSrc),
   'speaking: qizil ring va invalid panel uslublari mavjud');
+check(/\.speak-rec-warn\s*\{[^}]*#fca5a5/.test(speakCssSrc) &&
+      /\.speak-rec-ring\.is-away\s*\{[^}]*#ef4444/.test(speakCssSrc) &&
+      /\.speak-rec-eye\.is-away \.speak-rec-dot\s*\{[^}]*#ef4444/.test(speakCssSrc),
+  'speaking: ogohlantirish, halqa va ko\'z nuqtasi darhol qizil');
 check(/\.speak-rec\s*\{[^}]*position:\s*fixed/.test(speakCssSrc) &&
       /\.speak-rec\s*\{[^}]*inset:\s*0/.test(speakCssSrc) &&
       /\.speak-rec\s*\{[^}]*backdrop-filter:\s*blur\(14px\)/.test(speakCssSrc) &&
@@ -4192,6 +4207,9 @@ await (async () => {
   check(/Tez amallar/.test(supHomeText) && /Uyga vazifa berish/.test(supHomeText) &&
         !!q('[data-act="open-add-student"]') && /Guruhni tahrirlash/.test(supHomeText),
     'support: tez amallarda uyga vazifa berish, o\'quvchi qo\'shish va guruh tahrirlash ko\'rinadi');
+  check(qa('.quick-group-title').length === 3 &&
+        /O'quv jarayoni/.test(supHomeText) && /Baholash/.test(supHomeText) && /Boshqaruv/.test(supHomeText),
+    'support: tez amallar 3 qismga ajratilgan (o\'quv jarayoni, baholash, boshqaruv)');
   check(!/Biriktirilgan guruhlar/.test(supHomeText),
     'support: "biriktirilgan o\'quvchilar/guruhlar" bo\'limi paneldan olib tashlangan');
   forceNav('groups');

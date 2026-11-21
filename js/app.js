@@ -3001,6 +3001,17 @@ function supportCanEditGroup() {
 function supportCanGroups() {
   return isTeacher() || (isSupport() && (supportPerm('students') || supportPerm('edit_group')));
 }
+/* Support teacher biriktirilgan guruh o'quvchilarini baholay oladi va izoh yozadi */
+function supportCanGradeSpeaking() {
+  return isTeacher() || (isSupport() && supportPerm('speaking'));
+}
+function staffCanGradeStudent(sid) {
+  if (isTeacher()) return true;
+  if (!isSupport()) return false;
+  const st = studentById(sid);
+  if (!st) return false;
+  return supportRecordGroupIds(supportRecord()).indexOf(String(st.groupId)) >= 0;
+}
 function supportRecordGroupIds(rec) {
   return (rec && Array.isArray(rec.groupIds) ? rec.groupIds : []).map(String);
 }
@@ -3996,6 +4007,7 @@ const I18N_EN = {
   "Video baholashdan keyin ham saqlanadi.": "The video is kept after grading.",
   "Yangi sayt speaking videosi": "New website speaking video",
   "Kameraga qarang! Ogohlantirish: {n}/3": "Look at the camera! Warning: {n}/3",
+  "Ogohlantirish: {n}/3 — kameraga qarang! {s}s...": "Warning: {n}/3 — look at the camera! {s}s...",
   "Ko'zingiz 3 marta kameradan chetga qaradi. Yozuv to'xtatildi, videoni qaytadan oling.": "Your eyes looked away from the camera 3 times. Recording stopped — please record a new video.",
   "Qayta olish": "Retake",
   "Sayt videolari": "Website videos",
@@ -4271,8 +4283,11 @@ Object.assign(I18N_EN, {
   'Natija o‘chirildi': 'Result deleted',
   'Bu natijani o‘chirishni tasdiqlaysizmi?': 'Delete this result?',
   'Kameraga qarang! {s}s...': 'Look at the camera! {s}s...',
-  '5 soniya ichida kameraga qaytmadingiz. Yozuv bekor qilindi — videoni qaytadan oling.':
-    'You did not return to the camera within 5 seconds. Recording cancelled — please record again.'
+  '3 soniya ichida kameraga qaytmadingiz. Speaking bekor qilindi — videoni qaytadan oling.':
+    'You did not return to the camera within 3 seconds. Speaking cancelled — please record again.',
+  'O\'quv jarayoni': 'Learning',
+  'Baholash': 'Grading',
+  'Boshqaruv': 'Management'
 });
 
 function t(s) {
@@ -6170,17 +6185,22 @@ function supportHome() {
   const groups = scopedGroups();
   const students = scopedStudents();
   const perms = supportPermsOf(rec);
-  const quick = [];
-  if (supportCanGroups()) quick.push({ act: 'nav', screen: 'groups', icon: ICON.groups, label: 'Sinflar', tint: 'tint-amber' });
-  if (perms.students) quick.push({ act: 'nav', screen: 'students', icon: ICON.students, label: "O'quvchilar", tint: 'tint-amber' });
-  if (perms.homework) quick.push({ act: 'nav', screen: 'homework', icon: ICON.bookOpen, label: 'Uyga vazifa berish', tint: 'tint-blue' });
-  if (perms.add_student) quick.push({ act: 'open-add-student', screen: '', icon: ico('plus', 20), label: "O'quvchi qo'shish", tint: 'tint-emerald' });
-  if (perms.edit_group) quick.push({ act: 'nav', screen: 'groups', icon: ico('brush', 20), label: 'Guruhni tahrirlash', tint: 'tint-sky' });
-  if (perms.attendance) quick.push({ act: 'nav', screen: 'attendance', icon: ICON.cal, label: 'Davomat', tint: 'tint-emerald' });
-  if (perms.speaking) quick.push({ act: 'nav', screen: 'speaking', icon: ICON.mic, label: 'Speaking', tint: 'tint-sky' });
-  if (perms.grades) quick.push({ act: 'nav', screen: 'grades', icon: ICON.grades, label: 'Baholar', tint: 'tint-indigo' });
-  if (perms.mock) quick.push({ act: 'nav', screen: 'mock', icon: ICON.gradCap, label: 'Mock testlar', tint: 'tint-violet' });
-  if (perms.submissions) quick.push({ act: 'nav', screen: 'submissions', icon: ICON.clipboardCheck, label: 'Topshiriqlar', tint: 'tint-rose' });
+  /* Tez amallar asosiy teacher panelidagi kabi 3 qismga bo'linadi */
+  const quickGroups = [
+    { title: "O'quv jarayoni", items: [] },
+    { title: 'Baholash', items: [] },
+    { title: 'Boshqaruv', items: [] }
+  ];
+  if (perms.homework) quickGroups[0].items.push({ act: 'nav', screen: 'homework', icon: ICON.bookOpen, label: 'Uyga vazifa berish', tint: 'tint-blue' });
+  if (perms.attendance) quickGroups[0].items.push({ act: 'nav', screen: 'attendance', icon: ICON.cal, label: 'Davomat', tint: 'tint-emerald' });
+  if (perms.submissions) quickGroups[0].items.push({ act: 'nav', screen: 'submissions', icon: ICON.clipboardCheck, label: 'Topshiriqlar', tint: 'tint-rose' });
+  if (perms.speaking) quickGroups[1].items.push({ act: 'nav', screen: 'speaking', icon: ICON.mic, label: 'Speaking', tint: 'tint-sky' });
+  if (perms.grades) quickGroups[1].items.push({ act: 'nav', screen: 'grades', icon: ICON.grades, label: 'Baholar', tint: 'tint-indigo' });
+  if (perms.mock) quickGroups[1].items.push({ act: 'nav', screen: 'mock', icon: ICON.gradCap, label: 'Mock testlar', tint: 'tint-violet' });
+  if (supportCanGroups()) quickGroups[2].items.push({ act: 'nav', screen: 'groups', icon: ICON.groups, label: 'Sinflar', tint: 'tint-amber' });
+  if (perms.students) quickGroups[2].items.push({ act: 'nav', screen: 'students', icon: ICON.students, label: "O'quvchilar", tint: 'tint-amber' });
+  if (perms.add_student) quickGroups[2].items.push({ act: 'open-add-student', screen: '', icon: ico('plus', 20), label: "O'quvchi qo'shish", tint: 'tint-emerald' });
+  if (perms.edit_group) quickGroups[2].items.push({ act: 'nav', screen: 'groups', icon: ico('brush', 20), label: 'Guruhni tahrirlash', tint: 'tint-sky' });
   return `
   <section class="card hero-card">
     <div class="greet-main">
@@ -6199,11 +6219,14 @@ function supportHome() {
   </div>
 
   <div class="section-title">${t('Tez amallar')}</div>
+  ${quickGroups.filter(function (grp) { return grp.items.length; }).map(function (grp) {
+    return `<div class="quick-group-title">${esc(t(grp.title))}</div>
   <div class="quick-grid">
-    ${quick.map(function (q) {
-      return `<button type="button" class="card quick" data-act="${q.act}"${q.screen ? ` data-screen="${q.screen}"` : ''}><span class="quick-ico ${q.tint}">${q.icon}</span><span>${esc(t(q.label))}${q.screen === 'submissions' ? navBadgeHTML('submissions') : ''}</span></button>`;
+    ${grp.items.map(function (q) {
+      return `<button type="button" class="card quick" data-act="${q.act}"${q.screen ? ` data-screen="${q.screen}"` : ''}><span class="quick-ico ${q.tint}">${q.icon}</span><span>${esc(t(q.label))}${q.screen === 'submissions' ? navBadgeHTML('submissions') : ''}${q.screen === 'speaking' ? navBadgeHTML('speaking') : ''}</span></button>`;
     }).join('')}
   </div>`;
+  }).join('')}`;
 }
 
 function homeScreen() {
@@ -8746,15 +8769,23 @@ const SPEAK_MP_VERSION = '0.10.14';
 const SPEAK_MP_BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@' + SPEAK_MP_VERSION;
 const SPEAK_MP_MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
 const SPEAK_DETECT_MS = 100;
-/* Qat'iy ko'z nazorati: 1.0 s uzluksiz chetga qarash = 1 ogohlantirish, 3 tasida yozuv bekor qilinadi */
-const SPEAK_AWAY_MS = 1000;
-const SPEAK_AWAY_COOLDOWN_MS = 300;
+/* Qat'iy ko'z nazorati: o'qishga (chetga qarashga) yo'l yo'q.
+   0.25 s uzluksiz chetga qarash = 1 ogohlantirish, 3 tasida yozuv butunlay bekor qilinadi. */
+const SPEAK_AWAY_MS = 250;
+const SPEAK_AWAY_COOLDOWN_MS = 150;
 const SPEAK_MAX_WARNINGS = 3;
-/* Har qanday ogohlantirishdan keyin: 5 s ichida yuz va ko'z qaytmasa yozuv darhol bekor qilinadi */
-const SPEAK_RETURN_MS = 5000;
-const SPEAK_BLINK_MS = 400;
+/* Har qanday ogohlantirishdan keyin: 3 s ichida yuz va ko'z qaytmasa speaking darhol bekor qilinadi */
+const SPEAK_RETURN_MS = 3000;
+const SPEAK_BLINK_MS = 200;
 const SPEAK_BLINK_SCORE = 0.45;
-const SPEAK_GAZE_SCORE = 0.5;
+const SPEAK_GAZE_SCORE = 0.2;
+/* Bosh burilishi va iris chegaralari — eng kichik chetga qarash ham ogohlantiriladi */
+const SPEAK_YAW_MAX = 0.10;
+const SPEAK_PITCH_MIN = 0.12;
+const SPEAK_PITCH_MAX = 0.50;
+const SPEAK_IRIS_X_MAX = 0.13;
+const SPEAK_IRIS_Y_MIN = 0.35;
+const SPEAK_IRIS_Y_MAX = 0.68;
 let speakRec = null;
 let speakLandmarkerPromise = null;
 
@@ -8786,23 +8817,29 @@ function speakRecWarn(show, message, bad, count) {
   }
   if (txt && message) txt.textContent = message;
 }
-/* 5 s qaytish sanoqi matni: 5s, 4s, 3s, 2s, 1s */
+/* 3 s qaytish sanoqi matni: 3s, 2s, 1s */
 function speakCountdownText(ms) {
   const left = Math.max(0, Math.ceil(Number(ms) / 1000));
   return t('Kameraga qarang! {s}s...').replace('{s}', String(left));
 }
-/* Bekor qilish sababi: 3 ogohlantirish yoki 5 s ichida qaytmaslik */
+/* Ogohlantirish matni: nechchi marta ogohlantirilgani va qaytishga qancha vaqt qolgani */
+function speakWarnText(n, ms) {
+  const left = Math.max(0, Math.ceil(Number(ms) / 1000));
+  return t('Ogohlantirish: {n}/3 — kameraga qarang! {s}s...')
+    .replace('{n}', String(n)).replace('{s}', String(left));
+}
+/* Bekor qilish sababi: 3 ogohlantirish yoki 3 s ichida qaytmaslik */
 function speakInvalidText(reason) {
   return reason === 'timeout'
-    ? t('5 soniya ichida kameraga qaytmadingiz. Yozuv bekor qilindi — videoni qaytadan oling.')
+    ? t('3 soniya ichida kameraga qaytmadingiz. Speaking bekor qilindi — videoni qaytadan oling.')
     : t("Ko'zingiz 3 marta kameradan chetga qaradi. Yozuv to'xtatildi, videoni qaytadan oling.");
 }
-/* Ogohlantirish: qizil halqa + 5 s qaytish sanoqi. 3/3 da yozuv darhol bekor qilinadi. */
+/* Ogohlantirish: darhol qizil halqa + 3 s qaytish sanoqi. 3/3 da yozuv darhol bekor qilinadi. */
 function speakRecWarning(n) {
-  speakRec.warningUntil = Date.now() + 2200;
-  /* Har qanday ogohlantirishdan keyin 5 s ichida yuz VA ko'z qaytishi shart */
+  speakRec.warningUntil = Date.now() + SPEAK_RETURN_MS;
+  /* Har qanday ogohlantirishdan keyin 3 s ichida yuz VA ko'z qaytishi shart */
   speakRec.awayDeadline = Date.now() + SPEAK_RETURN_MS;
-  speakRecWarn(true, speakCountdownText(SPEAK_RETURN_MS), true, true);
+  speakRecWarn(true, speakWarnText(n, SPEAK_RETURN_MS), true, true);
   speakRecRing('bad');
   if (n >= SPEAK_MAX_WARNINGS) {
     speakRec.invalidReason = 'warnings';
@@ -8979,7 +9016,8 @@ function speakFaceSignals(lm, blends) {
   out.face = true;
   out.yaw = (nose.x - (lEye.x + rEye.x) / 2) / faceW;
   out.pitch = (nose.y - (lEye.y + rEye.y) / 2) / faceH;
-  out.headOk = Math.abs(out.yaw) <= 0.2 && out.pitch >= 0.05 && out.pitch <= 0.62;
+  out.headOk = Math.abs(out.yaw) <= SPEAK_YAW_MAX &&
+    out.pitch >= SPEAK_PITCH_MIN && out.pitch <= SPEAK_PITCH_MAX;
 
   const b = blends || {};
   const blinkL = Number(b.eyeBlinkLeft) || 0;
@@ -9004,11 +9042,11 @@ function speakFaceSignals(lm, blends) {
       if (lidGap <= 0 || lidGap / w < 0.11) eyesClosedCount++;
       /* Gorizontal iris markazi: burun tomonga/chetga siljishi */
       const ix = iris.reduce(function (sum, q) { return sum + q.x; }, 0) / iris.length;
-      if (Math.abs(ix - (a.x + c.x) / 2) / w > 0.22) out.irisAway = true;
+      if (Math.abs(ix - (a.x + c.x) / 2) / w > SPEAK_IRIS_X_MAX) out.irisAway = true;
       /* Vertikal iris markazi: tepaga/pastga qarash */
       const iy = iris.reduce(function (sum, q) { return sum + q.y; }, 0) / iris.length;
       const vy = (iy - up.y) / lidGap;
-      if (vy < 0.30 || vy > 0.72) out.irisAway = true;
+      if (vy < SPEAK_IRIS_Y_MIN || vy > SPEAK_IRIS_Y_MAX) out.irisAway = true;
     }
   }
 
@@ -9052,7 +9090,7 @@ function runSpeakDetection() {
   if (shortBlink && !headAway && !speakRec.awaySince) rawAway = false;
 
   if (!rawAway) speakRec.lastGoodAt = now;
-  const awayNow = rawAway && (speakRec.mode === 'recording' || now - speakRec.lastGoodAt > 350);
+  const awayNow = rawAway;
 
   if (speakRec.mode === 'recording') {
     speakRec.eyeSamples++;
@@ -9074,7 +9112,7 @@ function runSpeakDetection() {
           return;
         }
       }
-      /* 5 s qaytish talabi: sanoq davom etadi; 0 ga tushsa — darhol bekor qilinadi */
+      /* 3 s qaytish talabi: sanoq davom etadi; 0 ga tushsa — darhol bekor qilinadi */
       if (speakRec.awayDeadline) {
         const left = speakRec.awayDeadline - now;
         if (left <= 0) {
@@ -9083,14 +9121,14 @@ function runSpeakDetection() {
           return;
         }
         speakRec.warningUntil = now + 400;
-        speakRecWarn(true, speakCountdownText(left), true, true);
+        speakRecWarn(true, speakWarnText(speakRec.lookAwayCount || 1, left), true, true);
         speakRecRing('bad');
       }
     } else {
       if (speakRec.awaySince) speakRec.awayCooldownUntil = now + SPEAK_AWAY_COOLDOWN_MS;
       speakRec.awaySince = 0;
       speakRec.strikeCounted = false;
-      /* 5 s ichida kameraga qaytdi: sanoq tozalanadi, ogohlantirish soni saqlanadi */
+      /* 3 s ichida kameraga qaytdi: sanoq tozalanadi, ogohlantirish soni saqlanadi */
       if (speakRec.awayDeadline) {
         speakRec.awayDeadline = 0;
         speakRec.warningUntil = 0;
@@ -9103,9 +9141,10 @@ function runSpeakDetection() {
   speakRec.away = rawAway;
   speakRec.looking = !rawAway;
   const warningActive = now < (speakRec.warningUntil || 0);
-  speakRecRing(warningActive ? 'bad' : awayNow ? 'away' : 'good');
-  if (speakRec.mode !== 'recording' || speakRec.lookAwayCount === 0) {
-    speakRecWarn(awayNow, null, false);
+  /* Chetga qarash darhol qizil: sariq "kutish" holati yo'q */
+  speakRecRing(warningActive || awayNow ? 'bad' : 'good');
+  if (speakRec.lookAwayCount === 0 || speakRec.mode !== 'recording') {
+    speakRecWarn(awayNow, awayNow ? t('Kameraga qarang!') : null, awayNow);
   }
   const eye = speakRecQ('#speak-rec-eye');
   if (eye) eye.classList.toggle('is-away', awayNow || warningActive);
@@ -9495,8 +9534,8 @@ function webSpeakCard(sub, st, archived) {
       ${done ? `<span class="muted small">${t('Video baholashdan keyin ham saqlanadi.')}</span>` : [1,2,3,4,5,6,7,8,9,10].map(n => `
         <button type="button" class="btn btn-xs ${sub.score === n ? 'btn-primary' : 'ghost'}" data-act="tg-grade" data-tid="${sub.id}" data-score="${n}">${n}</button>`).join('')}
       ${done ? '' : `<input class="input" style="flex:1;min-width:140px" placeholder="${t('Izoh (ixtiyoriy)')}" value="${esc(sub.feedback || '')}" data-act="tg-feedback" data-tid="${sub.id}" />`}
-      ${done ? '' : `<button type="button" class="btn btn-xs danger" data-act="tg-reject" data-tid="${sub.id}">${t('Bekor qilish')}</button>`}
-      <button type="button" class="btn btn-xs danger" data-act="speak-del" data-tid="${sub.id}">${ico('trash', 13)} ${t("O'chirish")}</button>
+      ${done || !isTeacher() ? '' : `<button type="button" class="btn btn-xs danger" data-act="tg-reject" data-tid="${sub.id}">${t('Bekor qilish')}</button>`}
+      ${isTeacher() ? `<button type="button" class="btn btn-xs danger" data-act="speak-del" data-tid="${sub.id}">${ico('trash', 13)} ${t("O'chirish")}</button>` : ''}
     </div>
   </div>`;
 }
@@ -12935,10 +12974,13 @@ function changeDebt(sid, delta) {
 
 /* ==================== TELEGRAM TOPSHIRIKLARINI BAHOLASH (Ustoz) ==================== */
 function gradeTgSub(tid, score) {
-  if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
   const subs = getTgSubs();
   const sub = subs.filter(x => x.id === tid)[0];
   if (!sub) return;
+  /* Asosiy ustoz har qanday o'quvchini, support esa faqat o'z guruhini baholaydi */
+  if (!supportCanGradeSpeaking() || !staffCanGradeStudent(sub.sid)) {
+    toast("Ruxsat yo'q", 'error'); return;
+  }
   const wasGraded = sub.status === 'baholandi' || sub.status === 'graded';
   sub.status = 'baholandi';
   sub.score = score;
@@ -13162,7 +13204,7 @@ document.addEventListener('click', function (e) {
       'open-slot': 'speaking', 'save-slot': 'speaking', 'slot-assign': 'speaking',
       'slot-score': 'speaking', 'slot-del': 'speaking', 'slot-del-yes': 'speaking',
       'edit-grade': 'grades', 'grade-set': 'grades', 'grade-cat': 'grades',
-      'grade-clear': 'grades', 'group-detail': 'students'
+      'grade-clear': 'grades', 'group-detail': 'students', 'tg-grade': 'speaking'
     };
     let need = permForAct[act] || '';
     if (!need && /^mock-/.test(act)) need = 'mock';
