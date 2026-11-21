@@ -393,8 +393,57 @@ const SPEAKING_BOT_URL = 'https://t.me/uzbekspeakingcheckbot';
 function isR2Url(url) {
   return String(url || '').indexOf(R2_PUBLIC_BASE) === 0;
 }
+
+/* workers.dev ba'zi mobil operatorlarda butunlay bloklanadi — so'rov "Failed to fetch"
+   bilan qaytadi. Bunday tarmoqda fayl Supabase Storage'dagi public bucket'ga zaxira
+   sifatida yuklanadi (URL formati bir xil: /storage/v1/object/public/<bucket>/...). */
+const STORAGE_FALLBACK_BUCKETS = ['homework-media', 'homework_media'];
+let _fallbackStorageClient = null;
+function fallbackStorageClient() {
+  if (window.__cloudClient) return window.__cloudClient;
+  if (_fallbackStorageClient) return _fallbackStorageClient;
+  const supa = window.supabase;
+  if (supa && typeof supa.createClient === 'function') {
+    try {
+      _fallbackStorageClient = supa.createClient(
+        window.SUPABASE_URL || 'https://mvjoeqyqaylfccqcnwwe.supabase.co',
+        window.SUPABASE_ANON_KEY || ''
+      );
+    } catch (e) { _fallbackStorageClient = null; }
+  }
+  return _fallbackStorageClient;
+}
+
+async function uploadToFallbackStorage(file, path, name) {
+  const sb = fallbackStorageClient();
+  if (!sb) throw new Error('zaxira saqlash sozlanmagan');
+  const opts = {
+    upsert: true,
+    cacheControl: '3600',
+    contentType: file.type || 'application/octet-stream'
+  };
+  let lastErr = null;
+  for (let i = 0; i < STORAGE_FALLBACK_BUCKETS.length; i++) {
+    const bucket = STORAGE_FALLBACK_BUCKETS[i];
+    try {
+      const res = await sb.storage.from(bucket).upload(path, file, opts);
+      if (res && !res.error) {
+        const pub = sb.storage.from(bucket).getPublicUrl(path);
+        const url = pub && pub.data && pub.data.publicUrl ? String(pub.data.publicUrl) : '';
+        if (url) return { url: url, path: path, bucket: bucket, name: name };
+        lastErr = new Error('public URL olinmadi');
+      } else {
+        lastErr = (res && res.error) || new Error('noma\'lum xato');
+      }
+    } catch (e) { lastErr = e; }
+  }
+  const detail = (lastErr && (lastErr.message || lastErr.error || lastErr.statusCode)) || 'xatolik';
+  throw new Error('zaxira saqlashga ham yuklab bo\'lmadi: ' + detail);
+}
+
 /* Har qanday fayl (rasm, video, audio, Word/PDF/Excel, chek) R2'ga yuboriladi.
-   FormData Content-Type'ni o'zi qo'yadi — qo'lda header yozilmaydi. */
+   FormData Content-Type'ni o'zi qo'yadi — qo'lda header yozilmaydi.
+   Tarmoq R2'ga yetib bormasa (Failed to fetch / 5xx) — Supabase Storage zaxirasi. */
 async function uploadFileToR2(file, folderPath) {
   if (!file) throw new Error('Fayl tanlanmagan');
   const safeName = String(file.name || 'file').replace(/[^a-zA-Z0-9._-]/g, '_') || 'file';
@@ -403,20 +452,33 @@ async function uploadFileToR2(file, folderPath) {
   const fd = new FormData();
   fd.append('file', file);
   fd.append('path', path);
-  let res;
+  let res = null;
+  let netErr = null;
   try {
     res = await fetch(R2_UPLOAD_URL, { method: 'POST', body: fd });
   } catch (e) {
-    throw new Error('R2 yuklashda tarmoq xatosi: ' + ((e && e.message) || 'Failed to fetch'));
+    netErr = e;
   }
-  let data = null;
-  try { data = await res.json(); } catch (e) { data = null; }
-  const url = data && data.url ? String(data.url) : '';
-  if (!res || !res.ok || !data || !data.ok || !url) {
-    const detail = (data && (data.error || data.message)) || ('HTTP ' + ((res && res.status) || '?'));
-    throw new Error('R2 yuklash xatosi: ' + detail);
+  if (!netErr) {
+    let data = null;
+    try { data = await res.json(); } catch (e) { data = null; }
+    const url = data && data.url ? String(data.url) : '';
+    if (res && res.ok && data && data.ok && url) {
+      return { url: url, path: path, bucket: 'r2', name: safeName };
+    }
+    /* 4xx — so'rovning o'zi noto'g'ri (hajm/tur): matn bilan qaytaramiz.
+       5xx — server vaqtincha ishlamayapti: zaxira saqlashga o'tamiz. */
+    const status = Number((res && res.status) || 0);
+    if (status && status < 500) {
+      const detail = (data && (data.error || data.message)) || ('HTTP ' + status);
+      throw new Error('R2 yuklash xatosi: ' + detail);
+    }
   }
-  return { url: url, path: path, bucket: 'r2', name: safeName };
+  if (typeof console !== 'undefined' && console.warn) {
+    console.warn('[upload] R2 javob bermadi — Supabase Storage zaxirasiga o‘tiladi:',
+      (netErr && netErr.message) || ('HTTP ' + ((res && res.status) || '?')));
+  }
+  return uploadToFallbackStorage(file, path, safeName);
 }
 
 /* R2'dagi faylni o'chiradi. Har qanday xato yutiladi — fayl o'chmasa ham

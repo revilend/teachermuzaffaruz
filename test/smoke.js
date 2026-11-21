@@ -3655,6 +3655,16 @@ await (async () => {
   } catch (e) { upErr = (e && e.message) || ''; }
   check(/R2/.test(upErr) && /file too large/.test(upErr),
     'R2: server xatosi aniq matn bilan ko‘rsatiladi (ok:false)');
+  /* workers.dev bloklangan tarmoq ("Failed to fetch") — Supabase Storage zaxirasi */
+  win.fetch = function () { return Promise.reject(new TypeError('Failed to fetch')); };
+  const fbCalls = (cloudStub.storageCalls || []).length;
+  const fbUp = await realUpload(new win.File([new Uint8Array([1])], 'dars.mp3', { type: 'audio/mpeg' }), 1, 1);
+  check(!!fbUp && /stub\.supabase\.local/.test(String(fbUp.url)) && fbUp.bucket === 'homework-media',
+    'R2 bloklangan tarmoqda fayl Supabase Storage zaxirasiga yuklanadi (xato chiqmaydi)');
+  check((cloudStub.storageCalls || []).length === fbCalls + 1,
+    'zaxira yuklash Storage.upload orqali bir marta yuboriladi');
+  check(fbUp.path === (cloudStub.storageCalls[fbCalls] || {}).path,
+    'zaxira yuklashda ham xavfsiz path ishlatiladi');
   win.fetch = prevFetch;
 
   /* R2 o'chirish: public URL'dan key ajratilib DELETE ?path=... yuboriladi */
