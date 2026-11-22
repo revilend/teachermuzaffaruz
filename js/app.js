@@ -8861,8 +8861,11 @@ const SPEAK_GAZE_SCORE = 0.42;
 const SPEAK_YAW_MAX = 0.17;
 const SPEAK_PITCH_MIN = 0.05;
 const SPEAK_PITCH_MAX = 0.62;
-const SPEAK_IRIS_X_MAX = 0.17;
-const SPEAK_IRIS_X_STRONG = 0.26;
+/* Chap/o'ng qarash nazorati kuchaytirilgan: iris markazi ko'z o'rtasidan
+   ozgina siljishi bilan ushlanadi, ikkala ko'z bir tomonga ketishi shart. */
+const SPEAK_IRIS_X_MAX = 0.13;
+const SPEAK_IRIS_X_STRONG = 0.21;
+const SPEAK_GAZE_SIDE_SCORE = 0.36;
 const SPEAK_IRIS_Y_MIN = 0.22;
 /* Pastga qarash biroz yumshoq: yozishni boshlash/to'xtatish tugmalari ekranning pastida,
    ularga qisqa qarash ogohlantirishga sabab bo'lmasin. To'liq pastga (matnga) qarash baribir ushlanadi. */
@@ -9149,7 +9152,11 @@ function speakFaceSignals(lm, blends) {
      qarash o'tadi, lekin daftarga/matnga qarab olish baribir chetga qarash hisoblanadi. */
   out.gazeAway = gazeKeys.some(function (k) {
     const sc = Number(b[k]) || 0;
-    return sc >= (/Down/.test(k) ? SPEAK_GAZE_DOWN_SCORE : SPEAK_GAZE_SCORE);
+    /* Chap/o'ng (In/Out) uchun pastroq chegara — yon qarash qat'iyroq ushlanadi.
+       Pastga yumshoqroq (tugmalar), tepaga o'zgarmagan. */
+    if (/Down/.test(k)) return sc >= SPEAK_GAZE_DOWN_SCORE;
+    if (/In|Out/.test(k)) return sc >= SPEAK_GAZE_SIDE_SCORE;
+    return sc >= SPEAK_GAZE_SCORE;
   });
   return out;
 }

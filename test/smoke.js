@@ -1594,23 +1594,25 @@ check(/SPEAK_AWAY_MS\s*=\s*450/.test(appJs) &&
       /SPEAK_MAX_WARNINGS\s*=\s*3/.test(appJs) &&
       /SPEAK_BLINK_GRACE_MS\s*=\s*1200/.test(appJs) &&
       /SPEAK_YAW_MAX\s*=\s*0\.17/.test(appJs) &&
-      /SPEAK_IRIS_X_MAX\s*=\s*0\.17/.test(appJs),
+      /SPEAK_IRIS_X_MAX\s*=\s*0\.13/.test(appJs),
   'speaking: 0.45 s debounce, 3 warning, 1.2 s blink grace va gorizontal chegaralar');
 /* Haddan tashqari yumshoq bo'lib ketmasin: chegaralar baribir qat'iy bandda qoladi */
 check(/SPEAK_YAW_MAX\s*=\s*0\.(1[3-9])/.test(appJs) &&
-      /SPEAK_IRIS_X_MAX\s*=\s*0\.(1[5-9])/.test(appJs) &&
+      /SPEAK_IRIS_X_MAX\s*=\s*0\.1[0-4]/.test(appJs) &&
       /SPEAK_RETURN_MS\s*=\s*3000/.test(appJs),
   'speaking: chegaralar yengillashtirilgan, lekin o\'qishga yo\'l beradigan darajada emas');
 check(/function speakFaceSignals/.test(appJs) && /hRatio/.test(appJs) &&
-      /SPEAK_IRIS_X_STRONG\s*=\s*0\.26/.test(appJs) &&
+      /SPEAK_IRIS_X_STRONG\s*=\s*0\.21/.test(appJs) &&
       /irisHits\s*>=\s*2\s*\|\|\s*irisStrong/.test(appJs) &&
+      /SPEAK_GAZE_SIDE_SCORE\s*=\s*0\.36/.test(appJs) &&
+      /\/In\|Out\/\.test\(k\)\)\s*return sc >= SPEAK_GAZE_SIDE_SCORE/.test(appJs) &&
       /blinkGrace/.test(appJs) &&
       /SPEAK_BLINK_GRACE_MS/.test(appJs),
-  "speaking: chap/o'ng qarash ikkala iris bo'yicha tekshiriladi, qisqa ko'z yumish ogohlantirmaydi");
+  "speaking: chap/o'ng qarash kuchaytirilgan (iris + In/Out blendshape), qisqa ko'z yumish ogohlantirmaydi");
 check(/SPEAK_IRIS_Y_MAX\s*=\s*0\.92/.test(appJs) &&
       /SPEAK_IRIS_Y_MIN\s*=\s*0\.22/.test(appJs) &&
       /SPEAK_GAZE_DOWN_SCORE\s*=\s*0\.55/.test(appJs) &&
-      /\/Down\/\.test\(k\)\s*\?\s*SPEAK_GAZE_DOWN_SCORE\s*:\s*SPEAK_GAZE_SCORE/.test(appJs),
+      /\/Down\/\.test\(k\)\)\s*return sc >= SPEAK_GAZE_DOWN_SCORE/.test(appJs),
   "speaking: pastga qarash biroz yengillashtirilgan (tugmalar), tepaga nazorat qat'iy qolgan");
 check(/SPEAK_RETURN_MS\s*=\s*3000/.test(appJs) &&
       /function speakCountdownText/.test(appJs) &&
