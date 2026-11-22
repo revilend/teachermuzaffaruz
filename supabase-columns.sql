@@ -27,6 +27,24 @@ begin
 end;
 $$;
 
+-- Yordamchi: jadval va ustunlar bo'lsa indeks yaratadi (aks holda o'tkazib yuboradi)
+create or replace function public.et_add_index(idx text, tbl text, cols text)
+returns void
+language plpgsql
+as $$
+begin
+  if to_regclass('public.' || tbl) is null then
+    raise notice 'Jadval yo''q, indeks o''tkazib yuborildi: %', idx;
+    return;
+  end if;
+  begin
+    execute format('create index if not exists %I on public.%I (%s)', idx, tbl, cols);
+  exception when others then
+    raise notice 'Indeks o''tkazib yuborildi (%): %', idx, sqlerrm;
+  end;
+end;
+$$;
+
 -- ============================================================
 -- 1) YETISHMAYOTGAN JADVALLAR
 -- ============================================================
@@ -269,8 +287,11 @@ select public.et_add_col('payment_receipts', 'channel_message_id', 'bigint');
 select public.et_add_col('payment_receipts', 'channel_chat_id', 'text');
 select public.et_add_col('payment_receipts', 'admin_messages', 'jsonb default ''[]''::jsonb');
 
--- Oylik to'lovlar
+-- Oylik to'lovlar (eski jadvalda period/group_id bo'lmasligi mumkin)
+select public.et_add_col('monthly_fees', 'group_id', 'bigint references public.groups (id) on delete cascade');
+select public.et_add_col('monthly_fees', 'period', 'text');
 select public.et_add_col('monthly_fees', 'month_key', 'text');
+select public.et_add_col('monthly_fees', 'amount', 'numeric not null default 0');
 
 -- O'quvchi to'lovlari
 select public.et_add_col('student_payments', 'group_id', 'bigint references public.groups (id) on delete set null');
@@ -324,26 +345,26 @@ end $$;
 -- ============================================================
 -- 3) INDEKSLAR
 -- ============================================================
-create index if not exists audio_submissions_student_idx on public.audio_submissions (student_id, created_at);
-create index if not exists messages_student_idx on public.messages (student_id, created_at);
-create index if not exists speaking_submissions_status_idx on public.speaking_submissions (status, created_at);
-create index if not exists speaking_submissions_student_idx on public.speaking_submissions (student_id, created_at);
-create index if not exists homework_group_idx on public.homework (group_id, created_at);
-create index if not exists user_sessions_user_idx on public.user_sessions (user_type, user_id);
-create index if not exists telegram_outbox_status_idx on public.telegram_outbox (status, created_at);
-create index if not exists payments_student_idx on public.payments (student_id, created_at);
-create index if not exists monthly_fees_group_idx on public.monthly_fees (group_id, period);
-create index if not exists speaking_slots_date_idx on public.speaking_slots (date);
-create index if not exists payment_receipts_student_idx on public.payment_receipts (student_id, created_at);
-create index if not exists payment_receipts_status_idx on public.payment_receipts (status, created_at);
-create index if not exists auth_codes_code_idx on public.auth_codes (purpose, code, used);
-create index if not exists auth_codes_student_idx on public.auth_codes (student_id, created_at);
-create index if not exists email_outbox_status_idx on public.email_outbox (status, created_at);
-create index if not exists homework_submissions_hw_idx on public.homework_submissions (homework_id, created_at desc);
-create index if not exists homework_submissions_student_idx on public.homework_submissions (student_id, created_at desc);
-create index if not exists mock_tests_cat_idx on public.mock_tests (category, updated_at desc);
-create index if not exists mock_attempts_sid_idx on public.mock_attempts (sid, updated_at desc);
-create index if not exists mock_attempts_cat_idx on public.mock_attempts (category, updated_at desc);
+select public.et_add_index('audio_submissions_student_idx', 'audio_submissions', 'student_id, created_at');
+select public.et_add_index('messages_student_idx', 'messages', 'student_id, created_at');
+select public.et_add_index('speaking_submissions_status_idx', 'speaking_submissions', 'status, created_at');
+select public.et_add_index('speaking_submissions_student_idx', 'speaking_submissions', 'student_id, created_at');
+select public.et_add_index('homework_group_idx', 'homework', 'group_id, created_at');
+select public.et_add_index('user_sessions_user_idx', 'user_sessions', 'user_type, user_id');
+select public.et_add_index('telegram_outbox_status_idx', 'telegram_outbox', 'status, created_at');
+select public.et_add_index('payments_student_idx', 'payments', 'student_id, created_at');
+select public.et_add_index('monthly_fees_group_idx', 'monthly_fees', 'group_id, period');
+select public.et_add_index('speaking_slots_date_idx', 'speaking_slots', 'date');
+select public.et_add_index('payment_receipts_student_idx', 'payment_receipts', 'student_id, created_at');
+select public.et_add_index('payment_receipts_status_idx', 'payment_receipts', 'status, created_at');
+select public.et_add_index('auth_codes_code_idx', 'auth_codes', 'purpose, code, used');
+select public.et_add_index('auth_codes_student_idx', 'auth_codes', 'student_id, created_at');
+select public.et_add_index('email_outbox_status_idx', 'email_outbox', 'status, created_at');
+select public.et_add_index('homework_submissions_hw_idx', 'homework_submissions', 'homework_id, created_at desc');
+select public.et_add_index('homework_submissions_student_idx', 'homework_submissions', 'student_id, created_at desc');
+select public.et_add_index('mock_tests_cat_idx', 'mock_tests', 'category, updated_at desc');
+select public.et_add_index('mock_attempts_sid_idx', 'mock_attempts', 'sid, updated_at desc');
+select public.et_add_index('mock_attempts_cat_idx', 'mock_attempts', 'category, updated_at desc');
 
 -- ============================================================
 -- 4) RUXSATLAR VA DEMO RLS POLICY'LAR
@@ -442,4 +463,5 @@ create policy "mock_attempts anon all" on public.mock_attempts
 -- 5) YAKUN
 -- ============================================================
 drop function if exists public.et_add_col(text, text, text);
+drop function if exists public.et_add_index(text, text, text);
 notify pgrst, 'reload schema';
