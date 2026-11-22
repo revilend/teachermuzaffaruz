@@ -1590,12 +1590,17 @@ check(/outputFaceBlendshapes:\s*true/.test(appJs) &&
       /'eyeLookInLeft'/.test(appJs) && /'eyeLookDownRight'/.test(appJs) &&
       /speakBlendMap/.test(appJs),
   'speaking: FaceLandmarker blendshapes yoqilgan (eyeLookIn/Out/Up/Down)');
-check(/SPEAK_AWAY_MS\s*=\s*250/.test(appJs) &&
+check(/SPEAK_AWAY_MS\s*=\s*450/.test(appJs) &&
       /SPEAK_MAX_WARNINGS\s*=\s*3/.test(appJs) &&
       /SPEAK_BLINK_MS\s*=\s*200/.test(appJs) &&
-      /SPEAK_YAW_MAX\s*=\s*0\.10/.test(appJs) &&
-      /SPEAK_IRIS_X_MAX\s*=\s*0\.13/.test(appJs),
-  'speaking: 0.25 s debounce, 3 warning, 200 ms blink va qat\'iy yaw/iris chegaralari');
+      /SPEAK_YAW_MAX\s*=\s*0\.20/.test(appJs) &&
+      /SPEAK_IRIS_X_MAX\s*=\s*0\.24/.test(appJs),
+  'speaking: 0.45 s debounce, 3 warning, 200 ms blink va muvozanatli yaw/iris chegaralari');
+/* Haddan tashqari yumshoq bo'lib ketmasin: chegaralar baribir qat'iy bandda qoladi */
+check(/SPEAK_YAW_MAX\s*=\s*0\.(1[5-9]|2[0-9])/.test(appJs) &&
+      /SPEAK_IRIS_X_MAX\s*=\s*0\.(2[0-9]|3[0-5])/.test(appJs) &&
+      /SPEAK_RETURN_MS\s*=\s*3000/.test(appJs),
+  'speaking: chegaralar yengillashtirilgan, lekin o\'qishga yo\'l beradigan darajada emas');
 check(/SPEAK_RETURN_MS\s*=\s*3000/.test(appJs) &&
       /function speakCountdownText/.test(appJs) &&
       /function speakWarnText/.test(appJs) &&

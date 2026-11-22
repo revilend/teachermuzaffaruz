@@ -8842,23 +8842,25 @@ const SPEAK_MP_VERSION = '0.10.14';
 const SPEAK_MP_BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@' + SPEAK_MP_VERSION;
 const SPEAK_MP_MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
 const SPEAK_DETECT_MS = 100;
-/* Qat'iy ko'z nazorati: o'qishga (chetga qarashga) yo'l yo'q.
-   0.25 s uzluksiz chetga qarash = 1 ogohlantirish, 3 tasida yozuv butunlay bekor qilinadi. */
-const SPEAK_AWAY_MS = 250;
-const SPEAK_AWAY_COOLDOWN_MS = 150;
+/* Qat'iy ko'z nazorati, lekin tabiiy harakatga bag'rikeng:
+   0.45 s uzluksiz chetga qarash = 1 ogohlantirish, 3 tasida yozuv butunlay bekor qilinadi.
+   Bir-ikki kadrlik sakrash (kamera titrashi, pirpirash) ogohlantirishga sabab bo'lmaydi. */
+const SPEAK_AWAY_MS = 450;
+const SPEAK_AWAY_COOLDOWN_MS = 350;
 const SPEAK_MAX_WARNINGS = 3;
 /* Har qanday ogohlantirishdan keyin: 3 s ichida yuz va ko'z qaytmasa speaking darhol bekor qilinadi */
 const SPEAK_RETURN_MS = 3000;
 const SPEAK_BLINK_MS = 200;
-const SPEAK_BLINK_SCORE = 0.45;
-const SPEAK_GAZE_SCORE = 0.2;
-/* Bosh burilishi va iris chegaralari — eng kichik chetga qarash ham ogohlantiriladi */
-const SPEAK_YAW_MAX = 0.10;
-const SPEAK_PITCH_MIN = 0.12;
-const SPEAK_PITCH_MAX = 0.50;
-const SPEAK_IRIS_X_MAX = 0.13;
-const SPEAK_IRIS_Y_MIN = 0.35;
-const SPEAK_IRIS_Y_MAX = 0.68;
+const SPEAK_BLINK_SCORE = 0.55;
+const SPEAK_GAZE_SCORE = 0.42;
+/* Bosh burilishi va iris chegaralari — sezilarli chetga qarash ushlanadi,
+   ammo kameraga qarab turgan o'quvchi behuda ogohlantirilmaydi */
+const SPEAK_YAW_MAX = 0.20;
+const SPEAK_PITCH_MIN = 0.05;
+const SPEAK_PITCH_MAX = 0.62;
+const SPEAK_IRIS_X_MAX = 0.24;
+const SPEAK_IRIS_Y_MIN = 0.22;
+const SPEAK_IRIS_Y_MAX = 0.80;
 let speakRec = null;
 let speakLandmarkerPromise = null;
 
