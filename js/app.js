@@ -8850,15 +8850,19 @@ const SPEAK_AWAY_COOLDOWN_MS = 350;
 const SPEAK_MAX_WARNINGS = 3;
 /* Har qanday ogohlantirishdan keyin: 3 s ichida yuz va ko'z qaytmasa speaking darhol bekor qilinadi */
 const SPEAK_RETURN_MS = 3000;
-const SPEAK_BLINK_MS = 200;
+/* Ko'z yumilib ochilishi (tabiiy pirpirash) shu vaqtgacha ogohlantirish bermaydi */
+const SPEAK_BLINK_GRACE_MS = 1200;
 const SPEAK_BLINK_SCORE = 0.55;
 const SPEAK_GAZE_SCORE = 0.42;
 /* Bosh burilishi va iris chegaralari — sezilarli chetga qarash ushlanadi,
-   ammo kameraga qarab turgan o'quvchi behuda ogohlantirilmaydi */
-const SPEAK_YAW_MAX = 0.20;
+   ammo kameraga qarab turgan o'quvchi behuda ogohlantirilmaydi.
+   Gorizontal (chap/o'ng) chegara vertikal bilan teng sezgir bo'lishi uchun
+   iris markazi ko'z kengligiga nisbatan o'lchanadi. */
+const SPEAK_YAW_MAX = 0.17;
 const SPEAK_PITCH_MIN = 0.05;
 const SPEAK_PITCH_MAX = 0.62;
-const SPEAK_IRIS_X_MAX = 0.24;
+const SPEAK_IRIS_X_MAX = 0.17;
+const SPEAK_IRIS_X_STRONG = 0.26;
 const SPEAK_IRIS_Y_MIN = 0.22;
 const SPEAK_IRIS_Y_MAX = 0.80;
 let speakRec = null;
@@ -9098,6 +9102,8 @@ function speakFaceSignals(lm, blends) {
   const blinkL = Number(b.eyeBlinkLeft) || 0;
   const blinkR = Number(b.eyeBlinkRight) || 0;
   let eyesClosedCount = 0;
+  let irisHits = 0;
+  let irisStrong = false;
 
   if (lm.length >= 478) {
     /* Har ko'z: tashqi burchak, ichki burchak, yuqori/pastki qovoq, iris nuqtalari */
@@ -9115,15 +9121,23 @@ function speakFaceSignals(lm, blends) {
       if (w < 0.005) continue;
       const lidGap = low.y - up.y;
       if (lidGap <= 0 || lidGap / w < 0.11) eyesClosedCount++;
-      /* Gorizontal iris markazi: burun tomonga/chetga siljishi */
+      /* Gorizontal qarash: iris markazi qovoq burchaklariga nisbatan qayerda (0.5 = markaz).
+         Ko'z kengligiga nisbatan o'lchov — chap/o'ng qarash vertikal kabi sezilarli ushlanadi. */
       const ix = iris.reduce(function (sum, q) { return sum + q.x; }, 0) / iris.length;
-      if (Math.abs(ix - (a.x + c.x) / 2) / w > SPEAK_IRIS_X_MAX) out.irisAway = true;
+      const hRatio = (ix - a.x) / (c.x - a.x);
+      const hOff = Math.abs(hRatio - 0.5);
+      if (hOff > SPEAK_IRIS_X_MAX) irisHits++;
+      if (hOff > SPEAK_IRIS_X_STRONG) irisStrong = true;
       /* Vertikal iris markazi: tepaga/pastga qarash */
       const iy = iris.reduce(function (sum, q) { return sum + q.y; }, 0) / iris.length;
       const vy = (iy - up.y) / lidGap;
       if (vy < SPEAK_IRIS_Y_MIN || vy > SPEAK_IRIS_Y_MAX) out.irisAway = true;
     }
   }
+
+  /* Yon qarashda ikkala ko'z bir tomonga siljiydi: ikkalasi ham chegaradan chiqsa
+     yoki bittasi kuchli siljisa — chetga qarash. Bitta ko'zning yengil siljishi yetarli emas. */
+  if (irisHits >= 2 || irisStrong) out.irisAway = true;
 
   out.eyesClosed = Math.max(blinkL, blinkR) > SPEAK_BLINK_SCORE || eyesClosedCount >= 2;
   const gazeKeys = ['eyeLookInLeft', 'eyeLookOutLeft', 'eyeLookInRight', 'eyeLookOutRight',
@@ -9150,19 +9164,20 @@ function runSpeakDetection() {
   const headAway = !sig.face || !sig.headOk;
   const eyeAway = sig.irisAway || sig.gazeAway;
 
-  /* Qisqa blink (<400 ms) ko'z signallarini ishonchsiz qiladi, lekin yangi strike ochmaydi.
-     Agar chetga qarash epizodi allaqachon boshlangan bo'lsa — uning uzluksizligini saqlaymiz. */
+  /* Ko'z yumilib ochilishi — bir lahzalik holat: SPEAK_BLINK_GRACE_MS gacha umuman
+     chetga qarash hisoblanmaydi (yopiq ko'zda iris/gaze signallari ishonchsiz).
+     Agar chetga qarash epizodi allaqachon boshlangan bo'lsa — uzluksizlikni saqlaymiz. */
   if (sig.eyesClosed) {
     if (!speakRec.blinkStartedAt) speakRec.blinkStartedAt = now;
   } else {
     speakRec.blinkStartedAt = 0;
   }
-  const shortBlink = sig.eyesClosed && speakRec.blinkStartedAt &&
-    now - speakRec.blinkStartedAt < SPEAK_BLINK_MS;
+  const blinkGrace = sig.eyesClosed && speakRec.blinkStartedAt &&
+    now - speakRec.blinkStartedAt < SPEAK_BLINK_GRACE_MS;
 
-  let rawAway = headAway || (!shortBlink && (eyeAway || sig.eyesClosed));
-  if (shortBlink && !headAway && speakRec.awaySince) rawAway = true;
-  if (shortBlink && !headAway && !speakRec.awaySince) rawAway = false;
+  let rawAway = headAway || (!blinkGrace && (eyeAway || sig.eyesClosed));
+  if (blinkGrace && !headAway && speakRec.awaySince) rawAway = true;
+  if (blinkGrace && !headAway && !speakRec.awaySince) rawAway = false;
 
   if (!rawAway) speakRec.lastGoodAt = now;
   const awayNow = rawAway;
