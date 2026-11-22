@@ -769,16 +769,17 @@ async def btn_student_speak(message: types.Message):
     debt = int(st.get("speaking_debt") or 0)
     await message.answer(
         "🎙 <b>Speaking topshirish</b>\n\n"
-        "Shu yerga <b>vozli xabar</b> (ovozli xabar) yoki <b>dumaloq video</b> (krujok) yuboring — "
-        "men ustozga yo'llayman va baho qaytganda xabar olasiz.\n\n"
+        "Shu yerga <b>dumaloq video</b> (krujok) yuboring — kamerani yoqib, yuz ko'rinadigan "
+        "holda yozing. <b>Ovozli xabar qabul qilinmaydi.</b>\n"
+        "Men ustozga yo'llayman va baho qaytganda xabar olasiz.\n\n"
         f"💰 Joriy speaking qarzi: {debt} ta",
         parse_mode="HTML",
     )
 
 
 # ============================================================
-# Voice & Video Speaking Submissions (faqat ulangan o'quvchi,
-# voice_allowed = true bo'lgandagina qabul qilinadi)
+# Speaking Submissions — FAQAT dumaloq video (krujok). Ovozli xabar va oddiy video
+# qabul qilinmaydi (faqat ulangan o'quvchi, voice_allowed = true bo'lgandagina).
 # ============================================================
 def grade_keyboard(sub_id) -> InlineKeyboardMarkup:
     """Ustoz uchun 1-tap baho: [10][9][8][7][6] / [5][4][3][2][1] + [📝 Saytda ochish]."""
@@ -838,8 +839,24 @@ async def _send_media_to_teacher(file_id: str, media_type: str, student: dict, s
 @dp.message(F.voice | F.video_note | F.video)
 async def handle_speaking_submission(message: types.Message):
     user = message.from_user
-    media_type = "voice" if message.voice else ("video_note" if message.video_note else "video")
-    file_id = message.voice.file_id if message.voice else (message.video_note.file_id if message.video_note else message.video.file_id)
+    # Speaking topshirig'i FAQAT dumaloq video (krujok) ko'rinishida qabul qilinadi.
+    if not message.video_note:
+        if message.voice:
+            await message.answer(
+                "⛔ <b>Ovozli xabar qabul qilinmaydi.</b>\n\n"
+                "Speaking topshirig'i faqat <b>dumaloq video</b> (krujok) ko'rinishida yuboriladi. "
+                "Kamerani yoqib, dumaloq video yozib yuboring.",
+                parse_mode="HTML",
+            )
+        else:
+            await message.answer(
+                "⛔ <b>Oddiy video qabul qilinmaydi.</b>\n\n"
+                "Speaking topshirig'i faqat <b>dumaloq video</b> (krujok) ko'rinishida yuboriladi.",
+                parse_mode="HTML",
+            )
+        return
+    media_type = "video_note"
+    file_id = message.video_note.file_id
 
     # 1) O'quvchi ulanganmi?
     student = student_by_chat(user.id)
@@ -1176,7 +1193,7 @@ async def homework_watcher():
 # ============================================================
 VOICE_ALERT_TEXT = (
     "🎙 <b>Ruxsat berildi!</b>\n\n"
-    "<b>Muzaffar Amirov</b> sizga ovozli yoki dumaloq video (krujok) orqali "
+    "<b>Muzaffar Amirov</b> sizga dumaloq video (krujok) orqali "
     "Speaking topshirishga ruxsat berdi.\n"
     "Marhamat, javobingizni shu yerga yuborishingiz mumkin!"
 )

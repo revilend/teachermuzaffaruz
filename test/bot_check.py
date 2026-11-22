@@ -761,7 +761,8 @@ async def main():
     m = Msg(555, B.STUDENT_MENU["speak"])
     await B.btn_student_speak(m)
     t = m.answers[0]["text"]
-    check("vozli xabar" in t and "dumaloq video" in t, "speaking: yo'riqnoma (voice/video)")
+    check("dumaloq video" in t and "Ovozli xabar qabul qilinmaydi" in t,
+          "speaking: yo'riqnoma — faqat krujok, ovozli xabar taqiqlangan")
     check("Joriy speaking qarzi: 4 ta" in t, "speaking: joriy qarz ko'rsatildi")
 
     # =========================================================
@@ -796,11 +797,11 @@ async def main():
     m = Msg(4444, B.STUDENT_MENU["speak"])
     await B.btn_student_speak(m)
     t = m.answers[0]["text"]
-    check("vozli xabar" in t and "qarz" not in t.lower(),
+    check("dumaloq video" in t and "qarz" not in t.lower(),
           "guruh turi: speaking yo'riqnomada ham 'qarz' yo'q")
 
     fb.sent.clear()
-    v = Msg(4444, voice=Media("V-SCHOOL"))
+    v = Msg(4444, video_note=Media("V-SCHOOL"))
     await B.handle_speaking_submission(v)
     check(bool(v.replies) and "qarz" not in (v.replies[0]["text"] or "").lower(),
           "guruh turi: topshirish tasdiqida 'qarz' so'zi yo'q")
@@ -852,35 +853,56 @@ async def main():
           == "⛔ Kechirasiz! Ustoz hozircha sizga ovozli topshirishga ruxsat bermagan. Darsda topshiring.",
           "voice: ruxsat yo'q -> aynan spec rad xabari")
 
-    # ruxsat bor -> ustozga forward + qarz +1
+    # ovozli xabar endi qabul qilinmaydi (faqat krujok)
     fb.sent.clear()
     v = Msg(555, voice=Media("V3"))
     await B.handle_speaking_submission(v)
-    sub_voice = FAKE_ROWS["speaking_submissions"][-1]
-    check(sub_voice["media_type"] == "voice" and sub_voice["telegram_file_id"] == "V3",
-          "voice: speaking_submissions ga yozildi")
-    check(sub_voice["status"] == "kutilmoqda", "voice: status='kutilmoqda'")
+    check(bool(v.replies) and "Ovozli xabar qabul qilinmaydi" in (v.replies[0]["text"] or ""),
+          "voice: ovozli xabar rad etiladi (faqat krujok)")
+    check(not any(s["chat_id"] == ADMIN for s in fb.sent),
+          "voice: rad etilgan ovozli xabar ustozga yuborilmadi")
     check(FAKE_ROWS["students"][0]["speaking_debt"] == 4,
-          "voice: TOPSHIRISH speaking_debtni OSHIRMAYDI (4 -> 4)")
+          "voice: rad etilganda speaking_debt o'zgarmadi (4)")
 
-    fwd = [s for s in fb.sent if s["kind"] == "voice" and s["chat_id"] == ADMIN]
-    check(len(fwd) == 1, "voice: ustozga forward qilindi")
-    capv = fwd[0]["caption"] if fwd else ""
-    check("YANGI SPEAKING TOPSHIRILDI" in capv, "voice: ustozga kaptor sarlavhasi")
-    check("Jasur Karimov" in capv and "8-sinf" in capv, "voice: kaptorda ism + sinf")
-    check("Speaking qarzi:</b> 4 ta" in capv, "voice: kaptorda joriy speaking qarzi (4)")
+    # oddiy video (MP4) ham qabul qilinmaydi
+    fb.sent.clear()
+    v = Msg(555, video=Media("MP4"))
+    await B.handle_speaking_submission(v)
+    check(bool(v.replies) and "Oddiy video qabul qilinmaydi" in (v.replies[0]["text"] or ""),
+          "video: oddiy video rad etiladi (faqat krujok)")
+    check(not any(s["chat_id"] == ADMIN for s in fb.sent),
+          "video: rad etilgan video ustozga yuborilmadi")
 
-    gtexts = [t for t, _ in btn_texts(fwd[0]["reply_markup"])]
+    # krujok (video_note) qabul qilinadi -> ustozga uzatish + baho tugmalari
+    fb.sent.clear()
+    v = Msg(555, video_note=Media("V3"))
+    await B.handle_speaking_submission(v)
+    sub_voice = FAKE_ROWS["speaking_submissions"][-1]
+    check(sub_voice["media_type"] == "video_note" and sub_voice["telegram_file_id"] == "V3",
+          "krujok: speaking_submissions ga yozildi (media_type=video_note)")
+    check(sub_voice["status"] == "kutilmoqda", "krujok: status='kutilmoqda'")
+    check(FAKE_ROWS["students"][0]["speaking_debt"] == 4,
+          "krujok: TOPSHIRISH speaking_debtni OSHIRMAYDI (4 -> 4)")
+
+    fwd = [s for s in fb.sent if s["kind"] == "video_note" and s["chat_id"] == ADMIN]
+    check(len(fwd) == 1, "krujok: ustozga yuborildi")
+    caps = [s for s in fb.sent if s["kind"] == "message" and s["chat_id"] == ADMIN]
+    capv = caps[0]["text"] if caps else ""
+    check("YANGI SPEAKING TOPSHIRILDI" in capv, "krujok: ustozga kaptor sarlavhasi")
+    check("Jasur Karimov" in capv and "8-sinf" in capv, "krujok: kaptorda ism + sinf")
+    check("Speaking qarzi:</b> 4 ta" in capv, "krujok: kaptorda joriy speaking qarzi (4)")
+
+    gtexts = [t for t, _ in btn_texts(caps[0]["reply_markup"])]
     check(all(str(n) in gtexts for n in (10, 9, 8, 7, 6, 5)),
-          "voice: 1-tap baho tugmalari [10][9][8][7][6][5]")
-    check("📝 Saytda ochish" in gtexts, "voice: [ 📝 Saytda ochish ] tugmasi")
-    gdata = [c for _, c in btn_texts(fwd[0]["reply_markup"]) if c]
+          "krujok: 1-tap baho tugmalari [10][9][8][7][6][5]")
+    check("📝 Saytda ochish" in gtexts, "krujok: [ 📝 Saytda ochish ] tugmasi")
+    gdata = [c for _, c in btn_texts(caps[0]["reply_markup"]) if c]
     grade_cbs = [c for c in gdata if c.startswith("g:")]
     check(len(grade_cbs) == 10 and all(re.fullmatch(r"g:\d+:\d+", c) for c in grade_cbs),
-          "voice: baho callback g:<sub_id>:<score> (10 ta)")
+          "krujok: baho callback g:<sub_id>:<score> (10 ta)")
     check(len(gdata) == 11 and sum(1 for c in gdata if c.startswith("reject:")) == 1,
-          "voice: 10 ta baho + 1 ta bekor qilish tugmasi (jami 11 callback)")
-    check("Qabul qilindi" in v.replies[0]["text"], "voice: o'quvchiga tasdiq")
+          "krujok: 10 ta baho + 1 ta bekor qilish tugmasi (jami 11 callback)")
+    check("Qabul qilindi" in v.replies[0]["text"], "krujok: o'quvchiga tasdiq")
 
     # krujok (video_note) -> alohida video_note + matn xabari tugmalar bilan
     fb.sent.clear()
@@ -895,22 +917,15 @@ async def main():
     check(FAKE_ROWS["students"][0]["speaking_debt"] == 4,
           "video_note: TOPSHIRISH qarzni OSHIRMAYDI (4 -> 4)")
 
-    # video (MP4)
-    fb.sent.clear()
-    v = Msg(555, video=Media("MP4"))
-    await B.handle_speaking_submission(v)
-    sub_video = FAKE_ROWS["speaking_submissions"][-1]
-    check(any(s["kind"] == "video" and s["chat_id"] == ADMIN for s in fb.sent),
-          "video: MP4 ustozga yuborildi")
-    check(FAKE_ROWS["students"][0]["speaking_debt"] == 4,
-          "video: 3 ta topshirikdan keyin ham qarz 4 (qo'shilmaydi)")
+    sub_vn = FAKE_ROWS["speaking_submissions"][-1]
+    check(sub_vn["media_type"] == "video_note", "krujok: ikkinchi krujok ham yozildi")
     debt_before = FAKE_ROWS["students"][0]["speaking_debt"]  # topshiriklardan keyin ham o'zgarmagan
 
     # ---- 1-tap baho: [9] bosildi ----
     fb.sent.clear()
-    kb = B.grade_keyboard(sub_video["id"])
+    kb = B.grade_keyboard(sub_vn["id"])
     tap_data = kb.inline_keyboard[0][1].callback_data  # 9
-    check(tap_data == f"g:{sub_video['id']}:9", "baho: callback aynan 'g:<sub>:9'")
+    check(tap_data == f"g:{sub_vn['id']}:9", "baho: callback aynan 'g:<sub>:9'")
 
     call = Call(ADMIN, tap_data, msg=CallMsg(caption="old caption"))
     await B.on_grade_tap(call)
@@ -920,7 +935,7 @@ async def main():
           "baho: grades jadvaliga yozildi (9, Speaking)")
     check(FAKE_ROWS["students"][0]["speaking_debt"] == debt_before - 1,
           f"baho: speaking_debt {debt_before} -> {debt_before - 1} (-1)")
-    check(sub_video["status"] == "baholandi" and sub_video["score"] == 9,
+    check(sub_vn["status"] == "baholandi" and sub_vn["score"] == 9,
           "baho: speaking_submissions baholandi belgilandi")
     notes = [s["text"] for s in fb.sent if s["kind"] == "message" and s["chat_id"] == 555]
     check(notes == ["🎉 Muzaffar Amirov sizga 9/10 ball qo'ydi! "

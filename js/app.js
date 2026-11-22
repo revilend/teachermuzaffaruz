@@ -3620,8 +3620,8 @@ const I18N_EN = {
   "Ushbu platforma Muzaffar Amirovning 5–11-sinf o'quvchilari uchun mo'ljallangan zamonaviy ta'lim va nazorat tizimidir. O'quvchilar darslarni o'zlashtirishi, vazifalar va speaking topshiriqlarini bajarishi, ota-onalar esa davomat va baholarni real vaqtda kuzatishi mumkin.":
     "A modern learning and monitoring platform designed for Teacher Muzaffar Amirov's Grade 5–11 students. Track daily lessons, complete speaking assignments, and monitor attendance and grades in real time.",
   "Yakkama-yakka Speaking va Audio/Video tahlil": '1-on-1 Speaking & Audio/Video Review',
-  "O'quvchilar mavzular bo'yicha speaking topshiriqlarini darsda yoki Telegram bot orqali ovozli xabar va krujok video shaklida yuboradilar. Har bir javob 10 ballik tizimda baholanadi va speaking qarzlari avtomatik hisoblanadi.":
-    'Students submit speaking tasks in class or via Telegram bot as voice and video notes. Every submission is graded on a 10-point scale with automatic speaking debt tracking.',
+  "O'quvchilar mavzular bo'yicha speaking topshiriqlarini darsda yoki Telegram bot orqali dumaloq video (krujok) shaklida yuboradilar. Har bir javob 10 ballik tizimda baholanadi va speaking qarzlari avtomatik hisoblanadi.":
+    'Students submit speaking tasks in class or via Telegram bot as round videos (video notes). Every submission is graded on a 10-point scale with automatic speaking debt tracking.',
   "Kundalik 10 ballik elektron jurnal va Davomat": 'Daily 10-Point Gradebook & Attendance',
   "Har bir darsdagi faollik, davomat va baholar shaffof elektron jurnalga kiritiladi hamda haftalik va umumiy o'rtacha reyting avtomatik hisoblanadi.":
     'Class participation, attendance, and grades are recorded in a transparent electronic journal with automatic weekly and overall average calculations.',
@@ -4059,7 +4059,7 @@ const I18N_EN = {
   "Saytda yozish yopiq": "Website recording is off",
   "Saytda video yozish uchun ustoz ruxsati kerak. Speaking topshirig'ini Telegram bot orqali yuboring.": "Website recording requires teacher permission. Submit your speaking task via the Telegram bot.",
   "Telegram botga o'tish": "Open the Telegram bot",
-  "Botda ovozli xabar yoki dumaloq video yuboring.": "Send a voice message or a round video in the bot.",
+  "Botda dumaloq video (krujok) yuboring.": "Send a round video (video note) in the bot.",
   "Saytda speaking topshirishga ruxsat berildi": "Website speaking submission allowed",
   "Saytda speaking topshirish cheklandi": "Website speaking submission disabled",
   "Ruxsatni saqlashda xatolik": "Failed to save the permission",
@@ -4114,7 +4114,7 @@ const I18N_EN = {
   "Yopish": "Close",
   "Barchasini ko'rish": "View all",
   "Telegram orqali topshirish": "Submit via Telegram",
-  "Muzaffar Amirovga Telegram botga ovozli xabar (voice) yoki dumaloq video (krujok) yuboring — brauzerda yozish shart emas.": "Send a voice message or a round video (video note) to Muzaffar Amirov via the Telegram bot — no need to record in the browser.",
+  "Muzaffar Amirovga Telegram botga dumaloq video (krujok) yuboring — brauzerda yozish shart emas.": "Send a round video (video note) to Muzaffar Amirov via the Telegram bot — no need to record in the browser.",
   "Telegramda botga kiring": "Open the bot in Telegram",
   "ovozli xabar yuboring": "send a voice message",
   "Muzaffar Amirov baholaydi": "Muzaffar Amirov grades it",
@@ -4190,7 +4190,7 @@ const I18N_EN = {
   "Fayl tanlash": "Choose file",
   "Fayl tanlanmagan": "No file chosen",
   "Tushunarli": "Got it",
-  "Ovozli topshirish uchun Telegram botga kiring va u yerga ovozli xabar (voice) yoki krujok (video note) yuboring.": "To submit your speaking task, open the Telegram bot and send a voice message or a round video (video note) there.",
+  "Speaking topshirish uchun Telegram botga kiring va u yerga dumaloq video (krujok) yuboring.": "To submit your speaking task, open the Telegram bot and send a round video (video note) there.",
   "Davomat: {p}% qatnashgan ({n} ta qoldirilgan)": "Attendance: {p}% attended ({n} missed)",
   "{p} keldi · {a} kelmadi · {e} sababli": "{p} present · {a} absent · {e} excused",
   "{n} ta baholangan dars": "{n} graded lessons",
@@ -6141,7 +6141,7 @@ function studentPortal() {
     </div>
   </div>
   <a class="btn btn-primary btn-block speak-bot-btn" href="${SPEAKING_BOT_URL}" target="_blank" rel="noopener">${ICON.telegram} ${t("Telegram botga o'tish")}</a>
-  <div class="speak-rec-hint">${ico('cameraCheck', 14)} ${t('Botda ovozli xabar yoki dumaloq video yuboring.')}</div>` : `<div class="card speak-locked">
+  <div class="speak-rec-hint">${ico('cameraCheck', 14)} ${t('Botda dumaloq video (krujok) yuboring.')}</div>` : `<div class="card speak-locked">
     <div class="speak-locked-ico">${ICON.lock}</div>
     <div class="speak-locked-body">
       <div class="strong-label">${t('Ustoz ruxsati kerak')}</div>

@@ -69,8 +69,8 @@ Barcha sinf variantlari va filtrlari qat'iy: `5-sinf, 6-sinf, 7-sinf, 8-sinf, 9-
 - **O'quvchi:** kabinetda **"Speaking qarzingiz: X ta"** badge (yoki "qarzingiz yo'q")
 
 ### 10. Speaking topshirish — faqat Telegram orqali (lightweight)
-- **Brauzer yozgich YO'Q** — ilova yengil: o'quvchi Telegram botga 🎙 ovozli xabar
-  (voice), 📹 krujok (video note) yoki MP4 yuboradi.
+- **Brauzer yozgich YO'Q** — ilova yengil: o'quvchi Telegram botga 📹 krujok (video note)
+  yuboradi. Ovozli xabar va oddiy (MP4) video botda qabul qilinmaydi.
 - **Ustoz ruxsati:** har bir o'quvchi kartasida **"🎙 Ovozli topshirishga ruxsat"**
   kaliti → `students.voice_allowed`. Yopiq bo'lsa bot rad etadi:
   *"⛔ Kechirasiz! Ustoz hozircha sizga ovozli topshirishga ruxsat bermagan. Darsda topshiring."*
