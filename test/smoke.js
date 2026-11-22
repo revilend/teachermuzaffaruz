@@ -1607,6 +1607,11 @@ check(/function speakFaceSignals/.test(appJs) && /hRatio/.test(appJs) &&
       /blinkGrace/.test(appJs) &&
       /SPEAK_BLINK_GRACE_MS/.test(appJs),
   "speaking: chap/o'ng qarash ikkala iris bo'yicha tekshiriladi, qisqa ko'z yumish ogohlantirmaydi");
+check(/SPEAK_IRIS_Y_MAX\s*=\s*0\.92/.test(appJs) &&
+      /SPEAK_IRIS_Y_MIN\s*=\s*0\.22/.test(appJs) &&
+      /SPEAK_GAZE_DOWN_SCORE\s*=\s*0\.55/.test(appJs) &&
+      /\/Down\/\.test\(k\)\s*\?\s*SPEAK_GAZE_DOWN_SCORE\s*:\s*SPEAK_GAZE_SCORE/.test(appJs),
+  "speaking: pastga qarash biroz yengillashtirilgan (tugmalar), tepaga nazorat qat'iy qolgan");
 check(/SPEAK_RETURN_MS\s*=\s*3000/.test(appJs) &&
       /function speakCountdownText/.test(appJs) &&
       /function speakWarnText/.test(appJs) &&

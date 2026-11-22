@@ -8864,7 +8864,10 @@ const SPEAK_PITCH_MAX = 0.62;
 const SPEAK_IRIS_X_MAX = 0.17;
 const SPEAK_IRIS_X_STRONG = 0.26;
 const SPEAK_IRIS_Y_MIN = 0.22;
-const SPEAK_IRIS_Y_MAX = 0.80;
+/* Pastga qarash biroz yumshoq: yozishni boshlash/to'xtatish tugmalari ekranning pastida,
+   ularga qisqa qarash ogohlantirishga sabab bo'lmasin. To'liq pastga (matnga) qarash baribir ushlanadi. */
+const SPEAK_IRIS_Y_MAX = 0.92;
+const SPEAK_GAZE_DOWN_SCORE = 0.55;
 let speakRec = null;
 let speakLandmarkerPromise = null;
 
@@ -9142,7 +9145,12 @@ function speakFaceSignals(lm, blends) {
   out.eyesClosed = Math.max(blinkL, blinkR) > SPEAK_BLINK_SCORE || eyesClosedCount >= 2;
   const gazeKeys = ['eyeLookInLeft', 'eyeLookOutLeft', 'eyeLookInRight', 'eyeLookOutRight',
     'eyeLookUpLeft', 'eyeLookUpRight', 'eyeLookDownLeft', 'eyeLookDownRight'];
-  out.gazeAway = gazeKeys.some(function (k) { return (Number(b[k]) || 0) >= SPEAK_GAZE_SCORE; });
+  /* Pastga qarash blendshapes'i uchun alohida, biroz yuqori chegara — tugmalarga qisqa
+     qarash o'tadi, lekin daftarga/matnga qarab olish baribir chetga qarash hisoblanadi. */
+  out.gazeAway = gazeKeys.some(function (k) {
+    const sc = Number(b[k]) || 0;
+    return sc >= (/Down/.test(k) ? SPEAK_GAZE_DOWN_SCORE : SPEAK_GAZE_SCORE);
+  });
   return out;
 }
 
