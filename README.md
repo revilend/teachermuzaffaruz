@@ -319,6 +319,7 @@ js/data.js        — statik konfiguratsiya (sinflar, kunlar, kategoriyalar — 
 js/app.js         — kirish, rollar, kabinet, jurnal, davomat, speaking
 test/smoke.js     — jsdom asosida butun oqimni sinovdan o'tkazadi (278 tekshiruv)
 supabase.sql      — messages/homework/speaking_submissions/speaking_slots + unique login (SQL Editor'da Run)
+supabase-columns.sql — loyiha davomida qo'shilgan BARCHA ustunlar (idempotent, SQL Editor'da Run)
 bot.py            — Telegram bot (aiogram 3.x): /start + xabar funksiyalari
 config.py         — BOT_TOKEN, WEBAPP_URL, ADMIN_ID
 requirements.txt  — aiogram>=3.13.0, aiohttp>=3.9.0
