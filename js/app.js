@@ -6285,10 +6285,9 @@ function studentPortal() {
 
   ${cardsHTML}
 
-  <div class="section-title">${t('Sozlamalar')}</div>
-  <div class="card">
-    <div class="list-row"><span>Login</span><span class="login-val">${esc(u.login || '')}</span></div>
-    <div class="list-row"><span>${t('Parol')}</span><span class="muted">••••</span></div>
+  <div class="student-quote">
+    <span>Dear student, keep this in mind:</span>
+    <span class="student-quote-line">"Learning a new language means discovering a new world."</span>
   </div>
   `;
 }

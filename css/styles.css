@@ -2410,6 +2410,25 @@ html[data-theme="dark"] .auth-card-ico { background: rgba(99, 102, 241, 0.18); }
   .student-action { min-height: 112px; padding: 16px; }
 }
 
+/* O'quvchi kabineti: sahifaning eng tagidagi eslatma (tarjima qilinmaydi) */
+.student-quote {
+  margin: 22px 0 8px;
+  padding: 14px 16px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.55;
+  color: #1d4ed8;
+  background: rgba(37, 99, 235, 0.08);
+  border-radius: 14px;
+}
+.student-quote span { display: block; }
+.student-quote-line { font-weight: 600; margin-top: 4px; }
+html[data-theme="dark"] .student-quote {
+  color: #93c5fd;
+  background: rgba(96, 165, 250, 0.14);
+}
+
 /* Ichki oyna: orqaga qaytish qatori */
 .back-row {
   display: flex;
