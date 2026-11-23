@@ -928,8 +928,20 @@ body.auth-mode .toast { bottom: calc(26px + env(safe-area-inset-bottom)); }
   display: flex;
   align-items: center;
   gap: 4px;
-  flex: 1;
-  justify-content: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  justify-content: safe center;
+}
+.top-nav-tabs::-webkit-scrollbar { display: none; }
+.top-nav-tabs .top-nav-item { flex: none; }
+/* Brend siqilib, navigatsiya yorliqlari ("Bosh sahifa") ustiga chiqib qolmasin */
+.top-nav .header-inner > .brand {
+  flex: 0 0 auto;
+  min-width: max-content;
+  white-space: nowrap;
+  margin-right: 10px;
 }
 .top-nav-item {
   padding: 8px 14px;
@@ -947,6 +959,12 @@ body.auth-mode .toast { bottom: calc(26px + env(safe-area-inset-bottom)); }
   align-items: center;
   gap: 10px;
   flex: none;
+}
+/* Kompyuterda barcha yorliqlar sig'ishi uchun biroz zichroq */
+@media (min-width: 768px) {
+  .top-nav .brand { font-size: 18px; }
+  .top-nav-tabs { gap: 2px; }
+  .top-nav-item { padding: 8px 7px; font-size: 12.5px; }
 }
 .selector-label { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
 
@@ -3109,6 +3127,10 @@ html[data-theme="dark"] .mock-tab.is-active { color: #fff; }
 .mock-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; padding: 9px 11px; border-radius: 11px; background: rgba(225, 29, 72, 0.08); font-size: 12px; }
 .mock-empty { margin-top: 4px; }
 .mock-build { padding: 14px; margin-bottom: 10px; }
+/* Builder ichida karta bosilganda kichrayish effekti o'chirilgan: baland forma
+   0.97 ga kichrayib, tugmalar kursordan siljib ketardi va bosish "yo'qolardi"
+   (kompyuterda savol qo'shish / yozma javobga o'tish qiyin bo'lardi). */
+.mock-build:active { transform: none; }
 .mock-step-tabs { margin-top: 12px; }
 .mock-build-part { margin-top: 12px; padding: 11px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); }
 .mock-build-part:first-of-type { margin-top: 10px; }
