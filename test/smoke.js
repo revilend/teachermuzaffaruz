@@ -1208,7 +1208,8 @@ click('[data-act="mock-cat-back"]');
 win.__mock.saveDef({
   id: 'md_listen2', title: 'Listening Written 1', category: 'listening', groupIds: ['g2'],
   tasks: [{ id: 'tk2', title: 'Task 1', questions: [
-    { id: 'lw1', type: 'written', text: 'How many visitors came?', answer: '25 | twenty five' },
+    { id: 'lw1', type: 'written', text: 'How many visitors came?', answer: '25 (twenty five) | twenty-five' },
+    { id: 'lw3', type: 'written', text: 'What colour is the car?', answer: 'color (colour)' },
     { id: 'lw2', text: 'Which letter is correct?', opts: ['A opt', 'B opt', 'C opt', 'D opt', 'E opt'], ans: 4 }
   ] }]
 }, true);
@@ -1218,13 +1219,16 @@ check(qa('[data-mock-ans="lw1"]').length === 1, 'mock listening: yozma javob uch
 check(qa('[data-act="mock-pick"][data-mq="lw2"]').length === 5,
   'mock listening: 5 ta harf varianti (A–E) ko‘rsatiladi');
 setVal('[data-mock-ans="lw1"]', '  Twenty   Five ');
+setVal('[data-mock-ans="lw3"]', 'Color');
 click('[data-act="mock-pick"][data-mq="lw2"][data-mopt="4"]');
 check(q('[data-act="mock-submit"]').disabled === false,
   'mock listening: yozma javob va E varianti bilan “Yuborish” faol');
 clickAct('mock-submit');
-check(/2\/2/.test(text()), 'mock listening: yozma javob normalizatsiya qilinib avtomatik baholandi (2/2)');
+check(/3\/3/.test(text()), 'mock listening: yozma javob normalizatsiya qilinib avtomatik baholandi (3/3)');
 clickAct('mock-review');
 check(text().includes('twenty five') && text().includes('E opt'), 'mock listening: yozma va harfli javoblar tahlilda ko‘rsatiladi');
+check(qa('.mock-rev.is-ok').length === 3,
+  'mock listening: qavsdagi so‘z ham, qavsdan tashqaridagi so‘z ham alohida to‘g‘ri deb qabul qilindi');
 clickAct('mock-home');
 click('[data-act="mock-cat-back"]');
 closeStudentView();

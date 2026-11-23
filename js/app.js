@@ -4361,8 +4361,8 @@ Object.assign(I18N_EN, {
   'Yozma javob': 'Written answer',
   'To‘g‘ri javob (so‘z, son yoki gap)': 'Correct answer (word, number or sentence)',
   'Masalan: 25 | twenty five': 'e.g. 25 | twenty five',
-  'Bir nechta qabul qilinadigan variantni | yoki / bilan ajrating':
-    'Separate multiple accepted variants with | or /',
+  'Bir nechta qabul qilinadigan variantni | yoki / bilan ajrating; qavs ichidagi so‘z ham to‘g‘ri javob bo‘ladi':
+    'Separate multiple accepted variants with | or /; the word in parentheses is also accepted',
   'Harf / variant qo‘shish': 'Add option / letter',
   'Variantni o‘chirish': 'Delete option',
   'Javobingizni yozing': 'Type your answer',
@@ -11184,10 +11184,49 @@ function mockLetter(i) {
 function mockNormAnswer(v) {
   return String(v == null ? '' : v).trim().toLowerCase().replace(/\s+/g, ' ');
 }
-/* Ustoz bergan javob variantlari: "25 | twenty five" yoki "color / colour" */
+/* Bitta javob varianti va uning qavs ichidagi muqobili:
+   "color (colour)" → "color (colour)", "color", "colour" */
+function mockAnswerPartVariants(part) {
+  const base = mockNormAnswer(String(part == null ? '' : part).replace(/（/g, '(').replace(/）/g, ')'));
+  if (!base) return [];
+  const out = [base];
+  const stripped = mockNormAnswer(base.replace(/\([^)]*\)/g, ' '));
+  if (stripped) out.push(stripped);
+  const re = /\(([^)]*)\)/g;
+  let m;
+  while ((m = re.exec(base))) {
+    const inner = mockNormAnswer(m[1]);
+    if (inner) out.push(inner);
+  }
+  return out;
+}
+/* | va / faqat qavs tashqarisida variantlarni ajratadi:
+   "color (colour/gray) | hue" → ["color (colour/gray)", "hue"] */
+function mockSplitAnswerVariants(raw) {
+  const src = String(raw == null ? '' : raw);
+  const out = [];
+  let cur = '', depth = 0;
+  for (let i = 0; i < src.length; i++) {
+    const ch = src.charAt(i);
+    if (ch === '(') depth++;
+    else if (ch === ')' && depth > 0) depth--;
+    if ((ch === '|' || ch === '/') && depth === 0) { out.push(cur); cur = ''; continue; }
+    cur += ch;
+  }
+  out.push(cur);
+  return out;
+}
+/* Ustoz bergan javob variantlari: "25 | twenty five" yoki "color / colour".
+   Qavs ichidagi so'z ham alohida to'g'ri javob sifatida qabul qilinadi. */
 function mockAcceptedAnswers(q) {
   const raw = q && q.answer != null ? String(q.answer) : '';
-  return raw.split(/[|/]/).map(mockNormAnswer).filter(function (x) { return !!x; });
+  const out = [];
+  mockSplitAnswerVariants(raw).forEach(function (part) {
+    mockAnswerPartVariants(part).forEach(function (v) {
+      if (out.indexOf(v) < 0) out.push(v);
+    });
+  });
+  return out;
 }
 function mockIsWritten(q) { return !!q && q.type === 'written'; }
 function mockCheckAnswer(q, given) {
@@ -12627,7 +12666,7 @@ function mockBQFields(base, q, idx) {
     ${written
       ? `<label class="mock-field-label">${t('To‘g‘ri javob (so‘z, son yoki gap)')}</label>
         ${mockBInput(base + '.answer', t('Masalan: 25 | twenty five'))}
-        <div class="muted small mock-answer-hint">${t('Bir nechta qabul qilinadigan variantni | yoki / bilan ajrating')}</div>`
+        <div class="muted small mock-answer-hint">${t('Bir nechta qabul qilinadigan variantni | yoki / bilan ajrating; qavs ichidagi so‘z ham to‘g‘ri javob bo‘ladi')}</div>`
       : `<div class="mock-build-opts">${opts.map(function (_, oi) {
           return `<div class="mock-build-opt">
             ${mockBInput(base + '.opts.' + oi, mockLetter(oi) + ' ' + t('variant'))}
