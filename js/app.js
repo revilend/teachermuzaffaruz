@@ -4424,10 +4424,10 @@ const I18N_SKIP_SEL = '.s-name, .profile-name, .login-val, .brand, ' +
   '.mock-def-card-title, .mock-def-title, .mock-def-group, .mock-def-groups, .mock-stu-meta, ' +
   '.mock-passage, .mock-passage-title, .mock-hint, .mock-speak-q, .mock-ans-badge, ' +
   '.mock-q-head, .mock-opt, .mock-opt-key, .mock-ans-input, .mock-rev, .mock-written, ' +
-  '.mock-feedback, .mock-original, .mock-video-q, .mock-video-meta, .mock-file-link, ' +
+  '.mock-feedback, .mock-original, .mock-multiline, .mock-video-q, .mock-video-meta, .mock-file-link, ' +
   '.mock-history-row b, .mock-score-title, .mock-person-test, .mock-person-name, ' +
   '.mock-person-meta, .mock-build-part-head, .mock-build-answer-row, .mock-build-izoh, ' +
-  '.mock-build-opt';
+  '.mock-build-opt, .hw-desc-text, .hw-teacher-comment, .hw-sub-note';
 function i18nNorm(s) { return String(s == null ? '' : s).replace(/\s+/g, ' ').trim(); }
 /* Sonlar bilan keladigan dinamik matnlar */
 function i18nPattern(s, lang) {
@@ -4501,6 +4501,10 @@ function i18nApply(root, lang) {
     if (parent.closest && parent.closest(I18N_SKIP_SEL)) continue;
     const raw = node.nodeValue;
     if (!raw || !/\S/.test(raw)) continue;
+    /* Ustoz/o'quvchi yozgan ko'p qatorli matn (uyga vazifa, mock savoli, izoh)
+       hech qachon tarjima qilinmaydi: i18nNorm qatorlarni bitta qatorga
+       tekislab, matnni bir-biriga ulab qo'yardi. */
+    if (/[\r\n]/.test(raw.trim())) continue;
     const lead = raw.match(/^\s*/)[0];
     const trail = raw.match(/\s*$/)[0];
     const next = i18nText(raw, lang);
@@ -4517,6 +4521,18 @@ function i18nApply(root, lang) {
   }
 }
 function applyCurrentLang(root) { i18nApply(root || document.body, getLang()); }
+/* Ko'p qatorli matn maydonlari (mock savoli, izoh, uyga vazifa tavsifi)
+   yozilgan qatorlarning barchasini ko'rsatish uchun balandligi o'sadi. */
+function autoGrowTextarea(el) {
+  if (!el || !el.tagName || el.tagName.toLowerCase() !== 'textarea') return;
+  if (!el.scrollHeight) return;
+  el.style.height = 'auto';
+  const extra = Math.max(0, el.offsetHeight - el.clientHeight);
+  el.style.height = (el.scrollHeight + extra) + 'px';
+}
+function autoGrowTextareas() {
+  $$('textarea.mock-ta, #hw-desc').forEach(autoGrowTextarea);
+}
 /* Dinamik qo'shilgan matnlar (toast, xato, modal) ham darhol tarjima qilinadi */
 let i18nBusy = false;
 function startI18nObserver() {
@@ -5238,7 +5254,7 @@ function fmtSom(n) {
 function hwRowHTML(h) {
   const g = groupById(h.groupId);
   const chip = `<span class="chip-class">${g ? esc(g.name) : '—'}</span>`;
-  const meta = h.description ? `<div class="muted small" style="margin-top:3px">${esc(h.description)}</div>` : '';
+  const meta = h.description ? `<div class="muted small hw-desc-text">${esc(h.description)}</div>` : '';
   const due = h.dueDate
     ? `<div class="hw-due"><span class="hw-due-badge">${ico('calendar', 12)} ${t('Topshirish muddati')}: <b>${fmtDMY(h.dueDate)}</b></span></div>`
     : `<div class="muted small" style="margin-top:3px">${ico('calendar', 13)} ${t('Topshirish muddati')}: —</div>`;
@@ -5261,7 +5277,7 @@ function hwRowHTML(h) {
 
   /* --- O'quvchi: aylantirish checkbox (○ / ✓) + bajarildi nishoni --- */
   const done = isHwDone(h.id);
-  const metaStruck = meta ? (done ? meta.replace('class="muted small"', 'class="muted small hw-struck"') : meta) : '';
+  const metaStruck = meta ? (done ? meta.replace('class="muted small hw-desc-text"', 'class="muted small hw-desc-text hw-struck"') : meta) : '';
   return `<div class="hw-item hw-task${done ? ' is-done' : ''}" data-hid="${esc(String(h.id))}">
     <div class="hw-task-row">
       <button type="button" class="hw-check${done ? ' on' : ''}" data-act="toggle-hw"
@@ -5552,6 +5568,7 @@ function openHwModal(hid, preGroup) {
   `);
   const fi = $('#hw-media-input');
   if (fi) fi.addEventListener('change', function () { onHwFilePick(fi); });
+  autoGrowTextarea($('#hw-desc'));
 }
 
 const HW_MAX_BYTES = 100 * 1024 * 1024; /* 100MB — ustoz media biriktirmasi (R2 chegarasi) */
@@ -12606,7 +12623,7 @@ function mockBQFields(base, q, idx) {
       </div>
       <button type="button" class="btn btn-xs ghost mock-danger" data-act="mock-b-del-q" data-path="${esc(parent)}" data-idx="${idx}">${ico('trash', 12)}</button>
     </div>
-    ${mockBInput(base + '.text', t('Savol matni'))}
+    ${mockBTextarea(base + '.text', 3, t('Savol matni'))}
     ${written
       ? `<label class="mock-field-label">${t('To‘g‘ri javob (so‘z, son yoki gap)')}</label>
         ${mockBInput(base + '.answer', t('Masalan: 25 | twenty five'))}
@@ -12694,7 +12711,7 @@ function mockBuilderBodyHTML(def, c, step) {
           <div class="mock-build-part-head"><b>${esc(head)}</b></div>
           ${(p.questions || []).map(function (q, qi) {
             return `<div class="mock-build-answer-row">
-              <span>${qi + 1}. ${esc(q.text || '—')}</span>
+              <span class="mock-multiline">${qi + 1}. ${esc(q.text || '—')}</span>
               ${q.type === 'written'
                 ? `<b class="mock-ans-badge">${esc(q.answer || '—')}</b>`
                 : mockBAnswerSelect(base + '.questions.' + qi + '.ans', q.ans, (q.opts || []).length)}
@@ -12706,7 +12723,7 @@ function mockBuilderBodyHTML(def, c, step) {
         <div class="mock-build-part-head"><b>${esc(head)}</b></div>
         ${(p.questions || []).map(function (q, qi) {
           return `<div class="mock-build-izoh">
-            <div class="mock-build-sub">${qi + 1}. ${esc(q.text || '—')}</div>
+            <div class="mock-build-sub mock-multiline">${qi + 1}. ${esc(q.text || '—')}</div>
             ${mockBTextarea(base + '.questions.' + qi + '.izoh', 2, t('Izoh (javob izohi)'))}
           </div>`;
         }).join('')}
@@ -12755,7 +12772,7 @@ function mockBuilderBodyHTML(def, c, step) {
       const base = 'questions.' + i;
       return `<div class="mock-build-part">
         <div class="mock-build-part-head"><b>${t('Savol')} ${i + 1}</b>${mockBRemove('mock-b-del-speak', String(i))}</div>
-        ${mockBInput(base + '.text', t('Savol matni'))}
+        ${mockBTextarea(base + '.text', 3, t('Savol matni'))}
         <div class="mock-file-row">
           <input type="file" accept="image/*" data-mb-file="${esc(base + '.imageUrl')}" data-mb-name="${esc(base + '.imageName')}" data-mb-folder="mock/images" />
           ${mockBGet(base + '.imageUrl') ? `<img class="mock-q-img mock-builder-img" src="${esc(mockBGet(base + '.imageUrl'))}" alt="" />
@@ -13119,6 +13136,7 @@ function render() {
   if (scr === 'home' && !isTeacher()) refreshChat();
   syncLoginLock();
   applyCurrentLang();
+  autoGrowTextareas();
 }
 
 /* ==================== CHAT (Ustoz ↔ O'quvchi) ==================== */
@@ -13482,6 +13500,7 @@ document.addEventListener('input', function (e) {
   if (!ta) return;
   const mb = ta.getAttribute ? ta.getAttribute('data-mb') : '';
   if (mb === 'group' || (ta.type || '').toLowerCase() === 'checkbox') return;
+  if (ta.tagName && ta.tagName.toLowerCase() === 'textarea') autoGrowTextarea(ta);
   if (mb && state.mockBuilder) { mockBSet(mb, String(ta.value || '')); return; }
   if (ta.id !== 'mock-writing') return;
   if (state.mockRun) state.mockRun.text = String(ta.value || '');
