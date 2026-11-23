@@ -1371,6 +1371,462 @@ async def messages_watcher():
 
 
 # ============================================================
+# MOCK TESTLAR: guruhga yuborilganda o'quvchilarga, natija kelganda ustozga
+# ============================================================
+# Sayt ham telegram_outbox ga yozadi, lekin o'quvchi qurilmasida bu yozuv
+# ba'zan yetib bormaydi (mini-app yopilishi, eski kesh va h.k.). Shu sababli
+# bot jadvallarni o'zi ham kuzatadi: takroriy xabar ketmasligi uchun avval
+# outbox'da shu xabar bor-yo'qligi tekshiriladi (NOTIFY_GRACE_SECONDS kutish).
+MOCK_CATEGORY_LABELS = {
+    "reading": "Reading",
+    "listening": "Listening",
+    "writing": "Writing",
+    "speaking": "Speaking",
+    "grammar": "Grammar",
+    "vocabulary": "Vocabulary",
+}
+MOCK_NEW_TEXT = (
+    "📝 <b>YANGI MOCK TEST!</b>\n\n"
+    "<b>{title}</b> · {category}\n"
+    "Guruh: <b>{group}</b>\n"
+    "O'qituvchi: <b>Muzaffar Amirov</b>\n\n"
+    "Ilovadagi <b>Mock testlar</b> bo'limidan kirib ishlashingiz mumkin."
+)
+NOTIFY_GRACE_SECONDS = 20      # sayt outbox yozuviga ulgurishi uchun
+OUTBOX_DEDUPE_SECONDS = 1800   # shu vaqt ichida bir xil xabar bo'lsa — takrorlamaymiz
+
+
+def _setting_read(key):
+    """bot_settings dan bitta qiymat (yo'q bo'lsa None)."""
+    try:
+        rows = (supabase.table("bot_settings").select("value")
+                .eq("key", key).limit(1).execute().data or [])
+        return rows[0].get("value") if rows else None
+    except Exception as e:
+        logging.warning(f"settings read {key}: {e}")
+        return None
+
+
+def _setting_write(key, value) -> bool:
+    """bot_settings ga kalit/qiymat yozadi (bot qayta ishga tushsa holat saqlanadi)."""
+    try:
+        supabase.table("bot_settings").upsert(
+            {"key": key, "value": str(value)}, on_conflict="key"
+        ).execute()
+        return True
+    except Exception as e:
+        logging.warning(f"settings write {key}: {e}")
+        return False
+
+
+def _id_list(value) -> list:
+    """jsonb massiv / JSON matn / "g1,g2" — hammasini id ro'yxatiga aylantiradi."""
+    if isinstance(value, list):
+        raw = value
+    elif isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            raw = parsed if isinstance(parsed, list) else []
+        except Exception:
+            raw = [x for x in re.split(r"[,\s]+", value) if x]
+    else:
+        raw = []
+    out = []
+    for x in raw:
+        s = str(x).strip()
+        if s and s not in out:
+            out.append(s)
+    return out
+
+
+def _group_db_id(value):
+    """'g17' / 17 / '17' → 17 (groups.id)."""
+    s = str(value if value is not None else "").strip()
+    if re.fullmatch(r"g\d+", s):
+        return int(s[1:])
+    return int(s) if s.isdigit() else None
+
+
+def _iso_age_seconds(value):
+    """ISO vaqt → hozirgidan necha soniya o'tgan (aniqlab bo'lmasa None)."""
+    s = str(value or "").strip()
+    if not s:
+        return None
+    try:
+        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - dt).total_seconds()
+    except Exception:
+        return None
+
+
+def _outbox_has(chat_id, needles, max_age_seconds=OUTBOX_DEDUPE_SECONDS) -> bool:
+    """Shu chatga yaqin vaqt ichida aynan shu xabar navbatga qo'yilganmi?
+
+    Sayt allaqachon xabar yozgan bo'lsa, bot ikkinchi marta yubormaydi.
+    """
+    keys = [str(n) for n in (needles or []) if str(n or "").strip()]
+    if not keys:
+        return False
+    try:
+        rows = (supabase.table("telegram_outbox").select("text, created_at")
+                .eq("chat_id", str(chat_id)).order("id", desc=True).limit(30).execute().data or [])
+    except Exception as e:
+        logging.warning(f"outbox dedupe {chat_id}: {e}")
+        return False
+    for r in rows:
+        age = _iso_age_seconds(r.get("created_at"))
+        if age is not None and age > max_age_seconds:
+            continue
+        text = str(r.get("text") or "")
+        if all(k in text for k in keys):
+            return True
+    return False
+
+
+async def mock_students_broadcast(row: dict, group_ids) -> int:
+    """Mock test guruh o'quvchilariga (Telegram ulanganlariga) yuboriladi."""
+    ids = [g for g in (_group_db_id(x) for x in (group_ids or [])) if g is not None]
+    if not ids:
+        return 0
+    payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+    title = str(row.get("title") or payload.get("title") or "Mock test")
+    cat_key = str(row.get("category") or payload.get("category") or "")
+    category = MOCK_CATEGORY_LABELS.get(cat_key, cat_key.title() or "Mock")
+    try:
+        groups = supabase.table("groups").select("id, name").in_("id", ids).execute().data or []
+        studs = (supabase.table("students").select("id, name, telegram_chat_id")
+                 .in_("group_id", ids).execute().data or [])
+    except Exception as e:
+        logging.warning(f"mock broadcast lookup: {e}")
+        return 0
+    names = {g.get("id"): g.get("name") for g in groups}
+    group_name = ", ".join(str(names.get(i) or f"#{i}") for i in ids)
+    text = MOCK_NEW_TEXT.format(
+        title=html.escape(title),
+        category=html.escape(category),
+        group=html.escape(group_name),
+    )
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📱 Ilovani ochish", web_app=WebAppInfo(url=config.WEBAPP_URL))]
+    ])
+    sent = 0
+    for st in studs:
+        chat_id = st.get("telegram_chat_id")
+        if not chat_id:
+            continue
+        if _outbox_has(chat_id, ["YANGI MOCK TEST", title]):
+            continue  # sayt allaqachon yuborgan
+        try:
+            await bot.send_message(chat_id=int(chat_id), text=text, reply_markup=kb,
+                                   parse_mode="HTML", disable_notification=False)
+            sent += 1
+        except Exception as e:
+            logging.warning(f"mock notify {st.get('id')} -> {chat_id}: {e}")
+    return sent
+
+
+_MOCK_TESTS_STATE_KEY = "mock_tests_state"
+_mock_tests_state = None  # mock id -> biriktirilgan guruhlar (oxirgi holat)
+
+
+async def mock_tests_tick() -> int:
+    """Yangi mock yoki guruhga yangi biriktirilgan mock → o'quvchilarga xabar."""
+    global _mock_tests_state
+    try:
+        rows = (supabase.table("mock_tests")
+                .select("id, title, category, group_ids, payload, updated_at")
+                .execute().data or [])
+    except Exception as e:
+        msg = str(e)
+        if "PGRST205" in msg or "mock_tests" in msg:
+            return 0
+        logging.warning(f"mock tests watcher: {e}")
+        return 0
+
+    if _mock_tests_state is None:
+        stored = _setting_read(_MOCK_TESTS_STATE_KEY)
+        if stored is None:
+            # Birinchi ishga tushish: mavjud mocklarni SPAM qilmaymiz
+            _mock_tests_state = {str(r.get("id")): _id_list(r.get("group_ids")) for r in rows}
+            _setting_write(_MOCK_TESTS_STATE_KEY, json.dumps(_mock_tests_state))
+            logging.info(f"mock tests watcher: {len(rows)} ta mavjud mock ko'rib chiqildi")
+            return 0
+        try:
+            parsed = json.loads(stored)
+            _mock_tests_state = parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            _mock_tests_state = {}
+
+    current_ids = set()
+    changed = False
+    sent = 0
+    for r in rows:
+        mid = str(r.get("id"))
+        current_ids.add(mid)
+        groups = _id_list(r.get("group_ids"))
+        prev = _mock_tests_state.get(mid)
+        if prev is None:
+            new_groups = groups
+        else:
+            have = {str(x) for x in _id_list(prev)}
+            new_groups = [g for g in groups if str(g) not in have]
+        if not new_groups:
+            if prev is None:
+                _mock_tests_state[mid] = groups
+                changed = True
+            continue
+        age = _iso_age_seconds(r.get("updated_at"))
+        if age is not None and age < NOTIFY_GRACE_SECONDS:
+            continue  # keyingi qadamda qayta tekshiriladi (sayt outbox yozishga ulgursin)
+        sent += await mock_students_broadcast(r, new_groups)
+        _mock_tests_state[mid] = groups
+        changed = True
+
+    for mid in list(_mock_tests_state.keys()):
+        if mid not in current_ids:
+            _mock_tests_state.pop(mid, None)
+            changed = True
+    if changed:
+        _setting_write(_MOCK_TESTS_STATE_KEY, json.dumps(_mock_tests_state))
+    return sent
+
+
+async def mock_tests_watcher():
+    await asyncio.sleep(5)
+    while True:
+        try:
+            await mock_tests_tick()
+        except Exception as e:
+            logging.warning(f"mock tests watcher loop: {e}")
+        await asyncio.sleep(10)
+
+
+_MOCK_ATTEMPTS_SEEN_KEY = "mock_attempts_seen"
+_mock_attempts_seen = None  # oxirgi yuborilgan natijalar id'lari (takror yubormaslik)
+
+
+def _mock_attempt_notice(row: dict) -> tuple:
+    """Yangi mock natijasi uchun matn: (text, name, title — dedupe uchun)."""
+    payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+    name = str(payload.get("studentName") or "—")
+    cls = str(payload.get("gradeClass") or "—")
+    group = str(payload.get("groupName") or "—")
+    cat_key = str(payload.get("category") or row.get("category") or "")
+    category = MOCK_CATEGORY_LABELS.get(cat_key, cat_key.title())
+    title = str(payload.get("mockTitle") or category or "Mock")
+    score = payload.get("score")
+    total = payload.get("total")
+    percent = payload.get("percent")
+    if score is None or str(payload.get("status") or "") in ("pending", ""):
+        result = "Baholanmoqda"
+    else:
+        result = f"{int(score)}/{int(total or 0)} · {int(percent or 0)}%"
+    mock_line = title + (f" · {category}" if category else "")
+    text = (
+        "📝 <b>YANGI MOCK NATIJASI!</b>\n\n"
+        f"👤 <b>O'quvchi:</b> {html.escape(name)}\n"
+        f"🏫 <b>Sinf:</b> {html.escape(cls)}\n"
+        f"👥 <b>Guruh:</b> {html.escape(group)}\n"
+        f"📘 <b>Mock:</b> {html.escape(mock_line)}\n"
+        f"📊 <b>Natija:</b> {html.escape(result)}\n\n"
+        "Javoblar tahlilini ilovadagi <b>Mock testlar</b> bo'limida ko'ring."
+    )
+    return text, name, title
+
+
+async def mock_attempts_tick() -> int:
+    """Yangi mock urinishi → ustoz (admin) Telegramiga bildirishnoma."""
+    global _mock_attempts_seen
+    try:
+        rows = (supabase.table("mock_attempts")
+                .select("id, student_id, sid, category, payload, created_at, updated_at")
+                .order("updated_at", desc=True).limit(50).execute().data or [])
+    except Exception as e:
+        msg = str(e)
+        if "PGRST205" in msg or "mock_attempts" in msg:
+            return 0
+        logging.warning(f"mock attempts watcher: {e}")
+        return 0
+
+    if _mock_attempts_seen is None:
+        stored = _setting_read(_MOCK_ATTEMPTS_SEEN_KEY)
+        if stored is None:
+            # Birinchi start: eski urinishlarni SPAM qilmaymiz, lekin hozir
+            # tugagan (grace ichida) urinishlar baribir yuboriladi.
+            seed = [str(r.get("id")) for r in rows
+                    if (_iso_age_seconds(r.get("updated_at")) or 0) > NOTIFY_GRACE_SECONDS]
+            _mock_attempts_seen = seed
+            _setting_write(_MOCK_ATTEMPTS_SEEN_KEY, json.dumps(seed[-500:]))
+            logging.info(f"mock attempts watcher: {len(seed)} ta eski natija ko'rib chiqildi")
+        else:
+            try:
+                parsed = json.loads(stored)
+                _mock_attempts_seen = [str(x) for x in parsed] if isinstance(parsed, list) else []
+            except Exception:
+                _mock_attempts_seen = []
+
+    # Eng eskisidan boshlab yuriladi — ro'yxat oxirida eng yangilari qoladi
+    rows = list(reversed(rows))
+    seen_list = [str(x) for x in (_mock_attempts_seen or [])]
+    seen = set(seen_list)
+    sent = 0
+    changed = False
+    for r in rows:
+        rid = str(r.get("id"))
+        if rid in seen:
+            continue
+        age = _iso_age_seconds(r.get("updated_at"))
+        if age is not None and age < NOTIFY_GRACE_SECONDS:
+            continue  # keyingi qadamda
+        text, name, title = _mock_attempt_notice(r)
+        if not _outbox_has("ADMIN", ["YANGI MOCK NATIJASI", name, title]):
+            for aid in config.ADMIN_IDS:
+                try:
+                    await bot.send_message(chat_id=aid, text=text, parse_mode="HTML",
+                                           disable_notification=False)
+                    sent += 1
+                except Exception as e:
+                    logging.warning(f"mock result notify {aid}: {e}")
+        seen_list.append(rid)
+        seen.add(rid)
+        changed = True
+    if changed:
+        _mock_attempts_seen = seen_list[-500:]
+        _setting_write(_MOCK_ATTEMPTS_SEEN_KEY, json.dumps(_mock_attempts_seen))
+    return sent
+
+
+async def mock_attempts_watcher():
+    await asyncio.sleep(6)
+    while True:
+        try:
+            await mock_attempts_tick()
+        except Exception as e:
+            logging.warning(f"mock attempts watcher loop: {e}")
+        await asyncio.sleep(10)
+
+
+# ============================================================
+# Saytda yozilgan speaking videosi → ustozga bildirishnoma
+# ============================================================
+_SPEAKING_SEEN_KEY = "speaking_web_seen"
+_speaking_seen = None
+
+
+def _is_web_speaking(row: dict) -> bool:
+    """Saytdan yuborilgan speaking (R2 havolasi yoki media_url ustuni)."""
+    if row.get("media_url"):
+        return True
+    fid = str(row.get("telegram_file_id") or "").strip().lower()
+    return fid == "web" or fid.startswith("http://") or fid.startswith("https://")
+
+
+async def _web_speaking_notice(row: dict) -> int:
+    student = {"id": row.get("student_id"), "name": "O'quvchi", "school_class": "—"}
+    group_name = "—"
+    try:
+        studs = (supabase.table("students")
+                 .select("id, name, school_class, group_id")
+                 .eq("id", row.get("student_id")).limit(1).execute().data or [])
+        if studs:
+            student = studs[0]
+            if student.get("group_id") is not None:
+                g = (supabase.table("groups").select("name")
+                     .eq("id", student["group_id"]).limit(1).execute().data or [])
+                if g:
+                    group_name = str(g[0].get("name") or "—")
+    except Exception as e:
+        logging.warning(f"web speaking lookup: {e}")
+    name = str(student.get("name") or "O'quvchi")
+    text = (
+        "<b>Yangi sayt speaking videosi</b>\n\n"
+        f"O'quvchi: <b>{html.escape(name)}</b>\n"
+        f"Guruh: <b>{html.escape(group_name)}</b>\n\n"
+        "Video saytda saqlandi. Uni faqat <b>Speaking slotlari</b> bo'limida "
+        "ko'ring va baholang."
+    )
+    if _outbox_has("ADMIN", ["Yangi sayt speaking videosi", name]):
+        return 0  # sayt allaqachon yozgan
+    sent = 0
+    for aid in config.ADMIN_IDS:
+        try:
+            await bot.send_message(chat_id=aid, text=text, parse_mode="HTML",
+                                   disable_notification=False)
+            sent += 1
+        except Exception as e:
+            logging.warning(f"web speaking notify {aid}: {e}")
+    return sent
+
+
+async def speaking_web_tick() -> int:
+    global _speaking_seen
+    cols = "id, student_id, media_type, telegram_file_id, status, created_at"
+    try:
+        try:
+            rows = (supabase.table("speaking_submissions")
+                    .select(cols + ", media_url")
+                    .order("id", desc=True).limit(50).execute().data or [])
+        except Exception:
+            rows = (supabase.table("speaking_submissions")
+                    .select(cols).order("id", desc=True).limit(50).execute().data or [])
+    except Exception as e:
+        msg = str(e)
+        if "PGRST205" in msg or "speaking_submissions" in msg:
+            return 0
+        logging.warning(f"speaking web watcher: {e}")
+        return 0
+
+    rows = [r for r in rows if _is_web_speaking(r)]
+    if _speaking_seen is None:
+        stored = _setting_read(_SPEAKING_SEEN_KEY)
+        if stored is None:
+            seed = [int(r["id"]) for r in rows
+                    if (_iso_age_seconds(r.get("created_at")) or 0) > NOTIFY_GRACE_SECONDS]
+            _speaking_seen = seed
+            _setting_write(_SPEAKING_SEEN_KEY, json.dumps(seed[-500:]))
+            logging.info(f"speaking web watcher: {len(seed)} ta eski video ko'rib chiqildi")
+        else:
+            try:
+                parsed = json.loads(stored)
+                _speaking_seen = [int(x) for x in parsed] if isinstance(parsed, list) else []
+            except Exception:
+                _speaking_seen = []
+
+    seen = {int(x) for x in _speaking_seen}
+    sent = 0
+    changed = False
+    for r in rows:
+        try:
+            rid = int(r["id"])
+        except (TypeError, ValueError):
+            continue
+        if rid in seen:
+            continue
+        age = _iso_age_seconds(r.get("created_at"))
+        if age is not None and age < NOTIFY_GRACE_SECONDS:
+            continue
+        sent += await _web_speaking_notice(r)
+        seen.add(rid)
+        changed = True
+    if changed:
+        _speaking_seen = sorted(seen)[-500:]
+        _setting_write(_SPEAKING_SEEN_KEY, json.dumps(_speaking_seen))
+    return sent
+
+
+async def speaking_web_watcher():
+    await asyncio.sleep(7)
+    while True:
+        try:
+            await speaking_web_tick()
+        except Exception as e:
+            logging.warning(f"speaking web watcher loop: {e}")
+        await asyncio.sleep(12)
+
+
+# ============================================================
 # Zaxira (backup / restore) — Supabase
 # ============================================================
 BACKUP_TABLES = ["groups", "students", "attendance", "grades", "messages", "speaking_submissions", "audio_submissions", "homework"]
@@ -2525,6 +2981,9 @@ async def main():
     _bg_tasks.add(asyncio.create_task(grades_watcher()))     # yangi baho
     _bg_tasks.add(asyncio.create_task(messages_watcher()))   # yangi chat xabari
     _bg_tasks.add(asyncio.create_task(receipt_watcher()))    # to'lov cheklari
+    _bg_tasks.add(asyncio.create_task(mock_tests_watcher()))       # yangi mock → guruhga
+    _bg_tasks.add(asyncio.create_task(mock_attempts_watcher()))    # mock natijasi → ustozga
+    _bg_tasks.add(asyncio.create_task(speaking_web_watcher()))     # sayt speaking → ustozga
     _bg_tasks.add(asyncio.create_task(outbox_watcher()))     # telegram_outbox eslatmalari
     _bg_tasks.add(asyncio.create_task(email_outbox_watcher()))  # Gmail xatlari
 
