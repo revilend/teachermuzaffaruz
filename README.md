@@ -98,6 +98,9 @@ Ilova **haqiqiy Supabase jadvallariga to'g'ridan-to'g'ri** o'qiydi va yozadi:
 | `speaking_submissions` | Telegram voice/video topshiriklar (holat, ball) |
 | `speaking_slots` | 1-on-1 speaking slotlari (sana, vaqt, o'quvchi, ball) |
 | `audio_submissions` | eski brauzer topshiriklari (zaxira uchun) |
+| `mock_tests` | ustoz yaratgan Mock testlar (ta'rif + biriktirilgan guruhlar) |
+| `mock_attempts` | o'quvchilar Mock natijalari (javoblar, ball, CEFR, videolar) |
+| `telegram_outbox` | saytdan botga yuboriladigan xabarnomalar navbati |
 | `bot_settings` | tizim sozlamalari — ustoz paroli (`teacher_password`) |
 
 - **Loyiha ulanishi** `index.html` ichida: `window.SUPABASE_URL` +
@@ -230,6 +233,22 @@ ustunlari hamda `students.login` uchun **unique indeks** (bir xil login ikki o'q
   (GitHub Pages) arxitektura ichida brauzer tomonidan yopib bo'lmaydi: to'liq yechim —
   Supabase Auth + qat'iy RLS yoki kichik server API, hamda parollarni hash qilish.
   Bu ish alohida bosqich sifatida rejalashtirilgan.
+
+### 19. Mock testlar va natijalar
+- **Ustoz:** Mock testlar → bo'lim (Reading / Listening / Writing / Speaking / Grammar / Vocabulary) → test yaratish, tahrirlash va **guruhlarga biriktirish**.
+- **Biriktirilganda** o'sha guruhdagi Telegram'ga ulangan barcha o'quvchilarga bot orqali
+  **"📝 YANGI MOCK TEST!"** xabarnomasi boradi (test nomi, kategoriya, guruh + ilova havolasi).
+- **O'quvchi natijalari** — ustoz panelida **bitta vertikal karta ro'yxati** (jadval/ustun emas).
+  Har kartada: o'quvchining **ism-familiyasi**, **sinfi**, **guruhi**, **qaysi Mock** va **natija bali** (ball/foiz + CEFR yoki qo'yilgan baho).
+- **O'quvchi ismiga bosilsa** — tafsilot ekrani: har bir savol, o'quvchining javobi (✓ to'g'ri / ✕ xato),
+  to'g'ri javob, izoh, **To'g'ri/Xato soni**; Writing matni va Speaking videolari shu yerda baholanadi.
+- **Natija kelishi:** o'quvchi testni yakunlashi bilan `mock_attempts`ga yoziladi va ustoz paneliga
+  **realtime + 15 soniyalik zaxira poll** bilan keladi (sahifani yangilash shart emas).
+  Asosiy ustoz **support teacher guruhlaridagi o'quvchilar natijasini ham ko'radi**.
+- **Telegram xabarnoma:** har bir yakunlangan Mock natijasi (yozma, variantli yoki speaking) uchun
+  ustoz botiga **"📝 YANGI MOCK NATIJASI!"** xabari boradi — ism, sinf, guruh, test nomi va ball bilan.
+- **Saytda yozilgan Speaking** ham `speaking_submissions`ga saqlanadi va ustoz botiga matnli xabarnoma
+  yuboradi; **baholash saytda** amalga oshiriladi (video botga yuborilmaydi).
 
 ## Telegram bot (aiogram 3.x)
 

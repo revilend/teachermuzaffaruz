@@ -1268,13 +1268,12 @@ check(!!q('.quick-grid [data-act="nav"][data-screen="mock"]'),
   'mock ustoz: TEZ AMALLAR ichida “Mock testlar” tezkor kartasi');
 forceNav('mock');
 check(qa('[data-act="mock-cat-open"]').length === 6, 'mock ustoz: 6 ta kategoriya kartasi');
-check(!!q('#mock-sec-rl') && !q('#mock-sec-rl').hidden &&
-      text().includes('Reading va Listening javoblari'),
-  'mock ustoz: grid ostida Reading/Listening natija bo‘limi');
-check(!!q('#mock-sec-writing') && !!q('#mock-sec-speaking') && !!q('#mock-sec-vg'),
-  'mock ustoz: Writing, Speaking, Vocabulary+Grammar natija bo‘limlari');
-check(text().includes('Jasur Karimov') && /4\/4/.test(text()) && !!q('#mock-sec-rl .mock-cefr'),
+check(!!q('.mock-results') && qa('.mock-results .mock-person').length >= 3,
+  'mock ustoz: natijalar bitta karta ro‘yxatida (jadval/ustun emas)');
+check(text().includes('Jasur Karimov') && /4\/4/.test(text()) && !!q('.mock-results .mock-cefr'),
   'mock ustoz: o‘quvchi natijasi, ball va CEFR');
+check(!!q('.mock-results [data-act="mock-student-open"]'),
+  'mock ustoz: o‘quvchi ismi bosiladigan tugma');
 click('[data-act="mock-cat-open"][data-cat="reading"]');
 check(!!q('[data-act="mock-add"]') && text().includes("Yangi Mock qo'shish"),
   'mock ustoz: “+ Yangi Mock qo‘shish” tugmasi');
@@ -1370,34 +1369,42 @@ const regroupedDef = (JSON.parse(win.localStorage.getItem('et_mock_defs')) || []
 check(regroupedDef.groupIds.indexOf('g1') >= 0 && regroupedDef.groupIds.indexOf('g2') >= 0,
   'mock ustoz: tahrirlashda qo‘shimcha guruh biriktirildi (g1 + g2)');
 
-/* Natijani o‘chirish (barcha bo‘limlardagi kartalarda) */
+/* Natijani o‘chirish (ro‘yxatdagi kartalarda) */
 click('[data-act="mock-cat-back"]');
-const delRow = q('#mock-sec-vg .mock-person');
+const delRow = q('.mock-results .mock-person');
 check(!!delRow && !!delRow.querySelector('[data-act="mock-result-del"]'),
   'mock ustoz: natija kartasida “O‘chirish” tugmasi bor');
 const delId = delRow.getAttribute('data-mockrow');
 click('[data-act="mock-result-del"][data-id="' + delId + '"]');
-check(!!q('#mock-sec-vg .mock-confirm'), 'mock ustoz: natija o‘chirish tasdiqlashi ko‘rinadi');
+check(!!q('.mock-confirm'), 'mock ustoz: natija o‘chirish tasdiqlashi ko‘rinadi');
 click('[data-act="mock-result-del-yes"][data-id="' + delId + '"]');
 check(!(JSON.parse(win.localStorage.getItem('et_mock_results')) || []).some(a => a.id === delId),
   'mock ustoz: natija lokal holatdan o‘chirildi');
 
-check(!!q('#mock-sec-rl') && !q('#mock-sec-rl').hidden, 'mock ustoz: Reading/Listening natija bo‘limi');
-check(text().includes('Reading va Listening javoblari'), 'mock ustoz: bo‘lim sarlavhasi ko‘rinadi');
-check(text().includes('Jasur Karimov'), 'mock ustoz: o‘quvchi to‘liq ismi');
-check(qa('#mock-sec-rl .chip-class').length >= 1 && qa('#mock-sec-rl .pill').length >= 1 &&
-      qa('#mock-sec-rl .mock-person-when').length >= 1,
-  'mock ustoz: sinf, guruh va sana/vaqt ko‘rsatiladi');
-check(/4\/4/.test(text()) && !!q('#mock-sec-rl .mock-cefr'), 'mock ustoz: ball va CEFR badge');
-clickAct('mock-review');
-check(text().includes('Izoh') && text().includes('To‘g‘ri javob'), 'mock ustoz: to‘liq javoblar tahlili');
-
-/* Natija o‘chirilgach asosiy mock ekranidamiz — “Orqaga” faqat kerak bo‘lsa bosiladi */
+/* O‘quvchi ismiga bosish → to‘g‘ri/xato javoblar tafsiloti */
 if (q('[data-act="mock-cat-back"]')) click('[data-act="mock-cat-back"]');
-check(!!q('#mock-sec-writing') && !q('#mock-sec-writing').hidden && !!q('#mock-sec-writing .mock-ta'),
-  'mock ustoz: Writing bo‘limi va tahrirlanadigan matn');
-const mwRow = q('#mock-sec-writing .mock-person');
-const mwId = mwRow.getAttribute('data-mockrow');
+check(!!q('.mock-results') && text().includes('Jasur Karimov'), 'mock ustoz: natijalar ro‘yxati ko‘rinadi');
+const readAttempt = (JSON.parse(win.localStorage.getItem('et_mock_results')) || [])
+  .filter(a => a.category === 'reading')[0];
+click('[data-act="mock-student-open"][data-id="' + readAttempt.id + '"]');
+check(!!q('.mock-detail') && text().includes('Jasur Karimov') && /4\/4/.test(text()),
+  'mock ustoz: ismga bosilganda o‘quvchi natijasi ochiladi (ism, sinf, guruh, mock, ball)');
+check(text().includes('To‘g‘ri:') && text().includes('Xato:'),
+  'mock ustoz: to‘g‘ri va xato javoblar soni ko‘rsatiladi');
+check(qa('.mock-detail .mock-rev').length >= 1 &&
+      qa('.mock-detail .mock-rev.is-ok, .mock-detail .mock-rev.is-bad').length >= 1 &&
+      text().includes('To‘g‘ri javob') && text().includes('O‘quvchi javobi'),
+  'mock ustoz: har bir savolda o‘quvchi javobi va to‘g‘ri javob ko‘rinadi');
+clickAct('mock-student-back');
+check(!!q('.mock-results') && !q('.mock-detail'), 'mock ustoz: “Orqaga” ro‘yxatga qaytaradi');
+
+/* Writing: matn/izoh/baho tafsilot oynasida */
+const writingAttempt = (JSON.parse(win.localStorage.getItem('et_mock_results')) || [])
+  .filter(a => a.category === 'writing')[0];
+click('[data-act="mock-student-open"][data-id="' + writingAttempt.id + '"]');
+check(!!q('.mock-detail') && !!q('.mock-detail .mock-ta'),
+  'mock ustoz: Writing tafsilotida tahrirlanadigan matn bor');
+const mwId = writingAttempt.id;
 setVal('#mock-t-text-' + mwId, 'Teacher edited version of the essay.');
 setVal('#mock-t-feedback-' + mwId, 'Good ideas — add one more example.');
 setVal('#mock-t-grade-' + mwId, '8');
@@ -1406,16 +1413,20 @@ const mwSaved = JSON.parse(win.localStorage.getItem('et_mock_results')).filter(a
 check(mwSaved.teacherText === 'Teacher edited version of the essay.' &&
       mwSaved.feedback === 'Good ideas — add one more example.' && mwSaved.teacherGrade === '8',
   'mock ustoz: tahrir + izoh + erkin baho (teacher_grade) saqlandi');
+clickAct('mock-student-back');
 
-check(!!q('#mock-sec-speaking') && qa('#mock-sec-speaking video').length >= 1,
+/* Speaking: videolar va baho tafsilot oynasida */
+click('[data-act="mock-student-open"][data-id="' + spAttemptId + '"]');
+check(!!q('.mock-detail') && qa('.mock-detail video').length >= 1,
   'mock ustoz: speaking videolari ijro uchun ko‘rinadi');
 setVal('#mock-t-grade-' + spAttemptId, '7');
 click('[data-act="mock-save-grade"][data-id="' + spAttemptId + '"]');
 check(JSON.parse(win.localStorage.getItem('et_mock_results')).filter(a => a.id === spAttemptId)[0].teacherGrade === '7',
   'mock ustoz: speaking video bahosi saqlandi');
+clickAct('mock-student-back');
 
-check(!!q('#mock-sec-vg') && text().includes('Vocabulary va Grammar'),
-  'mock ustoz: Vocabulary va Grammar birlashgan bo‘limi');
+check(!!q('.mock-results') && text().includes('O‘quvchilar natijalari'),
+  'mock ustoz: barcha natijalar bitta ro‘yxatda');
 logout();
 
 await loginAs('nilufar', '7777');
