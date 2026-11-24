@@ -216,6 +216,8 @@ const state = {
   mockDelId: '',
   mockDelResultId: '',
   mockCatView: '',
+  mockResHome: false,
+  mockResView: '',
   mockRole: '',
   supervise: false,
   supportEditId: '',
@@ -3178,7 +3180,7 @@ function go(screen) {
   state.screen = screen;
   state.profileSection = '';
   if (screen === 'mock') mockLiveStart();
-  else { mockLiveStop(); state.mockTView = ''; }
+  else { mockLiveStop(); state.mockTView = ''; state.mockResHome = false; state.mockResView = ''; }
   render();
   /* Faol qurilmalar ro'yxatini yangilash (Profil ekrani) */
   if (screen === 'profile') Sessions.refresh();
@@ -4405,7 +4407,26 @@ Object.assign(I18N_EN, {
   'Matn kiritilmagan': 'No text entered',
   'Tezlik': 'Speed',
   'Bu bo‘limda sizga hali podcast biriktirilmagan. Ustoz podcast bergach shu yerda ko‘rinadi.':
-    'No podcast has been assigned to you in this section yet. It will appear here once your teacher assigns one.'
+    'No podcast has been assigned to you in this section yet. It will appear here once your teacher assigns one.',
+  'Natijalar': 'Results',
+  'ta natija': 'results',
+  'Bu bo‘limda hali natija yo‘q': 'No results in this section yet',
+  'O‘quvchilar natijalari bo‘limlar bo‘yicha': 'Student results by section',
+  'Sizning mock natijalaringiz bo‘limlar bo‘yicha': 'Your mock results by section',
+  'Reading natijalari': 'Reading results',
+  'Listening natijalari': 'Listening results',
+  'Writing natijalari': 'Writing results',
+  'Speaking natijalari': 'Speaking results',
+  'Grammar natijalari': 'Grammar results',
+  'Vocabulary natijalari': 'Vocabulary results',
+  'Podcasts natijalari': 'Podcasts results',
+  'Reading natijalarim': 'My reading results',
+  'Listening natijalarim': 'My listening results',
+  'Writing natijalarim': 'My writing results',
+  'Speaking natijalarim': 'My speaking results',
+  'Grammar natijalarim': 'My grammar results',
+  'Vocabulary natijalarim': 'My vocabulary results',
+  'Podcasts natijalarim': 'My podcasts results'
 });
 
 function t(s) {
@@ -11808,8 +11829,13 @@ function mockLastForDef(def, mine) {
     return String(a.mockId) === String(def.id);
   }))[0] || null;
 }
-/* Ikkala panelda bir xil 6 kartali grid */
-function mockCatGridHTML() {
+/* Ikkala panelda bir xil 6 kartali grid + oxirida natijalar bo'limi */
+function mockCatGridHTML(who) {
+  const teacher = who === 'teacher';
+  const resLabel = teacher ? t('Natijalar') : t('Mening natijalarim');
+  const resDesc = teacher
+    ? t('O‘quvchilar natijalari bo‘limlar bo‘yicha')
+    : t('Sizning mock natijalaringiz bo‘limlar bo‘yicha');
   return `<div class="mock-cats mock-cats-6">${MOCK_CATS.map(function (c) {
     return `<button type="button" class="card mock-cat" data-act="mock-cat-open" data-cat="${c.key}">
       <span class="mock-cat-ico">${ico(c.icon, 20)}</span>
@@ -11819,7 +11845,66 @@ function mockCatGridHTML() {
       </span>
       <span class="mock-cat-go">${ico('arrowRight', 14)}</span>
     </button>`;
+  }).join('')}</div>
+  <button type="button" class="card mock-cat mock-results-entry" data-act="mock-results-open">
+    <span class="mock-cat-ico">${ico('checkCircle', 20)}</span>
+    <span class="mock-cat-body">
+      <span class="mock-cat-name">${esc(resLabel)}</span>
+      <span class="mock-cat-desc">${esc(resDesc)}</span>
+    </span>
+    <span class="mock-cat-go">${ico('arrowRight', 14)}</span>
+  </button>`;
+}
+/* Natijalar bo'limi: har bir mock bo'limi uchun alohida kartalar */
+function mockResCatLabel(key, who) {
+  const c = mockCat(key);
+  return t(c.label + (who === 'teacher' ? ' natijalari' : ' natijalarim'));
+}
+function mockResCounts(list) {
+  const map = {};
+  MOCK_CATS.forEach(function (c) { map[c.key] = 0; });
+  (list || []).forEach(function (a) {
+    if (a && map[a.category] != null) map[a.category]++;
+  });
+  return map;
+}
+function mockResultsHomeHTML(who) {
+  const teacher = who === 'teacher';
+  const rows = teacher ? scopedMockResults() : mockMyResults();
+  const counts = mockResCounts(rows);
+  return `<div class="mock-run-head">
+    <button type="button" class="btn btn-xs ghost" data-act="mock-res-back">${ico('arrowLeft', 14)} ${t('Orqaga')}</button>
+    <span class="mock-run-title">${esc(teacher ? t('Natijalar') : t('Mening natijalarim'))}</span>
+  </div>
+  <div class="mock-cats">${MOCK_CATS.map(function (c) {
+    return `<button type="button" class="card mock-cat" data-act="mock-res-open" data-cat="${c.key}">
+      <span class="mock-cat-ico">${ico(c.icon, 20)}</span>
+      <span class="mock-cat-body">
+        <span class="mock-cat-name">${esc(mockResCatLabel(c.key, who))}</span>
+        <span class="mock-cat-desc">${esc(counts[c.key] + ' ' + t('ta natija'))}</span>
+      </span>
+      <span class="mock-cat-go">${ico('arrowRight', 14)}</span>
+    </button>`;
   }).join('')}</div>`;
+}
+function mockStudentResultsCatHTML(key) {
+  const c = mockCat(key);
+  const rows = mockSortResults(mockMyResults().filter(function (a) { return a.category === c.key; }));
+  return `<div class="mock-run-head">
+    <button type="button" class="btn btn-xs ghost" data-act="mock-res-back">${ico('arrowLeft', 14)} ${t('Orqaga')}</button>
+    <span class="mock-run-title">${esc(mockResCatLabel(c.key, 'student'))}</span>
+  </div>
+  ${rows.length ? `<div class="card mock-history">${rows.map(function (a) {
+    return `<button type="button" class="mock-history-row" data-act="mock-open-result" data-id="${esc(a.id)}">
+      <span class="mock-history-ico">${ico(c.icon, 16)}</span>
+      <span class="col">
+        <b>${esc(a.mockTitle || t(c.label))}</b>
+        <span class="muted small">${esc(mockWhen(a.createdAt))}</span>
+      </span>
+      <span class="mock-history-val">${esc(mockAttemptSummary(a))}</span>
+    </button>`;
+  }).join('')}</div>`
+    : `<div class="empty mock-empty"><span class="empty-ico">${ico(c.icon, 22)}</span>${t('Bu bo‘limda hali natija yo‘q')}</div>`}`;
 }
 function mockStudentDefHTML(def) {
   const c = mockCat(def.category);
@@ -11879,6 +11964,9 @@ function mockStudentHTML() {
     if (a) return mockResultHTML(a, 'student');
     state.mockResultId = '';
   }
+  if (state.mockResHome) {
+    return state.mockResView ? mockStudentResultsCatHTML(state.mockResView) : mockResultsHomeHTML('student');
+  }
   if (state.mockCatView) return mockStudentCatHTML(state.mockCatView);
   const st = linkedStudent();
   const defs = mockAssignedDefs(st);
@@ -11891,25 +11979,8 @@ function mockStudentHTML() {
     </div>
   </section>
   <div class="section-title">${t('Bo‘limni tanlang')}</div>
-  ${mockCatGridHTML()}
-  ${defs.length ? '' : `<div class="empty mock-empty"><span class="empty-ico">${ico('clipboardCheck', 22)}</span>${t('Sizga hali mock test biriktirilmagan. Ustoz test biriktirgach shu yerda ko‘rinadi.')}</div>`}
-  ${mockMyHistoryHTML()}`;
-}
-function mockMyHistoryHTML() {
-  const mine = mockSortResults(mockMyResults());
-  if (!mine.length) return '';
-  return `<div class="section-title">${t('Mening natijalarim')}</div>
-  <div class="card mock-history">${mine.slice(0, 8).map(function (a) {
-    const c = mockCat(a.category);
-    return `<button type="button" class="mock-history-row" data-act="mock-open-result" data-id="${esc(a.id)}">
-      <span class="mock-history-ico">${ico(c.icon, 16)}</span>
-      <span class="col">
-        <b>${esc(a.mockTitle || t(c.label))}</b>
-        <span class="muted small">${esc(mockWhen(a.createdAt))}</span>
-      </span>
-      <span class="mock-history-val">${esc(mockAttemptSummary(a))}</span>
-    </button>`;
-  }).join('')}</div>`;
+  ${mockCatGridHTML('student')}
+  ${defs.length ? '' : `<div class="empty mock-empty"><span class="empty-ico">${ico('clipboardCheck', 22)}</span>${t('Sizga hali mock test biriktirilmagan. Ustoz test biriktirgach shu yerda ko‘rinadi.')}</div>`}`;
 }
 
 /* --- O'quvchi: testni yechish --- */
@@ -12645,15 +12716,8 @@ function mockTeacherListHTML(rows) {
 }
 /* Ustoz: kategoriya kartasi ochilganda — yaratish/tahrirlash/guruhlash */
 function mockTeacherCatScreen(key) {
-  if (state.mockTView) {
-    const picked = mockResultById(state.mockTView);
-    if (picked) return mockTeacherDetailHTML(picked);
-    state.mockTView = '';
-  }
   const c = mockCat(key);
   const defs = mockSortDefs(scopedMockDefs().filter(function (d) { return d.category === c.key; }));
-  const sec = MOCK_SECTIONS.filter(function (s) { return s.cats.indexOf(c.key) >= 0; })[0] || MOCK_SECTIONS[0];
-  const rows = mockSortResults(scopedMockResults().filter(function (a) { return sec.cats.indexOf(a.category) >= 0; }));
   return `<div class="mock-run-head">
     <button type="button" class="btn btn-xs ghost" data-act="mock-cat-back">${ico('arrowLeft', 14)} ${t('Orqaga')}</button>
     <span class="mock-run-title">${esc(t(c.label))}</span>
@@ -12661,8 +12725,17 @@ function mockTeacherCatScreen(key) {
   <button type="button" class="btn btn-primary btn-block mock-add-btn" data-act="mock-add">${ico('plus', 16)} ${esc(c.key === 'podcasts' ? t("Yangi Podcast qo'shish") : t("Yangi Mock qo'shish"))}</button>
   <div class="section-title">${esc(t(c.label))} · ${t('Yaratilgan mock testlar')}</div>
   <div class="mock-defs">${defs.length ? defs.map(mockDefRowHTML).join('')
-    : `<div class="empty mock-empty"><span class="empty-ico">${ico(c.icon, 20)}</span>${t('Bu bo‘limda hali mock test yaratilmagan')}</div>`}</div>
-  <div class="section-title">${t('O‘quvchilar natijalari')}</div>
+    : `<div class="empty mock-empty"><span class="empty-ico">${ico(c.icon, 20)}</span>${t('Bu bo‘limda hali mock test yaratilmagan')}</div>`}</div>`;
+}
+/* Ustoz: natijalar bo'limi — faqat shu yerda o'quvchilar natijalari ko'rinadi */
+function mockTeacherResultsCatHTML(key) {
+  const c = mockCat(key);
+  const rows = mockSortResults(scopedMockResults().filter(function (a) { return a.category === c.key; }));
+  return `<div class="mock-run-head">
+    <button type="button" class="btn btn-xs ghost" data-act="mock-res-back">${ico('arrowLeft', 14)} ${t('Orqaga')}</button>
+    <span class="mock-run-title">${esc(mockResCatLabel(c.key, 'teacher'))}</span>
+  </div>
+  <div class="section-title">${esc(mockResCatLabel(c.key, 'teacher'))} <span class="mock-sec-count">${rows.length}</span></div>
   ${mockTeacherListHTML(rows)}`;
 }
 /* Mock ma'lumotlari: asosiy ustoz BARCHA o'quvchilar natijasini ko'radi
@@ -12697,7 +12770,9 @@ function mockTeacherScreen() {
     if (picked) return mockTeacherDetailHTML(picked);
     state.mockTView = '';
   }
-  const all = mockSortResults(scopedMockResults());
+  if (state.mockResHome) {
+    return state.mockResView ? mockTeacherResultsCatHTML(state.mockResView) : mockResultsHomeHTML('teacher');
+  }
   return `
   <div class="card mock-hero">
     <span class="mock-hero-ico">${ico('clipboardCheck', 22)}</span>
@@ -12707,9 +12782,7 @@ function mockTeacherScreen() {
     </div>
   </div>
   <div class="section-title">${t('Bo‘limni tanlang')}</div>
-  ${mockCatGridHTML()}
-  <div class="section-title">${t('O‘quvchilar natijalari')} <span class="mock-sec-count">${all.length}</span></div>
-  ${mockTeacherListHTML(all)}`;
+  ${mockCatGridHTML('teacher')}`;
 }
 /* Natijani o'chirish: R2 videolar + lokal holat + Supabase (mock_attempts) */
 async function mockDeleteResult(id) {
@@ -14377,6 +14450,19 @@ document.addEventListener('click', function (e) {
     'mock-start': function () { mockStart(btn.getAttribute('data-id')); },
     'mock-exit': function () { mockTimerStop(); state.mockRun = null; render(); },
     'mock-home': function () { mockTimerStop(); state.mockRun = null; state.mockResultId = ''; render(); },
+    'mock-results-open': function () {
+      state.mockTView = '';
+      state.mockCatView = '';
+      state.mockResHome = true;
+      state.mockResView = '';
+      render();
+    },
+    'mock-res-open': function () { state.mockResView = btn.getAttribute('data-cat') || ''; render(); },
+    'mock-res-back': function () {
+      if (state.mockResView) state.mockResView = '';
+      else state.mockResHome = false;
+      render();
+    },
     'mock-pick': function () { mockPick(btn.getAttribute('data-mq'), btn.getAttribute('data-mopt')); },
     'mock-submit': function () { mockSubmitRun(); },
     'mock-play': function () { mockPlayListening(btn.getAttribute('data-aid')); },
@@ -14421,6 +14507,9 @@ document.addEventListener('click', function (e) {
     },
     'mock-cat-open': function () {
       state.mockCatView = btn.getAttribute('data-cat') || 'reading';
+      state.mockTView = '';
+      state.mockResHome = false;
+      state.mockResView = '';
       state.mockTab = state.mockCatView;
       state.mockAssignId = '';
       state.mockDelId = '';

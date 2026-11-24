@@ -3221,6 +3221,9 @@ html[data-theme="dark"] .mock-confirm { background: rgba(244, 63, 94, 0.14); }
 
 /* ==== 6-kartali grid, o'quvchi ro'yxati, taymer, CEFR ustuni ==== */
 .mock-cats-6 .mock-cat { align-items: center; }
+/* Natijalar bo'limiga kirish kartasi — grid ostida, to'liq kenglikda */
+.mock-results-entry { width: 100%; margin-top: 10px; }
+.mock-results-entry .mock-cat-ico { background: var(--accent); color: #fff; }
 
 /* --- Podcasts (Mock ichida): pleyer, matn va so'zma-so'z solishtiruv --- */
 .pod-list { display: flex; flex-direction: column; gap: 10px; }

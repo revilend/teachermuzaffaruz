@@ -1278,6 +1278,29 @@ if (q('[data-act="mock-cat-back"]')) clickAct('mock-cat-back');
 check((q('[data-act="mock-cat-open"][data-cat="podcasts"] .mock-cat-desc') || {}).textContent === 'Audio/video and text',
   'mock podcasts EN: kategoriya tavsifi ham inglizchada');
 clickAct('toggle-lang');
+
+/* Natijalar: asosiy Mock bo‘limida emas, “Mening natijalarim” bo‘limida */
+check(!q('.mock-history') && !q('[data-act="mock-open-result"]'),
+  'mock natijalar: asosiy Mock bo‘limida natijalar ro‘yxati ko‘rinmaydi');
+check(!!q('[data-act="mock-results-open"]'), 'mock natijalar: o‘quvchida “Mening natijalarim” kartasi bor');
+clickAct('mock-results-open');
+check(qa('[data-act="mock-res-open"]').length === 7 && text().includes('Mening natijalarim'),
+  'mock natijalar: My results ichida 7 ta bo‘lim kartasi');
+check(text().includes('Reading natijalarim'),
+  'mock natijalar: bo‘limlar mock kabi kartalar ko‘rinishida (My reading results)');
+click('[data-act="mock-res-open"][data-cat="podcasts"]');
+check(!!q('.mock-history') && text().includes('Daily Podcast 1') && text().includes('10/12'),
+  'mock natijalar: podcast natijasi o‘z bo‘limida saqlangan');
+click('.mock-history-row');
+check(!!q('.mock-score-card') && !!q('.pod-diff'),
+  'mock natijalar: natija ustiga bosilganda to‘liq natija ochiladi');
+clickAct('mock-home');
+check(!!q('.mock-history') && text().includes('Daily Podcast 1'),
+  'mock natijalar: “Orqaga” natijalar bo‘limiga qaytaradi');
+clickAct('mock-res-back');
+clickAct('mock-res-back');
+check(!q('.mock-history') && !!q('[data-act="mock-cat-open"][data-cat="podcasts"]'),
+  'mock natijalar: bo‘limlar ro‘yxatidan Orqaga → Mock bo‘limlariga qaytadi');
 closeStudentView();
 
 /* ================= 11. O'QUVCHI: PAROLNI O'ZGARTIRISH ================= */
@@ -1330,14 +1353,30 @@ check(!!q('.quick-grid [data-act="nav"][data-screen="mock"]'),
   'mock ustoz: TEZ AMALLAR ichida “Mock testlar” tezkor kartasi');
 forceNav('mock');
 check(qa('[data-act="mock-cat-open"]').length === 7, 'mock ustoz: 7 ta kategoriya kartasi (Podcasts bilan)');
-check(!!q('.mock-results') && qa('.mock-results .mock-person').length >= 3,
-  'mock ustoz: natijalar bitta karta ro‘yxatida (jadval/ustun emas)');
-check(text().includes('Daily Podcast 1'),
-  'mock ustoz: podcast natijasi o‘qituvchi panelidagi ro‘yxatda ko‘rinadi');
+check(!q('.mock-results') && qa('.mock-results .mock-person').length === 0,
+  'mock ustoz: natijalar asosiy Mock vazifalari bo‘limida ko‘rinmaydi');
+check(!!q('[data-act="mock-results-open"]'), 'mock ustoz: “Natijalar” (Results) bo‘limi kartasi bor');
+clickAct('mock-results-open');
+check(qa('[data-act="mock-res-open"]').length === 7 &&
+  !!q('[data-act="mock-res-open"][data-cat="reading"]'),
+  'mock ustoz: Results ichida 7 ta bo‘lim kartasi (Reading results va h.k.)');
+check(text().includes('Reading natijalari') && text().includes('Listening natijalari'),
+  'mock ustoz: natija bo‘limlari mock kabi kartalar ko‘rinishida (ustun emas)');
+click('[data-act="mock-res-open"][data-cat="reading"]');
+check(!!q('.mock-results') && qa('.mock-results .mock-person').length >= 1,
+  'mock ustoz: Reading results ichida natijalar bitta karta ro‘yxatida');
 check(text().includes('Jasur Karimov') && /4\/4/.test(text()) && !!q('.mock-results .mock-cefr'),
   'mock ustoz: o‘quvchi natijasi, ball va CEFR');
 check(!!q('.mock-results [data-act="mock-student-open"]'),
   'mock ustoz: o‘quvchi ismi bosiladigan tugma');
+clickAct('mock-res-back');
+click('[data-act="mock-res-open"][data-cat="podcasts"]');
+check(text().includes('Daily Podcast 1'),
+  'mock ustoz: podcast natijasi Results → Podcasts bo‘limida ko‘rinadi');
+clickAct('mock-res-back');
+clickAct('mock-res-back');
+check(!q('.mock-results') && !!q('[data-act="mock-cat-open"][data-cat="podcasts"]'),
+  'mock ustoz: Results’dan Orqaga → Mock bo‘limlariga qaytadi');
 /* Podcasts builder: audio/video yuklash + tagida matn kiritish qismi */
 click('[data-act="mock-cat-open"][data-cat="podcasts"]');
 check(!!q('[data-act="mock-add"]') && text().includes("Yangi Podcast qo'shish"),
@@ -1466,8 +1505,10 @@ const regroupedDef = (JSON.parse(win.localStorage.getItem('et_mock_defs')) || []
 check(regroupedDef.groupIds.indexOf('g1') >= 0 && regroupedDef.groupIds.indexOf('g2') >= 0,
   'mock ustoz: tahrirlashda qo‘shimcha guruh biriktirildi (g1 + g2)');
 
-/* Natijani o‘chirish (ro‘yxatdagi kartalarda) */
+/* Natijani o‘chirish (Results bo‘limidagi kartalarda) */
 click('[data-act="mock-cat-back"]');
+clickAct('mock-results-open');
+click('[data-act="mock-res-open"][data-cat="listening"]');
 const delRow = q('.mock-results .mock-person');
 check(!!delRow && !!delRow.querySelector('[data-act="mock-result-del"]'),
   'mock ustoz: natija kartasida “O‘chirish” tugmasi bor');
@@ -1479,7 +1520,8 @@ check(!(JSON.parse(win.localStorage.getItem('et_mock_results')) || []).some(a =>
   'mock ustoz: natija lokal holatdan o‘chirildi');
 
 /* O‘quvchi ismiga bosish → to‘g‘ri/xato javoblar tafsiloti */
-if (q('[data-act="mock-cat-back"]')) click('[data-act="mock-cat-back"]');
+clickAct('mock-res-back');
+click('[data-act="mock-res-open"][data-cat="reading"]');
 check(!!q('.mock-results') && text().includes('Jasur Karimov'), 'mock ustoz: natijalar ro‘yxati ko‘rinadi');
 const readAttempt = (JSON.parse(win.localStorage.getItem('et_mock_results')) || [])
   .filter(a => a.category === 'reading')[0];
@@ -1498,6 +1540,8 @@ check(!!q('.mock-results') && !q('.mock-detail'), 'mock ustoz: “Orqaga” ro�
 /* Writing: matn/izoh/baho tafsilot oynasida */
 const writingAttempt = (JSON.parse(win.localStorage.getItem('et_mock_results')) || [])
   .filter(a => a.category === 'writing')[0];
+clickAct('mock-res-back');
+click('[data-act="mock-res-open"][data-cat="writing"]');
 click('[data-act="mock-student-open"][data-id="' + writingAttempt.id + '"]');
 check(!!q('.mock-detail') && !!q('.mock-detail .mock-ta'),
   'mock ustoz: Writing tafsilotida tahrirlanadigan matn bor');
@@ -1513,6 +1557,8 @@ check(mwSaved.teacherText === 'Teacher edited version of the essay.' &&
 clickAct('mock-student-back');
 
 /* Speaking: videolar va baho tafsilot oynasida */
+clickAct('mock-res-back');
+click('[data-act="mock-res-open"][data-cat="speaking"]');
 click('[data-act="mock-student-open"][data-id="' + spAttemptId + '"]');
 check(!!q('.mock-detail') && qa('.mock-detail video').length >= 1,
   'mock ustoz: speaking videolari ijro uchun ko‘rinadi');
@@ -1522,8 +1568,9 @@ check(JSON.parse(win.localStorage.getItem('et_mock_results')).filter(a => a.id =
   'mock ustoz: speaking video bahosi saqlandi');
 clickAct('mock-student-back');
 
-check(!!q('.mock-results') && text().includes('O‘quvchilar natijalari'),
-  'mock ustoz: barcha natijalar bitta ro‘yxatda');
+clickAct('mock-res-back');
+check(qa('[data-act="mock-res-open"]').length === 7 && text().includes('Natijalar'),
+  'mock ustoz: barcha natijalar bo‘limlar bo‘yicha ajratilgan (Results)');
 logout();
 
 await loginAs('nilufar', '7777');
