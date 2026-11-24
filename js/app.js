@@ -11845,7 +11845,7 @@ function mockCatGridHTML(who) {
       </span>
       <span class="mock-cat-go">${ico('arrowRight', 14)}</span>
     </button>`;
-  })}<button type="button" class="card mock-cat mock-results-entry" data-act="mock-results-open">
+  }).join('')}<button type="button" class="card mock-cat mock-results-entry" data-act="mock-results-open">
     <span class="mock-cat-ico">${ico('checkCircle', 20)}</span>
     <span class="mock-cat-body">
       <span class="mock-cat-name">${esc(resLabel)}</span>

@@ -1285,6 +1285,7 @@ check(!q('.mock-history') && !q('[data-act="mock-open-result"]'),
 check(!!q('.mock-cats-6 [data-act="mock-results-open"]') &&
   qa('.mock-cats-6 .mock-cat').pop().getAttribute('data-act') === 'mock-results-open',
   'mock natijalar: “Mening natijalarim” kartasi Podcasts yonida, grid ichida turadi');
+check(!/<\/button>,/.test(q('.mock-cats-6').innerHTML), 'mock: bo‘lim kartalari orasida ortiqcha vergul yo‘q');
 clickAct('mock-results-open');
 check(qa('[data-act="mock-res-open"]').length === 7 && text().includes('Mening natijalarim'),
   'mock natijalar: My results ichida 7 ta bo‘lim kartasi');
