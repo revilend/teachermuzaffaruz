@@ -11845,15 +11845,14 @@ function mockCatGridHTML(who) {
       </span>
       <span class="mock-cat-go">${ico('arrowRight', 14)}</span>
     </button>`;
-  }).join('')}</div>
-  <button type="button" class="card mock-cat mock-results-entry" data-act="mock-results-open">
+  })}<button type="button" class="card mock-cat mock-results-entry" data-act="mock-results-open">
     <span class="mock-cat-ico">${ico('checkCircle', 20)}</span>
     <span class="mock-cat-body">
       <span class="mock-cat-name">${esc(resLabel)}</span>
       <span class="mock-cat-desc">${esc(resDesc)}</span>
     </span>
     <span class="mock-cat-go">${ico('arrowRight', 14)}</span>
-  </button>`;
+  </button></div>`;
 }
 /* Natijalar bo'limi: har bir mock bo'limi uchun alohida kartalar */
 function mockResCatLabel(key, who) {

@@ -1282,7 +1282,9 @@ clickAct('toggle-lang');
 /* Natijalar: asosiy Mock bo‘limida emas, “Mening natijalarim” bo‘limida */
 check(!q('.mock-history') && !q('[data-act="mock-open-result"]'),
   'mock natijalar: asosiy Mock bo‘limida natijalar ro‘yxati ko‘rinmaydi');
-check(!!q('[data-act="mock-results-open"]'), 'mock natijalar: o‘quvchida “Mening natijalarim” kartasi bor');
+check(!!q('.mock-cats-6 [data-act="mock-results-open"]') &&
+  qa('.mock-cats-6 .mock-cat').pop().getAttribute('data-act') === 'mock-results-open',
+  'mock natijalar: “Mening natijalarim” kartasi Podcasts yonida, grid ichida turadi');
 clickAct('mock-results-open');
 check(qa('[data-act="mock-res-open"]').length === 7 && text().includes('Mening natijalarim'),
   'mock natijalar: My results ichida 7 ta bo‘lim kartasi');
@@ -1355,7 +1357,9 @@ forceNav('mock');
 check(qa('[data-act="mock-cat-open"]').length === 7, 'mock ustoz: 7 ta kategoriya kartasi (Podcasts bilan)');
 check(!q('.mock-results') && qa('.mock-results .mock-person').length === 0,
   'mock ustoz: natijalar asosiy Mock vazifalari bo‘limida ko‘rinmaydi');
-check(!!q('[data-act="mock-results-open"]'), 'mock ustoz: “Natijalar” (Results) bo‘limi kartasi bor');
+check(!!q('.mock-cats-6 [data-act="mock-results-open"]') &&
+  qa('.mock-cats-6 .mock-cat').pop().getAttribute('data-act') === 'mock-results-open',
+  'mock ustoz: “Natijalar” kartasi Podcasts yonida, grid ichida turadi (pastda alohida emas)');
 clickAct('mock-results-open');
 check(qa('[data-act="mock-res-open"]').length === 7 &&
   !!q('[data-act="mock-res-open"][data-cat="reading"]'),
