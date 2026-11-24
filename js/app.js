@@ -12773,6 +12773,9 @@ function mockTeacherScreen() {
     return state.mockResView ? mockTeacherResultsCatHTML(state.mockResView) : mockResultsHomeHTML('teacher');
   }
   return `
+  <div class="back-row">
+    <button type="button" class="btn btn-xs ghost" data-act="nav" data-screen="home">${ico('arrowLeft', 14)} ${t('Orqaga')}</button>
+  </div>
   <div class="card mock-hero">
     <span class="mock-hero-ico">${ico('clipboardCheck', 22)}</span>
     <div class="col">

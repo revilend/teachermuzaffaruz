@@ -1355,6 +1355,11 @@ await loginAs('m_amirov', '123');
 check(!!q('.quick-grid [data-act="nav"][data-screen="mock"]'),
   'mock ustoz: TEZ AMALLAR ichida “Mock testlar” tezkor kartasi');
 forceNav('mock');
+check(!!q('.back-row [data-act="nav"][data-screen="home"]'),
+  'mock ustoz: asosiy Mock oynasida yuqorida “Orqaga” tugmasi bor');
+q('.back-row [data-act="nav"][data-screen="home"]').click();
+check(!q('.mock-cats-6'), 'mock ustoz: “Orqaga” asosiy oynaga qaytaradi');
+forceNav('mock');
 check(qa('[data-act="mock-cat-open"]').length === 7, 'mock ustoz: 7 ta kategoriya kartasi (Podcasts bilan)');
 check(!q('.mock-results') && qa('.mock-results .mock-person').length === 0,
   'mock ustoz: natijalar asosiy Mock vazifalari bo‘limida ko‘rinmaydi');
