@@ -4429,7 +4429,8 @@ const I18N_SKIP_SEL = '.s-name, .profile-name, .login-val, .brand, ' +
   '.mock-feedback, .mock-original, .mock-multiline, .mock-video-q, .mock-video-meta, .mock-file-link, ' +
   '.mock-history-row b, .mock-score-title, .mock-person-test, .mock-person-name, ' +
   '.mock-person-meta, .mock-build-part-head, .mock-build-answer-row, .mock-build-izoh, ' +
-  '.mock-build-opt, .hw-desc-text, .hw-teacher-comment, .hw-sub-note, .student-quote';
+  '.mock-build-opt, .hw-desc-text, .hw-teacher-comment, .hw-sub-note, .student-quote, ' +
+  '.pod-diff, .pod-student-text, .pod-original, .pod-title, .pod-name';
 function i18nNorm(s) { return String(s == null ? '' : s).replace(/\s+/g, ' ').trim(); }
 /* Sonlar bilan keladigan dinamik matnlar */
 function i18nPattern(s, lang) {
@@ -11095,6 +11096,7 @@ async function saveProfileContact() {
 const MOCK_CATS = [
   { key: 'reading', label: 'Reading', desc: 'Matn va savollar', icon: 'bookOpen', kind: 'mcq' },
   { key: 'listening', label: 'Listening', desc: 'Audio va savollar', icon: 'headphones', kind: 'mcq' },
+  { key: 'podcasts', label: 'Podcasts', desc: 'Audio/video va matn', icon: 'mic', kind: 'podcast' },
   { key: 'writing', label: 'Writing', desc: 'Insho yozish', icon: 'fileText', kind: 'write' },
   { key: 'speaking', label: 'Speaking', desc: 'Video javoblar', icon: 'mic', kind: 'speak' },
   { key: 'grammar', label: 'Grammar', desc: 'Grammatika testi', icon: 'clipboardCheck', kind: 'mcq' },
@@ -11104,6 +11106,155 @@ const MOCK_CEFR_LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 
 function mockCat(key) {
   return MOCK_CATS.filter(function (c) { return c.key === key; })[0] || MOCK_CATS[0];
+}
+
+/* --- Podcasts: audio/video + ustoz matni bilan so'zma-so'z solishtirish --- */
+const PODCAST_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2];
+function podcastMediaType(url, name) {
+  const s = String(name || '') + ' ' + String(url || '');
+  return /\.(mp4|webm|mov|m4v|ogv|mkv)(\?|#|$)/i.test(s) ? 'video' : 'audio';
+}
+function podcastScript(def) {
+  return String((def && (def.script || def.transcript)) || '');
+}
+/* So'zni solishtirish uchun: katta-kichik harf va tinish belgilari hisobga
+   olinmaydi, lekin har bir harf qat'iy tekshiriladi (Aziz ≠ Azzi). */
+function podcastNormWord(w) {
+  return String(w == null ? '' : w).toLowerCase().replace(/[^\p{L}\p{N}']/gu, '');
+}
+function podcastTokens(text) {
+  return String(text == null ? '' : text).replace(/\s+/g, ' ').trim().split(' ')
+    .filter(function (w) { return podcastNormWord(w) !== ''; });
+}
+/* LCS asosida so'zma-so'z taqqoslash: same / sub (xato) / miss (tushirilgan) / extra */
+function podcastCompare(teacherText, studentText) {
+  const tWords = podcastTokens(teacherText);
+  const sWords = podcastTokens(studentText);
+  const tn = tWords.map(podcastNormWord);
+  const sn = sWords.map(podcastNormWord);
+  const n = tn.length, m = sn.length;
+  const dp = [];
+  for (let i = 0; i <= n; i++) dp.push(new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i][j] = tn[i] === sn[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+  const ops = [];
+  let i = 0, j = 0, dels = [], ins = [];
+  const flush = function () {
+    const len = Math.max(dels.length, ins.length);
+    for (let k = 0; k < len; k++) {
+      if (dels[k] != null && ins[k] != null) ops.push({ type: 'sub', wrong: ins[k], right: dels[k] });
+      else if (dels[k] != null) ops.push({ type: 'miss', right: dels[k] });
+      else ops.push({ type: 'extra', wrong: ins[k] });
+    }
+    dels = []; ins = [];
+  };
+  while (i < n || j < m) {
+    if (i < n && j < m && tn[i] === sn[j]) { flush(); ops.push({ type: 'same', word: sWords[j] }); i++; j++; continue; }
+    if (j < m && (i >= n || dp[i][j + 1] >= dp[i + 1][j])) { ins.push(sWords[j]); j++; continue; }
+    if (i < n) { dels.push(tWords[i]); i++; continue; }
+    ins.push(sWords[j]); j++;
+  }
+  flush();
+  let same = 0, wrong = 0, missed = 0, extra = 0;
+  ops.forEach(function (op) {
+    if (op.type === 'same') same++;
+    else if (op.type === 'sub') wrong++;
+    else if (op.type === 'miss') missed++;
+    else extra++;
+  });
+  const percent = n ? Math.round(same * 100 / n) : 0;
+  return {
+    ops: ops, same: same, wrong: wrong, missed: missed, extra: extra,
+    total: n, percent: percent, cefr: mockCefr(percent)
+  };
+}
+/* Xato so'z ustida qizil chiziq + yonida yashil to'g'ri so'z;
+   tushirib qoldirilgan so'zlar joyida qizil rangda qo'shiladi. */
+function podcastDiffHTML(teacherText, studentText) {
+  const cmp = podcastCompare(teacherText, studentText);
+  const body = cmp.ops.map(function (op) {
+    if (op.type === 'same') return `<span class="pod-word">${esc(op.word)}</span>`;
+    if (op.type === 'sub') return `<span class="pod-word is-wrong">${esc(op.wrong)}</span><span class="pod-fix">${esc(op.right)}</span>`;
+    if (op.type === 'miss') return `<span class="pod-miss">${esc(op.right)}</span>`;
+    return `<span class="pod-word is-extra">${esc(op.wrong)}</span>`;
+  }).join(' ');
+  return `<div class="pod-diff">${body || `<span class="muted small">${esc(t('Matn kiritilmagan'))}</span>`}</div>`;
+}
+function podcastStatsHTML(cmp) {
+  return `<div class="pod-stats">
+    <span class="pod-stat is-correct">${ico('checkCircle', 13)} ${t('To‘g‘ri so‘zlar')}: ${cmp.same}/${cmp.total}</span>
+    <span class="pod-stat is-wrong">${ico('close', 13)} ${t('Xato so‘zlar')}: ${cmp.wrong}</span>
+    <span class="pod-stat is-wrong">${ico('close', 13)} ${t('Tushirib qoldirilgan')}: ${cmp.missed}</span>
+    ${cmp.extra ? `<span class="pod-stat is-wrong">${ico('alert', 13)} ${t('Ortiqcha so‘zlar')}: ${cmp.extra}</span>` : ''}
+    <span class="pod-stat">${cmp.percent}%</span>
+  </div>`;
+}
+/* Podcast pleyeri: to'xtatish/seek — brauzer boshqaruvi, tezlik va 10s sakrash — tugmalar */
+function podcastMediaHTML(def) {
+  const url = String((def && def.mediaUrl) || '');
+  if (!url) return `<div class="empty pod-empty"><span class="empty-ico">${ico('headphones', 22)}</span>${t('Audio yoki video yuklanmagan')}</div>`;
+  const isVideo = podcastMediaType(url, def.mediaName) === 'video';
+  const media = isVideo
+    ? `<video class="pod-media-el pod-video" id="pod-media" controls controlsList="nodownload" playsinline preload="metadata" src="${esc(url)}"></video>`
+    : `<audio class="pod-media-el pod-audio" id="pod-media" controls controlsList="nodownload" preload="metadata" src="${esc(url)}"></audio>`;
+  return `<div class="pod-media">
+    ${media}
+    <div class="pod-controls">
+      <button type="button" class="btn btn-xs ghost" data-act="pod-skip" data-sec="-10">−10s</button>
+      <button type="button" class="btn btn-xs ghost" data-act="pod-skip" data-sec="10">+10s</button>
+      <span class="pod-speed-label">${t('Tezlik')}:</span>
+      <div class="pod-speeds" id="pod-speeds">${PODCAST_RATES.map(function (r) {
+        return `<button type="button" class="pod-speed${r === 1 ? ' is-active' : ''}" data-act="pod-speed" data-rate="${r}">${r}×</button>`;
+      }).join('')}</div>
+    </div>
+    ${def.instruction ? `<div class="mock-hint">${ico('alert', 13)} <span>${esc(def.instruction)}</span></div>` : ''}
+  </div>`;
+}
+/* O'quvchi: podcast nomlari ro'yxati (faqat nom) */
+function podcastListHTML(defs) {
+  return `<div class="pod-list">${defs.map(function (def) {
+    return `<button type="button" class="card pod-name-card" data-act="mock-start" data-id="${esc(def.id)}">
+      <span class="pod-name-ico">${ico('mic', 18)}</span>
+      <span class="pod-name">${esc(def.title || t('Podcast'))}</span>
+      <span class="pod-name-go">${ico('arrowRight', 14)}</span>
+    </button>`;
+  }).join('')}</div>`;
+}
+function podcastRunnerHTML() {
+  const run = state.mockRun;
+  const def = run.def;
+  const c = mockCat('podcasts');
+  const val = String(run.text || '');
+  return `${mockRunHeadHTML(c)}
+  <div class="card pod-player-card">
+    <div class="pod-title">${esc(def.title || t('Podcast'))}</div>
+    ${podcastMediaHTML(def)}
+  </div>
+  <div class="card pod-write">
+    <div class="section-title">${t('Podcast matni')}</div>
+    <textarea class="input mock-ta pod-textarea" id="podcast-text" rows="10" data-podcast-text="1" placeholder="${esc(t('Eshitganingizni shu yerga yozing...'))}">${esc(val)}</textarea>
+    <div class="pod-wordinfo">${t('So‘z soni')}: <b id="pod-word-count">${mockWordCount(val)}</b></div>
+    <button type="button" class="btn btn-primary btn-block" data-act="mock-submit">${ico('save', 15)} ${t('Saqlash va tekshirish')}</button>
+    <div class="mock-submit-hint">${t('Matningiz o‘qituvchi matni bilan so‘zma-so‘z solishtiriladi — xatolar avtomatik ko‘rsatiladi.')}</div>
+  </div>`;
+}
+/* Natija: o'quvchi ham, ustoz ham aynan bir xil tekshirilgan matnni ko'radi */
+function podcastAttemptHTML(a) {
+  const teacherText = String(a.teacherText || podcastScript(a.def) || '');
+  const studentText = String(a.text || '');
+  const cmp = podcastCompare(teacherText, studentText);
+  return `<div class="pod-result">
+    ${a.def && a.def.mediaUrl ? `<div class="pod-replay">${podcastMediaHTML(a.def)}</div>` : ''}
+    ${podcastStatsHTML(cmp)}
+    <div class="pod-label">${t('Tekshirilgan matn')}</div>
+    ${podcastDiffHTML(teacherText, studentText)}
+    <div class="pod-label">${t('O‘quvchi matni')}</div>
+    <div class="pod-student-text">${esc(studentText) || '—'}</div>
+    ${teacherText ? `<details class="pod-original"><summary>${esc(t('O‘qituvchi matni'))}</summary><div>${esc(teacherText)}</div></details>` : ''}
+  </div>`;
 }
 function mockWhen(iso) {
   if (!iso) return '';
@@ -11344,6 +11495,13 @@ function mockNormalizeDef(def) {
         questions: (Array.isArray(tk.questions) ? tk.questions : []).map(mockNormalizeQuestion)
       };
     });
+  } else if (cat === 'podcasts') {
+    out.mediaUrl = String(out.mediaUrl || '').trim();
+    out.mediaName = String(out.mediaName || '').trim();
+    out.mediaType = out.mediaUrl ? podcastMediaType(out.mediaUrl, out.mediaName) : '';
+    out.script = String(out.script || '');
+    out.instruction = String(out.instruction || '').trim();
+    out.questions = [];
   } else if (cat === 'writing') {
     out.prompt = String(out.prompt || '').trim();
     out.instruction = String(out.instruction || '').trim();
@@ -11609,6 +11767,9 @@ function mockAttemptSummary(a) {
   if (a.category === 'speaking') {
     return a.teacherGrade ? t('Baho') + ': ' + a.teacherGrade : t('Ustoz tekshiruvi kutilmoqda');
   }
+  if (a.category === 'podcasts') {
+    return (a.score || 0) + '/' + (a.total || 0) + ' ' + t('so‘z') + ' · ' + (a.percent || 0) + '%';
+  }
   const total = a.total || mockDefQuestionCount(a.def);
   return (a.score || 0) + '/' + total + ' · ' + (a.cefr || mockCefr(a.percent || 0));
 }
@@ -11635,9 +11796,11 @@ function mockStudentDefHTML(def) {
   const last = mockLastForDef(def);
   const total = mockDefQuestionCount(def);
   const groups = mockGroupIds(def).map(groupById).filter(function (g) { return !!g; });
-  const meta = c.kind === 'write' ? t('Yozma topshiriq') : (total + ' ' + t('savol'));
+  const meta = c.kind === 'podcast'
+    ? t('Podcast') + ' · ' + mockWordCount(podcastScript(def)) + ' ' + t('so‘z')
+    : (c.kind === 'write' ? t('Yozma topshiriq') : (total + ' ' + t('savol')));
   const stateCls = last
-    ? (String(last.teacherGrade || '').trim() || c.kind === 'mcq' ? 'is-done' : 'is-wait')
+    ? (String(last.teacherGrade || '').trim() || c.kind === 'mcq' || c.kind === 'podcast' ? 'is-done' : 'is-wait')
     : 'is-new';
   return `<div class="card mock-def-card mock-stu-row">
     <span class="mock-cat-ico">${ico(c.icon, 18)}</span>
@@ -11660,6 +11823,17 @@ function mockStudentCatHTML(key) {
   const c = mockCat(key);
   const st = linkedStudent();
   const defs = mockAssignedDefs(st).filter(function (d) { return d.category === c.key; });
+  /* Podcasts: bo'lim ichida faqat podcast nomlari turadi; nomga bosilganda
+     audio/video va matn yozish qismi ochiladi. */
+  if (c.key === 'podcasts') {
+    return `<div class="mock-run-head">
+      <button type="button" class="btn btn-xs ghost" data-act="mock-cat-back">${ico('arrowLeft', 14)} ${t('Orqaga')}</button>
+      <span class="mock-run-title">${esc(t(c.label))}</span>
+    </div>
+    ${defs.length
+      ? podcastListHTML(defs)
+      : `<div class="empty mock-empty"><span class="empty-ico">${ico('mic', 22)}</span>${t('Bu bo‘limda sizga hali podcast biriktirilmagan. Ustoz podcast bergach shu yerda ko‘rinadi.')}</div>`}`;
+  }
   return `<div class="mock-run-head">
     <button type="button" class="btn btn-xs ghost" data-act="mock-cat-back">${ico('arrowLeft', 14)} ${t('Orqaga')}</button>
     <span class="mock-run-title">${esc(t(c.label))}</span>
@@ -11751,6 +11925,7 @@ function mockRunnerHTML() {
   const def = run.def;
   const c = mockCat(def.category);
   if (c.kind === 'speak') return mockSpeakRunnerHTML();
+  if (c.kind === 'podcast') return podcastRunnerHTML();
   if (c.key === 'writing') return mockWritingRunnerHTML(def);
   const qs = mockAllQuestions(def);
   const answered = Object.keys(run.answers || {}).length;
@@ -11931,7 +12106,8 @@ function mockStart(id) {
   state.mockResultId = '';
   state.mockRun = {
     defId: def.id, def: JSON.parse(JSON.stringify(def)), cat: def.category,
-    answers: {}, idx: 0, text: '', attemptId: '',
+    answers: {}, idx: 0, attemptId: '',
+    text: def.category === 'podcasts' ? String(((state.podcastDrafts || {})[def.id]) || '') : '',
     deadline: def.category === 'reading' ? Date.now() + MOCK_READING_MS : 0
   };
   render();
@@ -12028,6 +12204,25 @@ function mockSubmitRun() {
     studentName: meta.studentName, gradeClass: meta.gradeClass, groupName: meta.groupName, sid: meta.sid,
     def: JSON.parse(JSON.stringify(def)), createdAt: new Date().toISOString()
   };
+  if (c.kind === 'podcast') {
+    const pa = $('#podcast-text');
+    const text = pa ? String(pa.value || '') : String(run.text || '');
+    if (!text.trim()) { toast(t('Avval eshitganlaringizni yozing'), 'error'); return; }
+    const teacherText = podcastScript(def);
+    const cmp = podcastCompare(teacherText, text);
+    const attempt = mockUpsert(Object.assign(base, {
+      id: mockNewId(), status: 'pending', text: text, teacherText: teacherText,
+      score: cmp.same, total: cmp.total, percent: cmp.percent, cefr: cmp.cefr,
+      words: mockWordCount(text), errors: cmp.wrong + cmp.missed + cmp.extra,
+      feedback: '', teacherGrade: ''
+    }));
+    state.mockRun = null;
+    state.mockResultId = attempt.id;
+    render();
+    toast(t('Podcast yuborildi — matn avtomatik tekshirildi'));
+    mockNotifyTeacherResult(attempt, st);
+    return;
+  }
   if (c.kind === 'write') {
     const ta = $('#mock-writing');
     const text = ta ? String(ta.value || '').trim() : String(run.text || '').trim();
@@ -12136,6 +12331,10 @@ function mockCefrBadge(a) {
   return mockCefrPill(lvl);
 }
 function mockScoreHTML(a) {
+  if (a.category === 'podcasts') {
+    return `<span class="mock-score">${a.score || 0}/${a.total || 0}</span>
+      <span class="mock-pct">${a.percent || 0}%</span>${mockCefrBadge(a)}`;
+  }
   if (a.category === 'writing' || a.category === 'speaking') {
     const grade = String(a.teacherGrade == null ? '' : a.teacherGrade).trim();
     return grade
@@ -12171,6 +12370,7 @@ function mockResultHTML(a, who) {
       ${open ? mockReviewHTML(a, who === 'student' ? 'student' : 'teacher') : ''}` : ''}
     ${c.key === 'writing' ? `<div class="mock-written">${esc(a.teacherText || a.text || '')}</div>` : ''}
     ${c.key === 'speaking' ? mockVideosHTML(a) : ''}
+    ${c.key === 'podcasts' ? podcastAttemptHTML(a) : ''}
     ${a.feedback ? `<div class="mock-feedback"><b>${t('Ustoz izohi')}:</b> ${esc(a.feedback)}</div>` : ''}
   </section>`;
 }
@@ -12235,7 +12435,8 @@ const MOCK_SECTIONS = [
   { key: 'rl', cats: ['reading', 'listening'], title: 'Reading and Listening Answers', uz: 'Reading va Listening javoblari', icon: 'bookOpen' },
   { key: 'writing', cats: ['writing'], title: 'Writing Answers', uz: 'Writing javoblari', icon: 'fileText' },
   { key: 'speaking', cats: ['speaking'], title: 'Speaking Answers', uz: 'Speaking javoblari', icon: 'mic' },
-  { key: 'vg', cats: ['grammar', 'vocabulary'], title: 'Vocabulary and Grammar', uz: 'Vocabulary va Grammar', icon: 'star' }
+  { key: 'vg', cats: ['grammar', 'vocabulary'], title: 'Vocabulary and Grammar', uz: 'Vocabulary va Grammar', icon: 'star' },
+  { key: 'podcasts', cats: ['podcasts'], title: 'Podcasts', uz: 'Podcasts', icon: 'mic' }
 ];
 function mockGroupBadgesHTML(def) {
   const ids = mockGroupIds(def);
@@ -12259,7 +12460,9 @@ function mockDefRowHTML(def) {
         <div class="mock-def-meta">
           <span>${esc(t(c.label))}</span>
           ${mockCefrPill(mockDefCefr(def))}
-          <span>${total} ${t('savol')}</span>
+          ${c.key === 'podcasts'
+            ? `<span>${t('Podcast')} · ${mockWordCount(podcastScript(def))} ${t('so‘z')}</span>`
+            : `<span>${total} ${t('savol')}</span>`}
           <span>${esc(mockWhen(def.updatedAt || def.createdAt))}</span>
         </div>
       </div>
@@ -12371,6 +12574,7 @@ function mockTeacherDetailHTML(a) {
     ${mockReviewHTML(a, 'teacher')}` : ''}
     ${c.key === 'writing' ? `<div class="mock-written">${esc(a.teacherText || a.text || '')}</div>` : ''}
     ${c.key === 'speaking' ? mockVideosHTML(a) : ''}
+    ${c.key === 'podcasts' ? podcastAttemptHTML(a) : ''}
     ${a.feedback ? `<div class="mock-feedback"><b>${t('Ustoz izohi')}:</b> ${esc(a.feedback)}</div>` : ''}
     ${c.kind !== 'mcq' ? mockTeacherGradeForm(a) : ''}
     ${delOpen
@@ -12424,7 +12628,7 @@ function mockTeacherCatScreen(key) {
     <button type="button" class="btn btn-xs ghost" data-act="mock-cat-back">${ico('arrowLeft', 14)} ${t('Orqaga')}</button>
     <span class="mock-run-title">${esc(t(c.label))}</span>
   </div>
-  <button type="button" class="btn btn-primary btn-block mock-add-btn" data-act="mock-add">${ico('plus', 16)} ${t("Yangi Mock qo'shish")}</button>
+  <button type="button" class="btn btn-primary btn-block mock-add-btn" data-act="mock-add">${ico('plus', 16)} ${esc(c.key === 'podcasts' ? t("Yangi Podcast qo'shish") : t("Yangi Mock qo'shish"))}</button>
   <div class="section-title">${esc(t(c.label))} · ${t('Yaratilgan mock testlar')}</div>
   <div class="mock-defs">${defs.length ? defs.map(mockDefRowHTML).join('')
     : `<div class="empty mock-empty"><span class="empty-ico">${ico(c.icon, 20)}</span>${t('Bu bo‘limda hali mock test yaratilmagan')}</div>`}</div>
@@ -12526,7 +12730,7 @@ async function mockNotifyTeacherResult(attempt, st) {
   const c = mockCat(attempt.category);
   const student = st || mockResultStudent(attempt);
   const who = mockResultWho(attempt);
-  const score = c.kind === 'mcq'
+  const score = c.kind === 'mcq' || c.kind === 'podcast'
     ? (Number(attempt.score) || 0) + '/' + (Number(attempt.total) || 0) + ' · ' + (Number(attempt.percent) || 0) + '%'
     : t('Baholanmoqda');
   const link = mockAppLink();
@@ -12820,6 +13024,24 @@ function mockBuilderBodyHTML(def, c, step) {
       </div>`;
     }).join('') + `<button type="button" class="btn btn-xs ghost mock-add-task" data-act="mock-b-add-task">${ico('plus', 13)} ${t('Add Task')}</button>`;
   }
+  if (c.key === 'podcasts') {
+    const mediaUrl = mockBGet('mediaUrl');
+    const isVideo = mediaUrl && podcastMediaType(mediaUrl, mockBGet('mediaName')) === 'video';
+    return `<label class="mock-field-label">${t('Audio yoki video (R2)')}</label>
+    <div class="mock-file-row">
+      <input type="file" accept="audio/*,video/*" data-mb-file="mediaUrl" data-mb-name="mediaName" data-mb-folder="mock/podcasts" />
+      ${mediaUrl
+        ? (isVideo
+          ? `<video class="mock-builder-video" controls preload="metadata" src="${esc(mediaUrl)}"></video>`
+          : `<audio controls preload="metadata" class="mock-audio" src="${esc(mediaUrl)}"></audio>`) +
+          `<button type="button" class="btn btn-xs ghost" data-act="mock-b-file-clear" data-path="mediaUrl">${ico('trash', 12)}</button>`
+        : `<span class="muted small">${t('Fayl tanlanmagan')}</span>`}
+    </div>
+    <label class="mock-field-label">${t('Podcast matni (o‘quvchi matni shu bilan solishtiriladi)')}</label>
+    <textarea class="input mock-ta" data-mb="script" rows="10" placeholder="${esc(t('Podcastning to‘liq matnini kiriting'))}">${esc(mockBGet('script'))}</textarea>
+    <label class="mock-field-label">${t('Shart (ixtiyoriy)')}</label>
+    ${mockBTextarea('instruction', 2, t('Masalan: audioni tinglab, eshitganingizni yozing'))}`;
+  }
   if (c.key === 'writing') {
     return `<label class="mock-field-label">${t('Topshiriq matni')}</label>
       ${mockBTextarea('prompt', 5, t('O‘quvchi yozadigan topshiriq'))}
@@ -12870,7 +13092,11 @@ function mockBuilderSave() {
   const def = mockNormalizeDef(draft);
   const c = mockCat(def.category);
   let valid = false;
-  if (c.key === 'writing') valid = !!def.prompt;
+  if (c.key === 'podcasts') {
+    if (!def.mediaUrl) { toast(t('Audio yoki video yuklang'), 'error'); return; }
+    if (!String(def.script || '').trim()) { toast(t('Podcast matnini kiriting'), 'error'); return; }
+    valid = true;
+  } else if (c.key === 'writing') valid = !!def.prompt;
   else if (c.key === 'speaking') valid = def.questions.some(function (q) { return !!q.text; });
   else if (c.key === 'reading') valid = def.parts.some(function (p) { return p.questions.some(mockQuestionValid); });
   else if (c.key === 'listening') valid = def.tasks.some(function (tk) { return tk.questions.some(mockQuestionValid); });
@@ -12879,7 +13105,12 @@ function mockBuilderSave() {
   const prevDef = mockDefById(def.id);
   const beforeGroups = prevDef ? mockGroupIds(prevDef) : [];
   mockSaveDef(def);
-  const addedGroups = mockGroupIds(def).filter(function (id) { return beforeGroups.indexOf(id) < 0; });
+  let addedGroups = mockGroupIds(def).filter(function (id) { return beforeGroups.indexOf(id) < 0; });
+  /* Podcast: yangi yoki media/matni yangilangan bo'lsa — guruh o'quvchilariga xabar */
+  if (def.category === 'podcasts' && (!prevDef ||
+      String(prevDef.mediaUrl || '') !== def.mediaUrl || podcastScript(prevDef) !== def.script)) {
+    addedGroups = mockGroupIds(def);
+  }
   state.mockBuilder = null;
   state.mockTab = def.category;
   state.mockCatView = def.category;
@@ -13567,6 +13798,15 @@ document.addEventListener('input', function (e) {
   if (mb === 'group' || (ta.type || '').toLowerCase() === 'checkbox') return;
   if (ta.tagName && ta.tagName.toLowerCase() === 'textarea') autoGrowTextarea(ta);
   if (mb && state.mockBuilder) { mockBSet(mb, String(ta.value || '')); return; }
+  if (ta.id === 'podcast-text') {
+    const val = String(ta.value || '');
+    if (state.mockRun) state.mockRun.text = val;
+    state.podcastDrafts = state.podcastDrafts || {};
+    if (state.mockRun && state.mockRun.defId) state.podcastDrafts[state.mockRun.defId] = val;
+    const wc = document.getElementById('pod-word-count');
+    if (wc) wc.textContent = String(mockWordCount(val));
+    return;
+  }
   if (ta.id !== 'mock-writing') return;
   if (state.mockRun) state.mockRun.text = String(ta.value || '');
   const el = document.getElementById('mock-word-count');
@@ -13584,6 +13824,7 @@ async function mockBBuilderUpload(input, path) {
     mockBSet(path, up.url);
     const namePath = input.getAttribute('data-mb-name');
     if (namePath) mockBSet(namePath, file.name || up.name || '');
+    if (path === 'mediaUrl') mockBSet('mediaType', /^video\//.test(String(file.type || '')) ? 'video' : 'audio');
     render();
     toast(t('Fayl yuklandi'));
   } catch (err) {
@@ -14109,6 +14350,20 @@ document.addEventListener('click', function (e) {
     'mock-pick': function () { mockPick(btn.getAttribute('data-mq'), btn.getAttribute('data-mopt')); },
     'mock-submit': function () { mockSubmitRun(); },
     'mock-play': function () { mockPlayListening(btn.getAttribute('data-aid')); },
+    'pod-skip': function () {
+      const el = document.getElementById('pod-media');
+      if (!el) return;
+      const sec = Number(btn.getAttribute('data-sec')) || 0;
+      const dur = Number(el.duration);
+      const next = (Number(el.currentTime) || 0) + sec;
+      try { el.currentTime = Math.max(0, isFinite(dur) && dur > 0 ? Math.min(dur, next) : next); } catch (e) { /* ijro etilmayapti */ }
+    },
+    'pod-speed': function () {
+      const rate = Number(btn.getAttribute('data-rate')) || 1;
+      const el = document.getElementById('pod-media');
+      if (el) { try { el.playbackRate = rate; } catch (e) { /* ijro etilmayapti */ } }
+      $$('#pod-speeds .pod-speed').forEach(function (b) { b.classList.toggle('is-active', b === btn); });
+    },
     'mock-script': function () {
       const el = document.getElementById('mock-script');
       if (el) el.hidden = !el.hidden;

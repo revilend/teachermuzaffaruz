@@ -1060,7 +1060,7 @@ check(text().includes('Jasur Karimov'), "guruh turi: Jasur qayta kirdi (keyingi 
 forceNav('home');
 check(!!q('[data-act="student-view"][data-view="mock"]'), 'mock: kabinetda “Mock testlar” kartasi bor');
 openStudentView('mock');
-check(qa('[data-act="mock-cat-open"]').length === 6, 'mock: o‘quvchida 6 ta kategoriya kartasi');
+check(qa('[data-act="mock-cat-open"]').length === 7, 'mock: o‘quvchida 7 ta kategoriya kartasi (Podcasts bilan)');
 click('[data-act="mock-cat-open"][data-cat="reading"]');
 check(qa('[data-act="mock-start"]').length === 0 && text().includes('biriktirilmagan'),
   'mock: biriktirilgan test yo‘q — bo‘sh holat ko‘rinadi');
@@ -1108,7 +1108,7 @@ win.__mock.saveDef({
 }, true);
 closeStudentView();
 openStudentView('mock');
-check(qa('[data-act="mock-cat-open"]').length === 6, 'mock: 6 kartali grid o‘quvchida ham bir xil');
+check(qa('[data-act="mock-cat-open"]').length === 7, 'mock: 7 kartali grid o‘quvchida ham bir xil');
 click('[data-act="mock-cat-open"][data-cat="reading"]');
 check(qa('[data-act="mock-start"]').length === 1, 'mock: reading bo‘limida faqat biriktirilgan test');
 check(!!q('.mock-start-btn') && text().includes('Boshlash'), 'mock: yashil “Boshlash” tugmasi');
@@ -1231,6 +1231,37 @@ check(qa('.mock-rev.is-ok').length === 3,
   'mock listening: qavsdagi so‘z ham, qavsdan tashqaridagi so‘z ham alohida to‘g‘ri deb qabul qilindi');
 clickAct('mock-home');
 click('[data-act="mock-cat-back"]');
+
+/* --- Podcasts: audio/video + matn — so'zma-so'z avtomatik tekshirish --- */
+win.__mock.saveDef({
+  id: 'md_pod', title: 'Daily Podcast 1', category: 'podcasts', groupIds: ['g2'],
+  mediaUrl: 'https://pub-836df3817ab64cee9075b55d51fe6061.r2.dev/mock/podcasts/demo.mp3',
+  mediaName: 'demo.mp3', mediaType: 'audio',
+  script: 'My name is Aziz and I live in Tashkent with my family.',
+  instruction: 'Listen and write what you hear.'
+}, true);
+openStudentView('mock');
+click('[data-act="mock-cat-open"][data-cat="podcasts"]');
+check(qa('.pod-name-card').length === 1 && text().includes('Daily Podcast 1'),
+  'mock podcasts: bo‘limda faqat podcast nomi turadi');
+check(!q('.mock-stu-meta') && qa('[data-act="mock-start"]').length === 1,
+  'mock podcasts: nom kartasidan boshqa ma’lumot ko‘rinmaydi');
+click('.pod-name-card');
+check(!!q('#podcast-text') && !!q('#pod-media') && qa('[data-act="pod-skip"]').length === 2,
+  'mock podcasts: nomga bosilganda audio pleyer va matn maydoni ochiladi');
+check(qa('[data-act="pod-speed"]').length === 6,
+  'mock podcasts: tezlik sozlamalari (0.5×–2×) mavjud');
+check(q('#pod-media').hasAttribute('controls'),
+  'mock podcasts: to‘xtatish/seek uchun pleyer boshqaruvi saqlangan');
+setVal('#podcast-text', 'My name is Azzi and I live in Tashkent my family.');
+clickAct('mock-submit');
+check(!!q('.mock-score-card') && qa('.pod-diff .pod-word.is-wrong').length === 1 &&
+  !!q('.pod-diff .pod-fix') && qa('.pod-diff .pod-miss').length === 1,
+  'mock podcasts: xato so‘z qizil chiziq + yashil to‘g‘ri so‘z, tushirilgan so‘z qizil kiritildi');
+check(text().includes('10/12') && (q('.pod-fix') || {}).textContent === 'Aziz' &&
+  (q('.pod-miss') || {}).textContent === 'with',
+  'mock podcasts: harflar bo‘yicha aniq solishtirish va natija (10/12)');
+clickAct('mock-home');
 closeStudentView();
 
 /* ================= 11. O'QUVCHI: PAROLNI O'ZGARTIRISH ================= */
@@ -1282,13 +1313,31 @@ await loginAs('m_amirov', '123');
 check(!!q('.quick-grid [data-act="nav"][data-screen="mock"]'),
   'mock ustoz: TEZ AMALLAR ichida “Mock testlar” tezkor kartasi');
 forceNav('mock');
-check(qa('[data-act="mock-cat-open"]').length === 6, 'mock ustoz: 6 ta kategoriya kartasi');
+check(qa('[data-act="mock-cat-open"]').length === 7, 'mock ustoz: 7 ta kategoriya kartasi (Podcasts bilan)');
 check(!!q('.mock-results') && qa('.mock-results .mock-person').length >= 3,
   'mock ustoz: natijalar bitta karta ro‘yxatida (jadval/ustun emas)');
+check(text().includes('Daily Podcast 1'),
+  'mock ustoz: podcast natijasi o‘qituvchi panelidagi ro‘yxatda ko‘rinadi');
 check(text().includes('Jasur Karimov') && /4\/4/.test(text()) && !!q('.mock-results .mock-cefr'),
   'mock ustoz: o‘quvchi natijasi, ball va CEFR');
 check(!!q('.mock-results [data-act="mock-student-open"]'),
   'mock ustoz: o‘quvchi ismi bosiladigan tugma');
+/* Podcasts builder: audio/video yuklash + tagida matn kiritish qismi */
+click('[data-act="mock-cat-open"][data-cat="podcasts"]');
+check(!!q('[data-act="mock-add"]') && text().includes("Yangi Podcast qo'shish"),
+  'mock ustoz: podcasts bo‘limida “Yangi Podcast qo‘shish” tugmasi');
+clickAct('mock-add');
+check(!!q('input[type="file"][data-mb-file="mediaUrl"]') && !!q('textarea[data-mb="script"]'),
+  'mock ustoz: podcast uchun audio/video tanlash va tagida matn maydoni bor');
+check((q('input[type="file"][data-mb-file="mediaUrl"]') || {}).accept.indexOf('video') >= 0,
+  'mock ustoz: podcast audio ham, video ham qabul qiladi');
+setVal('[data-mb="title"]', 'Podcast test');
+clickAct('mock-save');
+check(q('#toast').textContent.includes('Audio yoki video yuklang'),
+  'mock ustoz: media yuklanmasa podcast saqlanmaydi (ogohlantirish)');
+clickAct('mock-b-cancel');
+click('[data-act="mock-cat-back"]');
+
 click('[data-act="mock-cat-open"][data-cat="reading"]');
 check(!!q('[data-act="mock-add"]') && text().includes("Yangi Mock qo'shish"),
   'mock ustoz: “+ Yangi Mock qo‘shish” tugmasi');
