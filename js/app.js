@@ -4376,7 +4376,36 @@ Object.assign(I18N_EN, {
     'You did not return to the camera within 3 seconds. Speaking cancelled — please record again.',
   'O\'quv jarayoni': 'Learning',
   'Baholash': 'Grading',
-  'Boshqaruv': 'Management'
+  'Boshqaruv': 'Management',
+  /* Podcasts — faqat statik UI matnlari; ustoz/o'quvchi matni tegilmaydi */
+  'Audio/video va matn': 'Audio/video and text',
+  'Podcast matni': 'Podcast text',
+  'Podcast matni (o‘quvchi matni shu bilan solishtiriladi)': 'Podcast text (student text is compared with this)',
+  'Podcastning to‘liq matnini kiriting': 'Enter the full podcast text',
+  "Yangi Podcast qo'shish": 'Add New Podcast',
+  'Audio yoki video (R2)': 'Audio or video (R2)',
+  'Audio yoki video yuklang': 'Upload audio or video',
+  'Audio yoki video yuklanmagan': 'No audio or video uploaded',
+  'Podcast matnini kiriting': 'Enter the podcast text',
+  'Masalan: audioni tinglab, eshitganingizni yozing': 'e.g. listen to the audio and write what you hear',
+  'Eshitganingizni shu yerda yozing...': 'Type what you hear here...',
+  'So‘z soni': 'Word count',
+  'Saqlash va tekshirish': 'Save and check',
+  'Matningiz o‘qituvchi matni bilan so‘zma-so‘z solishtiriladi — xatolar avtomatik ko‘rsatiladi.':
+    'Your text is compared word by word with the teacher’s text — mistakes are shown automatically.',
+  'Avval eshitganlaringizni yozing': 'First write what you heard',
+  'Podcast yuborildi — matn avtomatik tekshirildi': 'Podcast submitted — text checked automatically',
+  'To‘g‘ri so‘zlar': 'Correct words',
+  'Xato so‘zlar': 'Wrong words',
+  'Tushirib qoldirilgan': 'Missing words',
+  'Ortiqcha so‘zlar': 'Extra words',
+  'Tekshirilgan matn': 'Checked text',
+  'O‘quvchi matni': 'Student text',
+  'O‘qituvchi matni': 'Teacher text',
+  'Matn kiritilmagan': 'No text entered',
+  'Tezlik': 'Speed',
+  'Bu bo‘limda sizga hali podcast biriktirilmagan. Ustoz podcast bergach shu yerda ko‘rinadi.':
+    'No podcast has been assigned to you in this section yet. It will appear here once your teacher assigns one.'
 });
 
 function t(s) {
@@ -11096,11 +11125,12 @@ async function saveProfileContact() {
 const MOCK_CATS = [
   { key: 'reading', label: 'Reading', desc: 'Matn va savollar', icon: 'bookOpen', kind: 'mcq' },
   { key: 'listening', label: 'Listening', desc: 'Audio va savollar', icon: 'headphones', kind: 'mcq' },
-  { key: 'podcasts', label: 'Podcasts', desc: 'Audio/video va matn', icon: 'mic', kind: 'podcast' },
   { key: 'writing', label: 'Writing', desc: 'Insho yozish', icon: 'fileText', kind: 'write' },
   { key: 'speaking', label: 'Speaking', desc: 'Video javoblar', icon: 'mic', kind: 'speak' },
   { key: 'grammar', label: 'Grammar', desc: 'Grammatika testi', icon: 'clipboardCheck', kind: 'mcq' },
-  { key: 'vocabulary', label: 'Vocabulary', desc: "Lug'at testi", icon: 'star', kind: 'mcq' }
+  { key: 'vocabulary', label: 'Vocabulary', desc: "Lug'at testi", icon: 'star', kind: 'mcq' },
+  /* Podcasts har doim eng so'ngida — Vocabulary bo'limidan keyin */
+  { key: 'podcasts', label: 'Podcasts', desc: 'Audio/video va matn', icon: 'mic', kind: 'podcast' }
 ];
 const MOCK_CEFR_LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 

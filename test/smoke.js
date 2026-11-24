@@ -1061,6 +1061,8 @@ forceNav('home');
 check(!!q('[data-act="student-view"][data-view="mock"]'), 'mock: kabinetda “Mock testlar” kartasi bor');
 openStudentView('mock');
 check(qa('[data-act="mock-cat-open"]').length === 7, 'mock: o‘quvchida 7 ta kategoriya kartasi (Podcasts bilan)');
+check(qa('[data-act="mock-cat-open"]')[6].getAttribute('data-cat') === 'podcasts',
+  'mock: Podcasts bo‘limi eng so‘ngida — Vocabulary’dan keyin turadi');
 click('[data-act="mock-cat-open"][data-cat="reading"]');
 check(qa('[data-act="mock-start"]').length === 0 && text().includes('biriktirilmagan'),
   'mock: biriktirilgan test yo‘q — bo‘sh holat ko‘rinadi');
@@ -1261,7 +1263,21 @@ check(!!q('.mock-score-card') && qa('.pod-diff .pod-word.is-wrong').length === 1
 check(text().includes('10/12') && (q('.pod-fix') || {}).textContent === 'Aziz' &&
   (q('.pod-miss') || {}).textContent === 'with',
   'mock podcasts: harflar bo‘yicha aniq solishtirish va natija (10/12)');
+/* EN rejim: faqat UI tarjima qilinadi, ustoz/o'quvchi matni o‘z holida qoladi */
+clickAct('toggle-lang');
+check(qa('.pod-label').map(function (el) { return el.textContent; }).join('|') === 'Checked text|Student text' &&
+  /Correct words/.test(text()) && /Teacher text/.test(text()) && !/Tekshirilgan matn/.test(text()),
+  'mock podcasts EN: natija yorliqlari inglizchaga tarjima qilindi');
+check((q('.pod-student-text') || {}).textContent ===
+  'My name is Azzi and I live in Tashkent my family.' &&
+  String((q('.pod-original div') || {}).textContent)
+    .indexOf('My name is Aziz and I live in Tashkent with my family.') >= 0,
+  'mock podcasts EN: o‘quvchi va o‘qituvchi matnlari tarjimasiz, original holida saqlanadi');
 clickAct('mock-home');
+if (q('[data-act="mock-cat-back"]')) clickAct('mock-cat-back');
+check((q('[data-act="mock-cat-open"][data-cat="podcasts"] .mock-cat-desc') || {}).textContent === 'Audio/video and text',
+  'mock podcasts EN: kategoriya tavsifi ham inglizchada');
+clickAct('toggle-lang');
 closeStudentView();
 
 /* ================= 11. O'QUVCHI: PAROLNI O'ZGARTIRISH ================= */
@@ -1336,6 +1352,23 @@ clickAct('mock-save');
 check(q('#toast').textContent.includes('Audio yoki video yuklang'),
   'mock ustoz: media yuklanmasa podcast saqlanmaydi (ogohlantirish)');
 clickAct('mock-b-cancel');
+/* Ustoz mavjud podcastni tahrirlay oladi: nom, audio/video va matn */
+check(!!q('[data-act="mock-edit"][data-id="md_pod"]'),
+  'mock ustoz: podcast ro‘yxatida “Tahrirlash” tugmasi bor');
+click('[data-act="mock-edit"][data-id="md_pod"]');
+check((q('[data-mb="title"]') || {}).value === 'Daily Podcast 1' &&
+  (q('[data-mb="script"]') || {}).value === 'My name is Aziz and I live in Tashkent with my family.' &&
+  !!q('.mock-build audio[src]'),
+  'mock ustoz: podcast tahrirlash formasi nom, media va matn bilan to‘ldirilgan');
+setVal('[data-mb="title"]', 'Daily Podcast 1 — edited');
+setVal('[data-mb="script"]', 'My name is Aziz and I live in Tashkent with my family.');
+clickAct('mock-save');
+const editedPod = (JSON.parse(win.localStorage.getItem('et_mock_defs')) || [])
+  .filter(d => d.id === 'md_pod')[0];
+check(!!editedPod && editedPod.title === 'Daily Podcast 1 — edited' &&
+  editedPod.script === 'My name is Aziz and I live in Tashkent with my family.' &&
+  !!editedPod.mediaUrl,
+  'mock ustoz: podcast tahriri saqlandi (nom va matn yangilandi, media saqlandi)');
 click('[data-act="mock-cat-back"]');
 
 click('[data-act="mock-cat-open"][data-cat="reading"]');
