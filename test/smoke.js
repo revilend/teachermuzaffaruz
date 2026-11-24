@@ -1237,6 +1237,17 @@ closeStudentView();
 click('[data-act="nav"][data-screen="profile"]');
 check(text().includes('Parolni o\'zgartirish'), 'student: profilda parol o\'zgartirish tugmasi');
 check(!!q('.list-row .login-val') && !q('.list-row code'), "login: profilda login oddiy matn — kod/badge yo'q");
+check(qa('[data-act="profile-open"]').length >= 3,
+  "profil: sozlamalar 'Tez amallar' uslubidagi bo'lim kartalariga ajratilgan");
+check(qa('.profile-sub').length >= 3 && qa('.profile-sub[hidden]').length === qa('.profile-sub').length,
+  'profil: ma\'lumotlar bosh ko\'rinishda yashirin — faqat kartalar turadi');
+click('[data-act="profile-open"][data-section="security"]');
+check(!!q('.profile-sub:not([hidden])') && !!q('[data-act="profile-back"]'),
+  'profil: karta bosilganda ichki bo\'lim va Orqaga tugmasi ochildi');
+check(!q('.profile-tiles'), 'profil: ichki bo\'limda asosiy kartalar ko\'rinmaydi');
+clickAct('profile-back');
+check(!!q('.profile-tiles') && !q('.profile-sub:not([hidden])'),
+  'profil: Orqaga → sozlamalar kartalari qaytdi');
 clickAct('open-change-pwd');
 check(q('#modal-overlay').hidden === false, 'change: modal ochildi');
 check(!!q('#modal-sheet .login-val') && !q('#modal-sheet code'), "change: modalda login oddiy matn — monospace kod yo'q");

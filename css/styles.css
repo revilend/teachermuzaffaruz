@@ -2422,6 +2422,21 @@ html[data-theme="dark"] .hero-card.is-blue {
   box-shadow: none;
 }
 
+/* Profil: sozlamalar "Tez amallar" uslubidagi bo'lim kartalari */
+.profile-tiles { grid-auto-rows: auto; margin: 4px 0 6px; }
+.profile-tiles .quick { height: auto; min-height: 96px; }
+.profile-tiles .quick > span:not(.quick-ico) {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+  white-space: normal;
+}
+@media (min-width: 1024px) {
+  .profile-tiles { grid-template-columns: repeat(3, 1fr); grid-auto-rows: auto; }
+}
+.profile-sub { animation: profile-sub-in 0.18s var(--ease); }
+@keyframes profile-sub-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
 /* O'quvchi kabineti: sahifaning eng tagidagi eslatma (tarjima qilinmaydi) */
 /* O'qituvchi paneli: pastdagi eslatma — o'quvchidagi bilan bir xil ko'rinish */
 .student-quote,

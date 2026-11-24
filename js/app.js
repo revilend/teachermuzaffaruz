@@ -195,6 +195,7 @@ const state = {
   subDelId: null,
   studentView: '',
   groupDetail: '',
+  profileSection: '',
   webSpeakingBusy: {},
   resetCtx: null,
   authStep: 'landing',
@@ -2908,12 +2909,12 @@ function forcedLogout() {
 }
 
 /* Profil: Faol qurilmalar bloki */
-function sessionsSectionHTML() {
+function sessionsSectionHTML(withTitle) {
   const dev = detectDevice();
   const cur = getSessionId();
   const others = (Sessions.list || []).filter(function (s) { return s.id !== cur; });
   return `
-  <div class="section-title">${ico('smartphone', 15)} ${t('Faol qurilmalar')}</div>
+  ${withTitle === false ? '' : `<div class="section-title">${ico('smartphone', 15)} ${t('Faol qurilmalar')}</div>`}
   <div class="card list-card" id="sessions-card">
     <div class="list-row session-row is-current">
       <span class="session-info">
@@ -3175,6 +3176,7 @@ function mockLiveStop() {
 }
 function go(screen) {
   state.screen = screen;
+  state.profileSection = '';
   if (screen === 'mock') mockLiveStart();
   else { mockLiveStop(); state.mockTView = ''; }
   render();
@@ -7312,27 +7314,37 @@ function sendDebtorsReminder() {
 function profileScreen() {
   const u = currentUser() || {};
   const st = !isTeacher() ? linkedStudent() : null;
-  return `
-  <div class="card profile-head">
-    <div class="avatar avatar-xl avatar-gerb"><img src="logo.png" alt="Gerb" /></div>
-    <div class="profile-name">${esc(st ? st.fullName : (u.name || ''))}</div>
-    <div class="muted">${esc(u.login || '')}</div>
-    <div style="margin-top:9px">
-      <span class="role-badge ${isStaff() ? 'is-teacher' : 'is-student'}">${isTeacher() ? 'Muzaffar Amirov' : isSupport() ? 'Support teacher' : "O'quvchi"}</span>
-      ${st ? `<span class="pill" style="margin-left:6px">${esc(tClass(st.schoolClass))}</span>` : ''}
-    </div>
-  </div>
+  const roleLabel = isTeacher() ? 'Muzaffar Amirov' : isSupport() ? 'Support teacher' : t("O'quvchi");
+  const openKey = state.profileSection || '';
 
-  <div class="section-title">${t('Xavfsizlik')}</div>
+  /* Sozlamalar — "Tez amallar" kabi alohida bo'lim kartalari.
+     Har bir karta ochilganda faqat o'sha bo'lim ko'rinadi (ichki bo'lim). */
+  const tiles = [];
+  const secList = [];
+  function addSection(key, title, tone, iconName, body) {
+    tiles.push(`<button type="button" class="card quick" data-act="profile-open" data-section="${key}"><span class="quick-ico ${tone}">${ico(iconName, 20)}</span><span>${title}</span></button>`);
+    secList.push({ key: key, title: title, body: body });
+  }
+  function secHTML(s, hidden) {
+    return `<section class="profile-sub" data-section="${s.key}"${hidden ? ' hidden' : ''}>
+  <div class="back-row">
+    <button type="button" class="btn btn-xs ghost" data-act="profile-back">${ico('arrowLeft', 14)} ${t('Orqaga')}</button>
+    <span class="back-title">${s.title}</span>
+  </div>
+  ${s.body}
+</section>`;
+  }
+
+  addSection('security', t('Xavfsizlik'), 'tint-indigo', 'key', `
   <div class="card list-card">
     <div class="list-row"><span>Login</span><span class="login-val">${esc(u.login || '')}</span></div>
     <div class="list-row"><span>${t('Parol')}</span><span class="muted">••••</span></div>
-    <div class="list-row"><span>${t("Ko'rinish")}</span><span class="muted">${isTeacher() ? 'Muzaffar Amirov' : isSupport() ? 'Support teacher' : t("O'quvchi")}</span></div>
+    <div class="list-row"><span>${t("Ko'rinish")}</span><span class="muted">${roleLabel}</span></div>
   </div>
-  <button type="button" class="btn btn-ghost btn-block" data-act="open-change-pwd">${ico('key', 16)} ${t("Parolni o'zgartirish")}</button>
+  <button type="button" class="btn btn-ghost btn-block" data-act="open-change-pwd">${ico('key', 16)} ${t("Parolni o'zgartirish")}</button>`);
 
-  ${(!isTeacher() && st) ? `
-  <div class="section-title">${ico('smartphone', 15)} ${t("Aloqa va tiklash ma'lumotlari")}</div>
+  if (!isTeacher() && st) {
+    addSection('contact', t("Aloqa va tiklash ma'lumotlari"), 'tint-sky', 'smartphone', `
   <div class="card">
     <label class="field-label" for="st-phone">${t('Telefon raqam')}</label>
     <input class="input" id="st-phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="+998 90 123 45 67" value="${esc(st.phone || '')}" />
@@ -7342,10 +7354,11 @@ function profileScreen() {
     ${(st.email && !st.emailVerified) ? `<button type="button" class="btn btn-ghost btn-block" data-act="resend-verify-existing" style="margin-top:6px">${ico('mail', 14)} ${t('Kod yuborish')}</button>` : ''}
     <div class="muted small" style="margin-top:6px">${t("Parolni tiklash kodi shu telefon (Telegram) yoki Gmail manzilga yuboriladi.")}</div>
     <button type="button" class="btn btn-primary btn-block" data-act="save-student-contact" style="margin-top:8px">${ico('save', 14)} ${t('Saqlash')}</button>
-  </div>` : ''}
+  </div>`);
+  }
 
-  ${isTeacher() ? `
-  <div class="section-title">${ico('lock', 15)} ${t('2FA va tiklash sozlamalari')}</div>
+  if (isTeacher()) {
+    addSection('2fa', t('2FA va tiklash sozlamalari'), 'tint-purple', 'lock', `
   <div class="card">
     <div class="muted small" style="margin-bottom:8px">${t("Kirishdagi 2 bosqichli kod va parolni tiklash kodi shu manzillarga yuboriladi.")}</div>
     <label class="field-label" for="tc-email">${t('Ustoz Gmail manzili')}</label>
@@ -7358,10 +7371,9 @@ function profileScreen() {
     <div class="muted small" style="margin-top:12px">${t('Ishonchli qurilmalar')}: <b>${adminTrusted.list.length}</b> ·
       ${t("bu qurilma")} ${trustedToken() ? ico('checkCircle', 14) + ' ' + t('ishonchli') : t('yangi')}</div>
     <button type="button" class="btn btn-ghost btn-block" data-act="clear-trusted" style="margin-top:6px">${ico('unlock', 14)} ${t('Ishonchli qurilmalarni tozalash')}</button>
-  </div>` : ''}
+  </div>`);
 
-  ${isTeacher() ? `
-  <div class="section-title">${t("Ma'lumotlar Bazasi Zaxirasi")}</div>
+    addSection('backup', t("Ma'lumotlar Bazasi Zaxirasi"), 'tint-emerald', 'download', `
   <div class="card backup-card">
     <div class="muted small">${t("Guruhlar, o'quvchilar, davomat, baholar, xabarlar va speaking topshiriqlari JSON faylda saqlanadi.")}</div>
     <button type="button" class="btn btn-primary btn-block" data-act="backup-dl">${ico('download', 16)} ${t('Bazani yuklab olish (Backup)')}</button>
@@ -7374,38 +7386,53 @@ function profileScreen() {
       ${CLEANUP_TABLES.map(ct => `<button type="button" class="chip-btn${(state.cleanupTable || 'grades') === ct[0] ? ' active' : ''}" data-act="cleanup-pick" data-table="${ct[0]}">${t(ct[1])}</button>`).join('')}
     </div>
     <button type="button" class="btn btn-danger btn-block" data-act="cleanup-go">${ico('brush', 16)} ${t('Tanlangan jadvalni tozalash')}</button>
-  </div>` : ''}
+  </div>`);
 
-  
-  ${isTeacher() ? `
-  <div class="section-title">${ico('creditCard', 15)} To\'lov kartasi sozlamalari</div>
+    addSection('card', t("To'lov kartasi sozlamalari"), 'tint-amber', 'creditCard', `
   <div class="card card-settings-block">
-    <div class="muted small" style="margin-bottom:8px">O\'quvchilar repetitorlik to\'lovini o\'tkazishi uchun karta raqamingiz va ism-familiyangizni kiriting:</div>
+    <div class="muted small" style="margin-bottom:8px">O'quvchilar repetitorlik to'lovini o'tkazishi uchun karta raqamingiz va ism-familiyangizni kiriting:</div>
     <label class="field-label" for="teacher-card-num">Karta raqami (16 ta raqam)</label>
     <input class="input" id="teacher-card-num" inputmode="numeric" maxlength="24" placeholder="8600 0000 0000 0000" value="${esc((store.get(K.cardSettings) || {}).number || '')}" />
     <label class="field-label" for="teacher-card-holder" style="margin-top:6px">Karta egasining ism-familiyasi</label>
     <input class="input" id="teacher-card-holder" autocapitalize="characters" placeholder="MUZAFFAR AMIROV" value="${esc((store.get(K.cardSettings) || {}).holder || '')}" />
     <button type="button" class="btn btn-primary btn-block" data-act="save-card-settings" style="margin-top:10px">${ico('save', 14)} Kartani saqlash</button>
-  </div>` : ''}
+  </div>`);
 
-  ${isTeacher() ? `
-  <div class="section-title">${ico('shield', 15)} Diagnostika</div>
+    addSection('diagnostics', t('Diagnostika'), 'tint-rose', 'shield', `
   <div class="card">
     <div class="muted small">Uyga vazifa yuklash ishlamasa: homework-media bucket public holati, Storage policy'lari va homework_submissions ustunlari shu yerda tekshiriladi.</div>
     <button type="button" class="btn btn-ghost btn-block" data-act="run-diagnostics" style="margin-top:8px">${ico('shield', 16)} Diagnostikani ishga tushirish</button>
-  </div>` : ''}
+  </div>`);
+  }
 
-  ${sessionsSectionHTML()}
+  addSection('sessions', t('Faol qurilmalar'), 'tint-teal', 'smartphone', sessionsSectionHTML(false));
 
-  <div class="section-title">${t('Maxfiylik')}</div>
+  addSection('privacy', t('Maxfiylik'), 'tint-slate', 'shield', `
   <div class="card list-card">
     <div class="list-row"><span class="muted small">${t("Bu ilova tashqi tahlil xizmatlariga ma'lumot yubormaydi.")}</span></div>
+  </div>`);
+
+  const active = openKey ? secList.filter(function (s) { return s.key === openKey; })[0] : null;
+  if (active) return secHTML(active, false);
+
+  return `
+  <div class="card profile-head">
+    <div class="avatar avatar-xl avatar-gerb"><img src="logo.png" alt="Gerb" /></div>
+    <div class="profile-name">${esc(st ? st.fullName : (u.name || ''))}</div>
+    <div class="muted">${esc(u.login || '')}</div>
+    <div style="margin-top:9px">
+      <span class="role-badge ${isStaff() ? 'is-teacher' : 'is-student'}">${isTeacher() ? 'Muzaffar Amirov' : isSupport() ? 'Support teacher' : "O'quvchi"}</span>
+      ${st ? `<span class="pill" style="margin-left:6px">${esc(tClass(st.schoolClass))}</span>` : ''}
+    </div>
   </div>
+
+  <div class="section-title">${t('Sozlamalar')}</div>
+  <div class="quick-grid profile-tiles">${tiles.join('')}</div>
+  ${secList.map(function (s) { return secHTML(s, true); }).join('')}
 
   <button type="button" class="btn btn-danger btn-block" data-act="logout">${t('Hisobdan chiqish')}</button>
   `;
 }
-
 /* ==================== MODALLAR ==================== */
 function openModal(html) {
   $('#modal-sheet').innerHTML = html;
@@ -13629,7 +13656,18 @@ document.addEventListener('click', function (e) {
       const scr = btn.getAttribute('data-screen');
       if (scr === 'homework') state.hwGroup = null;
       if (scr === 'groups') state.groupDetail = '';
+      state.profileSection = '';
       go(scr);
+    },
+    /* Profil: sozlamalar bo'limi kartasi → ichki bo'lim */
+    'profile-open': function () {
+      state.profileSection = btn.getAttribute('data-section') || '';
+      render();
+      try { window.scrollTo(0, 0); } catch (e) {}
+    },
+    'profile-back': function () {
+      state.profileSection = '';
+      render();
     },
 
     /* --- Dashboard stat kartalari (bosiladigan) --- */
