@@ -1469,9 +1469,11 @@ def _outbox_has(chat_id, needles, max_age_seconds=OUTBOX_DEDUPE_SECONDS) -> bool
     keys = [str(n) for n in (needles or []) if str(n or "").strip()]
     if not keys:
         return False
+    # telegram_outbox.chat_id bigint: ustoz uchun "0" sentineli ishlatiladi
+    chat_key = 0 if str(chat_id).strip().upper() in ("ADMIN", "0") else str(chat_id)
     try:
         rows = (supabase.table("telegram_outbox").select("text, created_at")
-                .eq("chat_id", str(chat_id)).order("id", desc=True).limit(30).execute().data or [])
+                .eq("chat_id", chat_key).order("id", desc=True).limit(30).execute().data or [])
     except Exception as e:
         logging.warning(f"outbox dedupe {chat_id}: {e}")
         return False
@@ -2745,8 +2747,8 @@ async def outbox_tick() -> int:
 
         try:
             raw_chat = str(chat_id).strip()
-            if raw_chat.upper() == "ADMIN":
-                # Sayt 'ADMIN' manziliga yozgan xabarlar BARCHA ustozlarga boradi
+            if raw_chat.upper() == "ADMIN" or raw_chat == "0":
+                # Ustoz uchun "0" sentineli (chat_id ustuni bigint) — BARCHA ustozlarga boradi
                 target_ids = list(config.ADMIN_IDS)
             elif raw_chat.startswith("+") or re.fullmatch(r"998\d{9}", raw_chat):
                 # Telefon ko'rinishidagi chat_id → o'quvchining ulangan Telegrami

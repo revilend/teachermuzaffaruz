@@ -2,6 +2,9 @@
 
 /* ==================== Telegram WebApp ==================== */
 const tg = (window.Telegram && window.Telegram.WebApp) || null;
+/* telegram_outbox.chat_id ustuni bigint: ustozga (admin) ketadigan xabarlar uchun
+   "0" ishlatiladi — bot uni ADMIN deb tushunadi va barcha ustoz chatlariga yuboradi. */
+const TG_ADMIN_CHAT = '0';
 if (tg) {
   try { tg.ready(); tg.expand(); } catch (e) {}
   try { tg.setHeaderColor && tg.setHeaderColor('secondary_bg_color'); } catch (e) {}
@@ -852,7 +855,7 @@ const CloudSync = (function () {
     const place = link ? `<a href="${esc(link)}">Speaking slotlari</a>` : '<b>Speaking slotlari</b>';
     const when = new Date().toLocaleString(getLang() === 'en' ? 'en-GB' : 'uz-UZ');
     return queueMessages([{
-      chat_id: 'ADMIN',
+      chat_id: TG_ADMIN_CHAT,
       student_id: p.studentDbId == null ? null : p.studentDbId,
       status: 'pending',
       text: "<b>Yangi sayt speaking videosi</b>\n\n" +
@@ -10467,7 +10470,7 @@ async function startTeacher2FA(userObj) {
     expiresAt: new Date(until).toISOString()
   });
   CloudSync.queueMessages([{
-    chat_id: 'ADMIN',
+    chat_id: TG_ADMIN_CHAT,
     text: '<b>2-bosqichli tasdiqlash</b>\nQurilma: ' + esc(dev) +
           '\nKod: <b>' + code + '</b>\nKod 3 daqiqa amal qiladi.'
   }]);
@@ -10576,7 +10579,7 @@ async function sendLoginReminder(raw) {
   if (clean.toLowerCase() === TEACHER_LOGIN) {
     login = TEACHER_LOGIN;
     name = TEACHER_NAME;
-    chat = 'ADMIN';
+    chat = TG_ADMIN_CHAT;
     mail = await teacherVerifiedEmail();
   } else {
     let row = null;
@@ -10722,7 +10725,7 @@ async function sendResetCodeWork(raw) {
 
   if (isTeacher) {
     /* Ustoz: kod ADMIN kanallariga (bot_settings.admin_email yoki config.ADMIN_EMAIL) */
-    telegramChat = 'ADMIN';
+    telegramChat = TG_ADMIN_CHAT;
     emailTo = await teacherVerifiedEmail();   /* faqat tasdiqlangan Gmail */
   } else {
     row = lookedUpRow;
@@ -11302,9 +11305,6 @@ function podcastAttemptHTML(a) {
     ${podcastStatsHTML(cmp)}
     <div class="pod-label">${t('Tekshirilgan matn')}</div>
     ${podcastDiffHTML(teacherText, studentText)}
-    <div class="pod-label">${t('O‘quvchi matni')}</div>
-    <div class="pod-student-text">${esc(studentText) || '—'}</div>
-    ${teacherText ? `<details class="pod-original"><summary>${esc(t('O‘qituvchi matni'))}</summary><div>${esc(teacherText)}</div></details>` : ''}
   </div>`;
 }
 function mockWhen(iso) {
@@ -12842,7 +12842,7 @@ async function mockNotifyTeacherResult(attempt, st) {
   const place = link ? `<a href="${esc(link)}">Mock testlar</a>` : '<b>Mock testlar</b>';
   try {
     await CloudSync.queueMessages([{
-      chat_id: 'ADMIN',
+      chat_id: TG_ADMIN_CHAT,
       student_id: student && student.dbId != null ? student.dbId : null,
       status: 'pending',
       text: '📝 <b>YANGI MOCK NATIJASI!</b>\n\n' +

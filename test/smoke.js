@@ -435,10 +435,10 @@ await win.__cloud.queueWebSpeakingNotice({ studentDbId: 5 });
 const webNotice = (cloudStub.db.telegram_outbox || []).slice(outboxBeforeWebNotice)
   .filter(r => /Yangi sayt speaking videosi/.test(String(r.text || '')))[0] || {};
 const webNoticeText = String(webNotice.text || '');
-check(String(webNotice.chat_id || '') === 'ADMIN' &&
+check(String(webNotice.chat_id || '') === '0' &&
   /O'quvchi: <b>Malika Yusupova<\/b>/.test(webNoticeText) &&
   /Guruh: <b>IELTS Band 7\.0<\/b>/.test(webNoticeText),
-  'web speaking: telegram_outbox ADMIN ga o‘quvchi va guruh nomi bilan yozildi');
+  'web speaking: telegram_outbox ustoz manziliga (0) o‘quvchi va guruh nomi bilan yozildi');
 check(/Video saytda saqlandi/.test(webNoticeText) &&
   /<a href="http:\/\/localhost:3000\/">Speaking slotlari<\/a>/.test(webNoticeText) &&
   /ko'ring va baholang/.test(webNoticeText),
@@ -1263,16 +1263,15 @@ check(!!q('.mock-score-card') && qa('.pod-diff .pod-word.is-wrong').length === 1
 check(text().includes('10/12') && (q('.pod-fix') || {}).textContent === 'Aziz' &&
   (q('.pod-miss') || {}).textContent === 'with',
   'mock podcasts: harflar bo‘yicha aniq solishtirish va natija (10/12)');
-/* EN rejim: faqat UI tarjima qilinadi, ustoz/o'quvchi matni o‘z holida qoladi */
+check(!!q('.pod-diff') && !q('.pod-student-text') && !q('.pod-original'),
+  'mock podcasts: faqat tekshirilgan matn qoladi (o‘quvchi/o‘qituvchi matni alohida emas)');
+/* EN rejim: faqat UI tarjima qilinadi, tekshirilgan matn o‘z holida qoladi */
 clickAct('toggle-lang');
-check(qa('.pod-label').map(function (el) { return el.textContent; }).join('|') === 'Checked text|Student text' &&
-  /Correct words/.test(text()) && /Teacher text/.test(text()) && !/Tekshirilgan matn/.test(text()),
+check(qa('.pod-label').map(function (el) { return el.textContent; }).join('|') === 'Checked text' &&
+  /Correct words/.test(text()) && !/Teacher text/.test(text()) && !/Tekshirilgan matn/.test(text()),
   'mock podcasts EN: natija yorliqlari inglizchaga tarjima qilindi');
-check((q('.pod-student-text') || {}).textContent ===
-  'My name is Azzi and I live in Tashkent my family.' &&
-  String((q('.pod-original div') || {}).textContent)
-    .indexOf('My name is Aziz and I live in Tashkent with my family.') >= 0,
-  'mock podcasts EN: o‘quvchi va o‘qituvchi matnlari tarjimasiz, original holida saqlanadi');
+check(!q('.pod-student-text') && !q('.pod-original'),
+  'mock podcasts EN: o‘quvchi va o‘qituvchi matni alohida ko‘rsatilmaydi');
 clickAct('mock-home');
 if (q('[data-act="mock-cat-back"]')) clickAct('mock-cat-back');
 check((q('[data-act="mock-cat-open"][data-cat="podcasts"] .mock-cat-desc') || {}).textContent === 'Audio/video and text',
@@ -3368,9 +3367,9 @@ await (async () => {
   check(!!tf && /^\d{6}$/.test(String(tf.code)), '2fa: 6 xonali kod auth_codes ga yozildi');
   check(!JSON.parse(win.localStorage.getItem('et_session') || 'null'),
     "2fa: kod tasdiqlanmaguncha sessiya yaratilmaydi");
-  check((cloudStub.db.telegram_outbox || []).some(r => String(r.chat_id) === 'ADMIN' &&
+  check((cloudStub.db.telegram_outbox || []).some(r => String(r.chat_id) === '0' &&
       String(r.text || '').includes(String(tf.code))),
-    '2fa: kod telegram_outbox (ADMIN) ga qo‘yildi');
+    '2fa: kod telegram_outbox (ustoz manzili 0) ga qo‘yildi');
   check((cloudStub.db.email_outbox || []).some(r => String(r.to_email) === 'ustoz@test.uz' &&
       String(r.body_html || '').includes(String(tf.code))),
     '2fa: kod faqat tasdiqlangan ustoz Gmailiga (email_outbox) qo‘yildi');
@@ -3587,9 +3586,9 @@ await (async () => {
   check(await until(() => q('#fp-step2') && q('#fp-step2').hidden === false, 3000),
     'reset: ustoz uchun ham kod yuboriladi');
   const tpr = (cloudStub.db.auth_codes || []).filter(r => r.purpose === 'reset' && r.student_id == null).pop();
-  check(!!tpr && (cloudStub.db.telegram_outbox || []).some(r => String(r.chat_id) === 'ADMIN' &&
+  check(!!tpr && (cloudStub.db.telegram_outbox || []).some(r => String(r.chat_id) === '0' &&
       String(r.text || '').includes(String(tpr.code))),
-    'reset: ustoz kodi telegram_outbox (ADMIN) ga qo‘yildi');
+    'reset: ustoz kodi telegram_outbox (ustoz manzili 0) ga qo‘yildi');
   check((cloudStub.db.email_outbox || []).some(r => String(r.to_email) === 'ustoz@test.uz' &&
       String(r.body_html || '').includes(String(tpr.code))),
     'reset: ustoz kodi faqat tasdiqlangan Gmailga qo‘yildi');
