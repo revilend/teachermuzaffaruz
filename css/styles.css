@@ -2410,18 +2410,6 @@ html[data-theme="dark"] .auth-card-ico { background: rgba(99, 102, 241, 0.18); }
   .student-action { min-height: 112px; padding: 16px; }
 }
 
-/* Yuqoridagi ma'lumot kartasi — och ko'k fon (o'quvchi va o'qituvchi paneli) */
-.hero-card.is-blue {
-  background: linear-gradient(135deg, #cfe4ff 0%, #e6f1ff 100%);
-  border: 1px solid rgba(37, 99, 235, 0.28);
-  box-shadow: 0 10px 26px rgba(37, 99, 235, 0.14);
-}
-html[data-theme="dark"] .hero-card.is-blue {
-  background: linear-gradient(135deg, rgba(37, 99, 235, 0.32) 0%, rgba(59, 130, 246, 0.18) 100%);
-  border-color: rgba(96, 165, 250, 0.34);
-  box-shadow: none;
-}
-
 /* Profil: sozlamalar "Tez amallar" uslubidagi bo'lim kartalari */
 .profile-tiles { grid-auto-rows: auto; margin: 4px 0 6px; }
 .profile-tiles .quick { height: auto; min-height: 96px; }

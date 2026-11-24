@@ -5945,7 +5945,7 @@ function teacherHome() {
   const name = u.name || TEACHER_NAME;
 
   return `
-  <section class="card hero-card is-blue">
+  <section class="card hero-card">
     <div class="greet-main">
       <div class="avatar avatar-lg">${esc(initials(name))}</div>
       <div class="col">
@@ -6268,7 +6268,7 @@ function studentPortal() {
   </div>`;
 
   return `
-  <section class="card hero-card is-blue">
+  <section class="card hero-card">
     <div class="portal-head">
       <div class="avatar avatar-lg">${esc(initials(st.fullName))}</div>
       <div class="col">
