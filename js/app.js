@@ -4427,7 +4427,7 @@ const I18N_SKIP_SEL = '.s-name, .profile-name, .login-val, .brand, ' +
   '.mock-feedback, .mock-original, .mock-multiline, .mock-video-q, .mock-video-meta, .mock-file-link, ' +
   '.mock-history-row b, .mock-score-title, .mock-person-test, .mock-person-name, ' +
   '.mock-person-meta, .mock-build-part-head, .mock-build-answer-row, .mock-build-izoh, ' +
-  '.mock-build-opt, .hw-desc-text, .hw-teacher-comment, .hw-sub-note';
+  '.mock-build-opt, .hw-desc-text, .hw-teacher-comment, .hw-sub-note, .student-quote';
 function i18nNorm(s) { return String(s == null ? '' : s).replace(/\s+/g, ' ').trim(); }
 /* Sonlar bilan keladigan dinamik matnlar */
 function i18nPattern(s, lang) {
@@ -5943,7 +5943,7 @@ function teacherHome() {
   const name = u.name || TEACHER_NAME;
 
   return `
-  <section class="card hero-card">
+  <section class="card hero-card is-blue">
     <div class="greet-main">
       <div class="avatar avatar-lg">${esc(initials(name))}</div>
       <div class="col">
@@ -5977,7 +5977,7 @@ function teacherHome() {
   ${supportWatchPanelHTML()}
 
   <button type="button" class="btn btn-primary btn-block" data-act="open-hw">${ico('bookOpen', 16)} Uyga vazifa berish</button>
-  <div class="muted small" style="margin-top:6px;text-align:center">${t("Berilgan vazifalar «Uyga vazifalar» bo'limida ko'rinadi.")}</div>
+  <div class="panel-note">${t("Berilgan vazifalar «Uyga vazifalar» bo'limida ko'rinadi.")}</div>
   `;
 }
 
@@ -6266,7 +6266,7 @@ function studentPortal() {
   </div>`;
 
   return `
-  <section class="card hero-card">
+  <section class="card hero-card is-blue">
     <div class="portal-head">
       <div class="avatar avatar-lg">${esc(initials(st.fullName))}</div>
       <div class="col">

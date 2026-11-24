@@ -2410,8 +2410,22 @@ html[data-theme="dark"] .auth-card-ico { background: rgba(99, 102, 241, 0.18); }
   .student-action { min-height: 112px; padding: 16px; }
 }
 
+/* Yuqoridagi ma'lumot kartasi — och ko'k fon (o'quvchi va o'qituvchi paneli) */
+.hero-card.is-blue {
+  background: #e8f1ff;
+  border-color: rgba(37, 99, 235, 0.18);
+  box-shadow: 0 10px 26px rgba(37, 99, 235, 0.10);
+}
+html[data-theme="dark"] .hero-card.is-blue {
+  background: rgba(59, 130, 246, 0.18);
+  border-color: rgba(96, 165, 250, 0.26);
+  box-shadow: none;
+}
+
 /* O'quvchi kabineti: sahifaning eng tagidagi eslatma (tarjima qilinmaydi) */
-.student-quote {
+/* O'qituvchi paneli: pastdagi eslatma — o'quvchidagi bilan bir xil ko'rinish */
+.student-quote,
+.panel-note {
   margin: 22px 0 8px;
   padding: 14px 16px;
   text-align: center;
@@ -2424,7 +2438,8 @@ html[data-theme="dark"] .auth-card-ico { background: rgba(99, 102, 241, 0.18); }
 }
 .student-quote span { display: block; }
 .student-quote-line { font-weight: 600; margin-top: 4px; }
-html[data-theme="dark"] .student-quote {
+html[data-theme="dark"] .student-quote,
+html[data-theme="dark"] .panel-note {
   color: #93c5fd;
   background: rgba(96, 165, 250, 0.14);
 }
