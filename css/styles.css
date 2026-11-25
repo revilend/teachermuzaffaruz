@@ -1184,6 +1184,26 @@ body.auth-mode .toast { bottom: calc(26px + env(safe-area-inset-bottom)); }
   border-bottom: 1px solid var(--line);
 }
 .speak-row:last-child { border-bottom: 0; }
+
+/* Speaking: slotlar va sessiyalar — tez amallardagi kabi guruhlangan setka (ustun emas) */
+.speak-slot-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 4px; }
+@media (min-width: 768px) { .speak-slot-grid { grid-template-columns: repeat(3, 1fr); gap: 12px; } }
+.speak-slot-grid .speak-row {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--card);
+  padding: 12px;
+  gap: 10px;
+}
+.speak-slot-grid .speak-row:last-child { border-bottom: 1px solid var(--line); }
+.speak-slot-grid .speak-top { flex-direction: column; align-items: flex-start; gap: 6px; }
+.speak-slot-grid .slot-who { text-align: left; min-width: 0; max-width: 100%; }
+.speak-slot-grid .speak-actions { width: 100%; }
+.speak-slot-grid .speak-actions .btn { flex: 1 1 auto; justify-content: center; }
+.speak-log-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+@media (min-width: 768px) { .speak-log-grid { grid-template-columns: repeat(4, 1fr); gap: 12px; } }
+.speak-log-card { display: flex; flex-direction: column; gap: 6px; padding: 11px 12px; }
+.speak-log-who { font-size: 12.5px; line-height: 1.35; }
 .speak-top { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
 .slot-time {
   font-size: 14.5px;

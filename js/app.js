@@ -4092,6 +4092,7 @@ const I18N_EN = {
   "Ko'zingiz 3 marta kameradan chetga qaradi. Yozuv to'xtatildi, videoni qaytadan oling.": "Your eyes looked away from the camera 3 times. Recording stopped — please record a new video.",
   "Qayta olish": "Retake",
   "Sayt videolari": "Website videos",
+  "Slotlar": "Slots",
   "Guruhlar bo'yicha": "By group",
   "Sayt videolari guruhlar bo'yicha shu yerda; bot topshiriqlari botda ko'rinadi. \"Baholash\" orqali 1–10 ball qo'yiladi, video saqlanadi, ball baholar jurnaliga tushadi va Speaking qarzi 1 ga kamayadi. Video faqat \"O'chirish\" tasdiqlanganda R2 va bazadan o'chadi.": "Website videos appear here grouped by group; bot submissions stay in the bot. Grade 1–10, the video is kept, the score goes to the gradebook and the Speaking debt drops by one. A video is removed from R2 and the database only after the teacher confirms Delete.",
   "yangi speaking videosi": "new speaking video",
@@ -8880,14 +8881,14 @@ function speakingScreen() {
     <input class="input" id="sp-date" type="date" value="${esc(state.speakDate)}" />
   </div>
 
-  <div class="card" style="padding-top:4px;padding-bottom:4px">
-    ${list.length ? list.map(speakRowHTML).join('') : emptyState("Bu sanada slot yo'q — 'Slot' tugmasini bosing")}
-  </div>
+  <div class="quick-group-title">${ico('clock', 13)} ${t('Slotlar')}</div>
+  ${list.length
+    ? `<div class="speak-slot-grid">${list.map(speakRowHTML).join('')}</div>`
+    : emptyState("Bu sanada slot yo'q — 'Slot' tugmasini bosing")}
 
   ${speakingLogHTML()}
 
-  <div class="section-title">${ico('video', 15)} ${t('Speaking slotlari')} — ${t('Sayt videolari')}</div>
-  <div class="muted small" style="margin:-4px 0 8px">${t('Speaking topshiriqlari (Inbox)')} · ${t("Guruhlar bo'yicha")}</div>
+  <div class="quick-group-title">${ico('video', 13)} ${t('Sayt videolari')} · ${t('Speaking topshiriqlari (Inbox)')}</div>
   <div class="card">
     ${renderTgInbox()}
   </div>
@@ -8908,11 +8909,11 @@ function speakingLogHTML() {
   const byId = {};
   getStudents().forEach(s => { byId[s.id] = s; });
   return `
-  <div class="section-title">Speaking sessiyalar jurnali</div>
-  <div class="card">
+  <div class="quick-group-title">${ico('checkCircle', 13)} Speaking sessiyalar jurnali</div>
+  <div class="speak-log-grid">
     ${log.map(e => `
-      <div class="row between" style="padding:7px 0;border-bottom:1px solid var(--line)">
-        <span class="muted small">${e.date ? fmtDM(e.date) : '—'} • ${e.sid && byId[e.sid] ? esc(byId[e.sid].fullName) : '—'}</span>
+      <div class="card speak-log-card">
+        <span class="speak-log-who">${e.date ? fmtDM(e.date) : '—'} • ${e.sid && byId[e.sid] ? esc(byId[e.sid].fullName) : '—'}</span>
         <span class="chip-class">${Number(e.score) || 0}/10</span>
       </div>`).join('')}
   </div>`;
