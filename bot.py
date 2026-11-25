@@ -9,7 +9,7 @@ import re
 import smtplib
 import ssl
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 import aiohttp
 from aiohttp import web
@@ -1186,6 +1186,212 @@ async def homework_watcher():
             else:
                 logging.warning(f"homework watcher: {e}")
         await asyncio.sleep(5)
+
+
+# ============================================================
+# Avtomatik eslatmalar (Toshkent vaqti, UTC+5)
+#   1) Uyga vazifa eslatmasi — muddatdan 1 kun oldin, 19:00 da
+#      (maktab ham, repetitorlik ham)
+#   2) To'lov eslatmasi — har Juma 00:00 da, faqat repetitorlik
+#      guruhlaridagi qarzdorlarga
+# ============================================================
+REMINDER_TZ = timezone(timedelta(hours=5))   # Asia/Tashkent
+HW_REMINDER_HOUR = 19                        # muddatdan 1 kun oldin
+PAY_REMINDER_WEEKDAY = 4                     # Juma (dushanba = 0)
+PAY_REMINDER_HOUR = 0                        # 00:00
+REMINDER_TICK_SECONDS = 20
+
+# Shu jarayonda yuborilgan/belgilangan eslatma kalitlari (takror so'rov bo'lmasin)
+_reminder_sent: set = set()
+
+HW_REMINDER_TEXT = (
+    "⏰ <b>Uyga vazifa eslatmasi</b>\n"
+    "Guruh: {group_name}\n"
+    "Mavzu: {title}\n"
+    "Vazifa: {description}\n"
+    "Muddat: {due_date} (ertaga)\n"
+    "Vazifani ilovada topshirishni unutmang!"
+)
+
+PAY_REMINDER_TEXT = (
+    "💳 <b>To'lov eslatmasi</b>\n"
+    "Guruh: {group_name}\n"
+    "Oylik to'lov: {fee} so'm\n"
+    "Qarzingiz: {debt} so'm\n"
+    "Iltimos, to'lovni amalga oshiring. Rahmat!"
+)
+
+
+def reminder_now() -> datetime:
+    """Hozirgi Toshkent vaqti."""
+    return datetime.now(REMINDER_TZ)
+
+
+def _is_tutoring_group(row: dict) -> bool:
+    """Repetitorlik guruhi: group_type faqat 'school' bo'lsa maktab.
+
+    Saytdagi groupTypeOf() bilan bir xil mantiq — maydoni yo'q eski guruhlar
+    repetitorlik hisoblanadi.
+    """
+    return str((row or {}).get("group_type") or "tutoring").strip().lower() != "school"
+
+
+def _fmt_date(value) -> str:
+    """2026-12-01 → '01.12.2026' (boshqa format o'zgarmaydi)."""
+    s = str(value or "").strip()[:10]
+    m = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", s)
+    return f"{m.group(3)}.{m.group(2)}.{m.group(1)}" if m else (s or "—")
+
+
+def _money(value) -> str:
+    """300000 → '300 000'."""
+    try:
+        return f"{int(float(value or 0)):,}".replace(",", " ")
+    except (TypeError, ValueError):
+        return "0"
+
+
+def _reminder_seen(key: str) -> bool:
+    """Eslatma avval yuborilganmi (jarayon xotirasi + bot_settings)."""
+    if key in _reminder_sent:
+        return True
+    if _setting_read("reminder_" + key) is not None:
+        _reminder_sent.add(key)
+        return True
+    return False
+
+
+def _reminder_mark(key: str) -> None:
+    """Eslatma yuborildi deb belgilaydi (bot qayta ishga tushsa ham takror yo'q)."""
+    _reminder_sent.add(key)
+    _setting_write("reminder_" + key, datetime.now(timezone.utc).isoformat())
+
+
+async def broadcast_homework_reminder(row: dict) -> int:
+    """Bitta vazifa uchun guruh o'quvchilariga «Uyga vazifa eslatmasi» yuboradi."""
+    hw_id = row.get("id")
+    try:
+        groups = supabase.table("groups").select("id, name").eq("id", row.get("group_id")).limit(1).execute().data
+        group_name = groups[0]["name"] if groups else "—"
+        studs = supabase.table("students").select("id, name, telegram_chat_id")\
+            .eq("group_id", row.get("group_id")).execute().data
+    except Exception as e:
+        logging.warning(f"homework reminder lookup {hw_id}: {e}")
+        return 0
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📱 Ilovani ochish", web_app=WebAppInfo(url=config.WEBAPP_URL))]
+    ])
+    due = _fmt_date(row.get("due_date"))
+    text = HW_REMINDER_TEXT.format(
+        group_name=html.escape(str(group_name)),
+        title=html.escape(str(row.get("title") or "—")),
+        description=html.escape(str(row.get("description") or "—")),
+        due_date=html.escape(due),
+    )
+    sent = 0
+    for st in studs:
+        chat_id = st.get("telegram_chat_id")
+        if not chat_id:
+            continue
+        try:
+            await bot.send_message(int(chat_id), text=text, reply_markup=kb, parse_mode="HTML",
+                                   disable_notification=False)
+            sent += 1
+        except Exception as e:
+            logging.warning(f"homework reminder {st.get('id')} -> {chat_id}: {e}")
+    return sent
+
+
+async def hw_reminder_tick(now: datetime = None) -> int:
+    """Muddati ERTAGA bo'lgan vazifalar uchun 19:00 da eslatma yuboradi."""
+    now = now or reminder_now()
+    if now.hour != HW_REMINDER_HOUR:
+        return 0
+    tomorrow = (now.date() + timedelta(days=1)).isoformat()
+    try:
+        rows = (supabase.table("homework")
+                .select("id, group_id, title, description, due_date")
+                .eq("due_date", tomorrow).execute().data or [])
+    except Exception as e:
+        logging.warning(f"hw_reminder_tick: {e}")
+        return 0
+    total = 0
+    for row in rows:
+        key = f"hw_{row.get('id')}_{tomorrow}"
+        if _reminder_seen(key):
+            continue
+        sent = await broadcast_homework_reminder(row)
+        _reminder_mark(key)
+        total += sent
+        logging.info(f"homework #{row.get('id')} -> eslatma {sent} ta o'quvchiga yuborildi")
+    return total
+
+
+async def payment_reminder_tick(now: datetime = None) -> int:
+    """Har Juma 00:00 da repetitorlik guruhlaridagi qarzdorlarga to'lov eslatmasi."""
+    now = now or reminder_now()
+    if now.weekday() != PAY_REMINDER_WEEKDAY or now.hour != PAY_REMINDER_HOUR:
+        return 0
+    week_key = now.date().isoformat()
+    try:
+        groups = (supabase.table("groups")
+                  .select("id, name, group_type, monthly_fee").execute().data or [])
+        students = (supabase.table("students")
+                    .select("id, name, group_id, telegram_chat_id, payment_debt")
+                    .execute().data or [])
+    except Exception as e:
+        logging.warning(f"payment_reminder_tick: {e}")
+        return 0
+
+    tutoring = {g.get("id"): g for g in groups if _is_tutoring_group(g)}
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📱 Ilovani ochish", web_app=WebAppInfo(url=config.WEBAPP_URL))]
+    ])
+    sent = 0
+    for st in students:
+        group = tutoring.get(st.get("group_id"))
+        if group is None:
+            continue
+        try:
+            debt = float(st.get("payment_debt") or 0)
+        except (TypeError, ValueError):
+            debt = 0
+        if debt <= 0:
+            continue
+        chat_id = st.get("telegram_chat_id")
+        if not chat_id:
+            continue
+        key = f"pay_{st.get('id')}_{week_key}"
+        if _reminder_seen(key):
+            continue
+        text = PAY_REMINDER_TEXT.format(
+            group_name=html.escape(str(group.get("name") or "—")),
+            fee=_money(group.get("monthly_fee")),
+            debt=_money(debt),
+        )
+        try:
+            await bot.send_message(int(chat_id), text=text, reply_markup=kb, parse_mode="HTML",
+                                   disable_notification=False)
+            sent += 1
+            _reminder_mark(key)
+        except Exception as e:
+            logging.warning(f"payment reminder {st.get('id')} -> {chat_id}: {e}")
+    if sent:
+        logging.info(f"to'lov eslatmasi: {sent} ta qarzdorga yuborildi")
+    return sent
+
+
+async def reminders_watcher():
+    """Uyga vazifa (19:00, 1 kun oldin) va to'lov (Juma 00:00) eslatmalari."""
+    await asyncio.sleep(8)
+    while True:
+        try:
+            await hw_reminder_tick()
+            await payment_reminder_tick()
+        except Exception as e:
+            logging.warning(f"reminders watcher: {e}")
+        await asyncio.sleep(REMINDER_TICK_SECONDS)
 
 
 # ============================================================
@@ -2988,6 +3194,7 @@ async def main():
     _bg_tasks.add(asyncio.create_task(speaking_web_watcher()))     # sayt speaking → ustozga
     _bg_tasks.add(asyncio.create_task(outbox_watcher()))     # telegram_outbox eslatmalari
     _bg_tasks.add(asyncio.create_task(email_outbox_watcher()))  # Gmail xatlari
+    _bg_tasks.add(asyncio.create_task(reminders_watcher()))  # uyga vazifa / to'lov eslatmalari
 
     # Diagnostika: qaysi bot jonli — logda username ko'rinadi
     try:

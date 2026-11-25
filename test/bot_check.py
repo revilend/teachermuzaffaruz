@@ -12,7 +12,7 @@ import json
 import os
 import re
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -221,7 +221,7 @@ class FakeTable:
     def update(self, payload):
         return FakeQuery(self.name, "update", payload)
 
-    def upsert(self, payload):
+    def upsert(self, payload, **kw):
         return FakeQuery(self.name, "upsert", payload)
 
     def delete(self):
@@ -1073,6 +1073,80 @@ async def main():
           "homework: ovozli (sound) yetkazish — disable_notification=False")
 
     # =========================================================
+    # 11b) Avtomatik eslatmalar: uyga vazifa (19:00) va to'lov (Juma 00:00)
+    # =========================================================
+    _saved_groups = FAKE_ROWS["groups"]
+    _saved_students = FAKE_ROWS["students"]
+    _saved_hw = FAKE_ROWS["homework"]
+    _saved_settings = FAKE_ROWS["bot_settings"]
+    TZ = timezone(timedelta(hours=5))
+    FAKE_ROWS["groups"] = [
+        {"id": 1, "name": "IELTS Band 7.0", "group_type": "tutoring", "monthly_fee": 300000},
+        {"id": 2, "name": "5-A sinf", "group_type": "school", "monthly_fee": 0},
+    ]
+    FAKE_ROWS["students"] = [
+        {"id": 1, "name": "Jasur Karimov", "group_id": 1, "telegram_chat_id": 555,
+         "payment_debt": 300000},
+        {"id": 2, "name": "Nilufar Ergasheva", "group_id": 1, "telegram_chat_id": 666,
+         "payment_debt": 0},
+        {"id": 3, "name": "Malika Yusupova", "group_id": 2, "telegram_chat_id": 777,
+         "payment_debt": 250000},
+    ]
+    FAKE_ROWS["bot_settings"] = []
+    FAKE_ROWS["homework"] = [
+        {"id": 91, "group_id": 1, "title": "Present Perfect",
+         "description": "1-20 gacha", "due_date": "2026-12-01"},
+    ]
+    B._reminder_sent.clear()
+
+    # (a) 19:00 dan boshqa vaqtda eslatma ketmaydi
+    fb.sent.clear()
+    early = await B.hw_reminder_tick(datetime(2026, 11, 30, 15, 0, tzinfo=TZ))
+    check(early == 0 and not fb.sent, "hw eslatma: 19:00 dan boshqa vaqtda yuborilmaydi")
+
+    # (b) muddatdan 1 kun oldin 19:00 → guruh o'quvchilariga
+    n = await B.hw_reminder_tick(datetime(2026, 11, 30, 19, 0, tzinfo=TZ))
+    hw_rem = [s for s in fb.sent if "Uyga vazifa eslatmasi" in (s.get("text") or "")]
+    check(n == 2 and len(hw_rem) == 2,
+          f"hw eslatma: guruhning ulangan 2 o'quvchisiga yuborildi (keldi={n})")
+    check(any("Present Perfect" in (s.get("text") or "") for s in hw_rem),
+          "hw eslatma: mavzu xabarda ko'rsatilgan")
+    check(any("01.12.2026" in (s.get("text") or "") or "2026-12-01" in (s.get("text") or "")
+              for s in hw_rem), "hw eslatma: muddat xabarda")
+    n_again = await B.hw_reminder_tick(datetime(2026, 11, 30, 19, 5, tzinfo=TZ))
+    check(n_again == 0, "hw eslatma: takror yuborilmaydi")
+
+    # (c) to'lov eslatmasi — faqat Juma 00:00 va faqat repetitorlik qarzdoriga
+    fb.sent.clear()
+    B._reminder_sent.clear()
+    odd = await B.payment_reminder_tick(datetime(2026, 12, 5, 0, 0, tzinfo=TZ))
+    check(odd == 0 and not fb.sent, "to'lov eslatma: shanba kuni yuborilmaydi")
+    fri = await B.payment_reminder_tick(datetime(2026, 12, 4, 0, 0, tzinfo=TZ))
+    pay_msgs = [s for s in fb.sent if "To'lov eslatmasi" in (s.get("text") or "")]
+    check(fri == 1 and len(pay_msgs) == 1,
+          f"to'lov eslatma: faqat repetitorlik qarzdoriga (keldi={fri})")
+    check(pay_msgs and pay_msgs[0]["chat_id"] == 555,
+          "to'lov eslatma: qarzdor o'quvchining chatiga yuborildi (maktab guruhi emas)")
+    check(any("300 000" in (s.get("text") or "") for s in pay_msgs),
+          "to'lov eslatma: summalar o'qishli formatda (300 000)")
+    fri_again = await B.payment_reminder_tick(datetime(2026, 12, 4, 0, 30, tzinfo=TZ))
+    check(fri_again == 0, "to'lov eslatma: bir haftada takror yuborilmaydi")
+
+    # (d) keyingi hafta eslatma yana yuboriladi (yangi kalit)
+    fb.sent.clear()
+    B._reminder_sent.clear()
+    FAKE_ROWS["bot_settings"] = []
+    nxt = await B.payment_reminder_tick(datetime(2026, 12, 11, 0, 0, tzinfo=TZ))
+    check(nxt == 1, "to'lov eslatma: keyingi Juma qayta yuboriladi")
+
+    FAKE_ROWS["groups"] = _saved_groups
+    FAKE_ROWS["students"] = _saved_students
+    FAKE_ROWS["homework"] = _saved_hw
+    FAKE_ROWS["bot_settings"] = _saved_settings
+    B._reminder_sent.clear()
+    B._last_hw_seen = 1
+
+    # =========================================================
     # 12) TEZKOR BILDIRISHNOMALAR (grade_tick / message_tick / voice)
     # =========================================================
     B._last_grade_seen = None
@@ -1438,6 +1512,8 @@ async def main():
     for wname in ("homework_watcher", "voice_watcher", "grades_watcher", "messages_watcher"):
         check(f"asyncio.create_task({wname}())" in src,
               f"main: {wname} asyncio.create_task orqali fon vazifasi")
+    check("asyncio.create_task(reminders_watcher())" in src,
+          "main: reminders_watcher (uyga vazifa / to'lov eslatmalari) fon vazifasi")
     check("bot.get_me()" in src, "main: startdan oldin getMe bilan bot identifikatsiya qilinadi")
     check("DIAGNOSTIKA: POLLING FAOL" in src, "main: polling watchdog (60s heartbeat) mavjud")
 
