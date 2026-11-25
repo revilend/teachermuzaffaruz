@@ -4514,6 +4514,35 @@ await (async () => {
   check(!!q('.sup-quick-grid [data-kind="homework"]') && !q('.sup-quick-grid [data-kind="mock"]'),
     'support: tezkor amallar support teacherning ruxsatlariga mos (mock ruxsati yo‘q)');
 
+  /* Nusxa rejimi: bo'limlar faqat shu support teacherning guruhi bilan ishlaydi */
+  click('[data-act="support-quick"][data-kind="homework"]');
+  check(/Uyga vazifa/.test(text()) && !!q('[data-act="hw-group-back"]'),
+    'support nusxasi: «Uyga vazifa» bo\'limi tezkor amaldan ochildi');
+  clickAct('hw-group-back');
+  const supViewHwGroups = qa('.hw-group-card').map(c => c.getAttribute('data-gid'));
+  check(supViewHwGroups.length === 1 && supViewHwGroups[0] === sGroupId,
+    'support nusxasi: bo\'limda faqat support teacherga biriktirilgan guruh ko\'rinadi (' + supViewHwGroups.length + ')');
+  click('.back-row [data-act="nav"]');
+  check(!!q('.sup-quick-grid') && /Support teacherlar/.test(text()),
+    'support nusxasi: «Orqaga» support teacher paneliga qaytardi (asosiy panelga emas)');
+  check(q('.back-row [data-act="nav"]').getAttribute('data-screen') === 'home',
+    'support: support teacherlar bo\'limining o\'z «Orqaga» tugmasi asosiy panelga qaytaradi');
+
+  click('[data-act="support-quick"][data-kind="attendance"]');
+  check(qa('[data-act="att-group"]').length === 1,
+    'support nusxasi: davomatda faqat support guruhi tanlanadi (' + qa('[data-act="att-group"]').length + ')');
+  click('.back-row [data-act="nav"]');
+  check(!!q('.sup-quick-grid'), 'support nusxasi: davomatdan orqaga — yana support paneli');
+
+  click('[data-act="support-quick"][data-kind="grades"]');
+  check(qa('[data-act="grade-group"]').length === 1,
+    'support nusxasi: baholarda faqat support guruhi ko\'rinadi (' + qa('[data-act="grade-group"]').length + ')');
+  click('.back-row [data-act="nav"]');
+  check(!!q('.sup-quick-grid'), 'support nusxasi: baholardan orqaga — yana support paneli');
+  /* Keyingi testlar asosiy panelning odatiy holatiga tayanadi */
+  clickAct('toggle-supervise');
+  check(!q('.sup-watch .switch.on'), 'support: nazorat rejimi keyingi testlar uchun o\'chirildi');
+
   /* Berilgan va qabul qilingan vazifalar: video, rasm, fayl ko'rinadi */
   const supHwAll = JSON.parse(win.localStorage.getItem('et_homework') || '[]');
   supHwAll.push({ id: 'sup_hw_media', dbId: 9001, title: 'Support media task', groupId: sGroupId,

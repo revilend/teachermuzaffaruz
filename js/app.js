@@ -227,7 +227,8 @@ const state = {
   supportEditId: '',
   supportDelId: '',
   supportOpenId: '',
-  supportGroupId: ''
+  supportGroupId: '',
+  supportViewId: ''
 };
 
 const AUTH_SCREENS = ['login'];
@@ -3101,6 +3102,16 @@ function supportTeacherOfGroup(gid) {
     return supportRecordGroupIds(r).indexOf(id) >= 0;
   })[0] || null;
 }
+/* Asosiy ustoz support teacher panelining nusxasida ishlayotganda (nazorat
+   paneli) — faqat shu support teacherga biriktirilgan guruh/o'quvchilar. */
+function supportViewRecord() {
+  if (!isTeacher() || isSupport() || !state.supportViewId) return null;
+  return supportTeacherById(state.supportViewId);
+}
+function supportViewGroupIds() {
+  const rec = supportViewRecord();
+  return rec ? supportRecordGroupIds(rec) : null;
+}
 /* Ko'rinadigan guruhlar: support — faqat o'z guruhlari; asosiy ustoz —
    support guruhlari faqat "Support teacherni nazorat qilish" rejimida. */
 function scopedGroups() {
@@ -3109,6 +3120,8 @@ function scopedGroups() {
     const ids = supportRecordGroupIds(supportRecord());
     return all.filter(function (g) { return ids.indexOf(String(g.id)) >= 0; });
   }
+  const viewIds = supportViewGroupIds();
+  if (viewIds) return all.filter(function (g) { return viewIds.indexOf(String(g.id)) >= 0; });
   if (state.supervise) return all;
   const hidden = supportGroupIdsAll();
   return all.filter(function (g) { return !hidden[String(g.id)]; });
@@ -3118,6 +3131,8 @@ function scopedStudents() {
     const ids = supportRecordGroupIds(supportRecord());
     return getStudents().filter(function (s) { return ids.indexOf(String(s.groupId)) >= 0; });
   }
+  const viewIds = supportViewGroupIds();
+  if (viewIds) return getStudents().filter(function (s) { return viewIds.indexOf(String(s.groupId)) >= 0; });
   if (state.supervise) return getStudents();
   const hidden = supportGroupIdsAll();
   return getStudents().filter(function (s) { return !hidden[String(s.groupId)]; });
@@ -5212,9 +5227,17 @@ function emptyState(text, icoName) {
   return `<div class="empty"><span class="empty-ico">${ICON[icoName] || ICON.clipboardCheck}</span>${esc(text)}</div>`;
 }
 /* Har bir bo'lim ichida asosiy sahifaga qaytish uchun yagona "Orqaga" qatori */
+/* Support teacher paneli nusxasidan ochilgan bo'limlar: «Orqaga» yana shu
+   support teacherning tez amallar paneliga qaytaradi, asosiy panelga emas. */
+const SUPPORT_VIEW_SCREENS = ['groups', 'students', 'homework', 'submissions', 'grades', 'attendance', 'speaking', 'mock'];
 function backRowHTML(screen) {
+  let target = screen || 'home';
+  if (target === 'home' && supportViewRecord() &&
+      SUPPORT_VIEW_SCREENS.indexOf(String(state.screen)) >= 0) {
+    target = 'support';
+  }
   return `<div class="back-row">
-    <button type="button" class="btn btn-xs ghost" data-act="nav" data-screen="${esc(screen || 'home')}">${ico('arrowLeft', 14)} ${t('Orqaga')}</button>
+    <button type="button" class="btn btn-xs ghost" data-act="nav" data-screen="${esc(target)}">${ico('arrowLeft', 14)} ${t('Orqaga')}</button>
   </div>`;
 }
 
@@ -10285,6 +10308,7 @@ function logout() {
   state.studentView = '';
   state.attOpen = false;
   state.supervise = false;
+  state.supportViewId = '';
   state.groupDetail = '';
   state.supportEditId = '';
   state.supportDelId = '';
@@ -12915,20 +12939,20 @@ function mockTeacherResultsCatHTML(key) {
 /* Mock ma'lumotlari: asosiy ustoz BARCHA o'quvchilar natijasini ko'radi
    (support guruhlaridagi o'quvchilar ham), support esa faqat o'z guruhlarini. */
 function mockVisibleStudents() {
-  return isSupport() ? scopedStudents() : getStudents();
+  return isSupport() || supportViewRecord() ? scopedStudents() : getStudents();
 }
 function scopedMockResults() {
-  if (!isSupport()) return mockResults().slice();
+  if (!isSupport() && !supportViewRecord()) return mockResults().slice();
   const ids = {};
   mockVisibleStudents().forEach(function (s) { ids[String(s.id)] = 1; });
   return mockResults().filter(function (a) { return !!ids[String(a.sid)]; });
 }
 function scopedMockDefs() {
   const list = mockDefs();
-  if (!isSupport()) return list;
-  const rec = supportRecord();
+  const rec = supportRecord() || supportViewRecord();
+  if (!rec) return list;
   const gids = supportRecordGroupIds(rec);
-  const myLogin = String((currentUser() || {}).login || '');
+  const myLogin = String(rec.login || (currentUser() || {}).login || '');
   return list.filter(function (d) {
     const ids = mockGroupIds(d);
     if (!ids.length) return String(d.createdBy || '') === myLogin;
@@ -12948,9 +12972,7 @@ function mockTeacherScreen() {
     return state.mockResView ? mockTeacherResultsCatHTML(state.mockResView) : mockResultsHomeHTML('teacher');
   }
   return `
-  <div class="back-row">
-    <button type="button" class="btn btn-xs ghost" data-act="nav" data-screen="home">${ico('arrowLeft', 14)} ${t('Orqaga')}</button>
-  </div>
+  ${backRowHTML('home')}
   <div class="card mock-hero">
     <span class="mock-hero-ico">${ico('clipboardCheck', 22)}</span>
     <div class="col">
@@ -14259,6 +14281,8 @@ document.addEventListener('click', function (e) {
       if (scr === 'homework') state.hwGroup = null;
       if (scr === 'groups') state.groupDetail = '';
       state.profileSection = '';
+      /* Asosiy panelga qaytilsa — support teacher nusxasi rejimi yopiladi */
+      if (scr === 'home') state.supportViewId = '';
       go(scr);
     },
     /* Profil: sozlamalar bo'limi kartasi → ichki bo'lim */
@@ -14348,7 +14372,14 @@ document.addEventListener('click', function (e) {
       if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
       const gid = String(btn.getAttribute('data-gid') || '');
       const kind = String(btn.getAttribute('data-kind') || '');
+      const supId = String(btn.getAttribute('data-id') || '');
       state.supervise = true;
+      /* Qaysi support teacher paneli nusxasidamiz — bo'limlar faqat shu
+         teacherning guruh/o'quvchilari bilan ishlaydi va «Orqaga» shu
+         panelga qaytaradi. */
+      state.supportViewId = supId;
+      state.supportOpenId = supId;
+      state.supportGroupId = gid;
       if (kind === 'homework') { state.hwGroup = gid; go('homework'); return; }
       if (kind === 'attendance') { state.attGroup = gid; state.attDate = todayKey(); state.attDraftFor = ''; go('attendance'); return; }
       if (kind === 'submissions') { state.subGroup = gid; go('submissions'); return; }
@@ -14368,13 +14399,20 @@ document.addEventListener('click', function (e) {
     },
     'toggle-supervise': function () {
       state.supervise = !state.supervise;
-      if (!state.supervise) state.groupDetail = '';
+      if (!state.supervise) { state.groupDetail = ''; state.supportViewId = ''; }
       render();
       toast(state.supervise ? 'Support nazorat rejimi yoniq' : "Support nazorat rejimi o'chirildi");
     },
     'support-watch-group': function () {
+      const gid = btn.getAttribute('data-gid') || '';
+      const rec = supportTeacherOfGroup(gid);
       state.supervise = true;
-      state.groupDetail = btn.getAttribute('data-gid') || '';
+      state.groupDetail = gid;
+      if (rec) {
+        state.supportViewId = String(rec.id);
+        state.supportOpenId = String(rec.id);
+        state.supportGroupId = String(gid);
+      }
       go('groups');
     },
 
