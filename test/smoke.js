@@ -922,6 +922,14 @@ check(qa('.att-row')[0].querySelector('[data-status="absent"]').classList.contai
 /* ================= 8. SPEAKING SCHEDULER ================= */
 click('[data-act="nav"][data-screen="speaking"]');
 check(text().includes('Speaking'), 'speaking: ekran');
+check(qa('.speak-tab').length === 3, 'speaking: 3 ta bo\'lim tugmasi (vidyo, jurnal, slotlar)');
+check(qa('.speak-tab.is-active')[0].getAttribute('data-tab') === 'videos',
+  'speaking: avval "Sayt videolari" bo\'limi ochiq');
+check(qa('.speak-row').length === 0 && !q('#sp-date'),
+  'speaking: slotlar tugma bosilmaguncha ko\'rinmaydi');
+click('[data-act="speak-tab"][data-tab="slots"]');
+check(qa('.speak-tab.is-active')[0].getAttribute('data-tab') === 'slots', 'speaking: "Slotlar" bo\'limi tanlandi');
+check(!q('.speak-log-card'), 'speaking: slotlar bo\'limida jurnal ko\'rinmaydi');
 check(qa('.speak-row').length === 3, 'speaking: 3 ta seed slot');
 check(text().includes('14:00 – 14:20'), 'speaking: slot vaqti');
 check(text().includes('Bosh (tayinlanmagan)'), 'speaking: tayinlanmagan slot');
@@ -948,6 +956,12 @@ check(qa('.score-btn').length === 10, 'speaking: 10 ta ball tugmasi');
 click(qa('.score-btn').filter(b => b.getAttribute('data-score') === '9')[0]);
 check(q('#modal-overlay').hidden === true, 'speaking: baho saqlanib yopildi');
 check(q('#toast').textContent.includes('jurnalga yozildi'), 'speaking: jurnalga sync toast');
+
+/* sessiyalar jurnali — alohida bo'lim */
+click('[data-act="speak-tab"][data-tab="log"]');
+check(qa('.speak-log-card').length > 0, 'speaking: jurnal bo\'limida yozuvlar bor');
+check(text().includes('Nilufar Ergasheva'), 'speaking: jurnalda o\'quvchi ismi');
+check(qa('.speak-row').length === 0 && !q('.speak-slot-grid'), 'speaking: jurnalda slotlar ko\'rinmaydi');
 
 /* jurnalda tekshirish (Nilufar g2 da) */
 click('[data-act="nav"][data-screen="grades"]');
@@ -1729,8 +1743,11 @@ check(qa('.debt-num').filter(d => d.textContent.trim() === '0 ta').length >= 1, 
 click('[data-act="nav"][data-screen="speaking"]');
 check(!text().includes("Speaking qarzi (o'quvchilar)") && qa('[data-act="debt-plus"]').length === 0,
   'speaking: o\'quvchilar qarz ro\'yxati olib tashlangan');
+check(qa('.speak-tab').length === 3, 'speaking: 3 ta bo\'lim tugmasi saqlangan');
+click('[data-act="speak-tab"][data-tab="slots"]');
 check(!!q('#sp-date') && !!q('[data-act="open-slot"]'),
-  'speaking: sana selektori va + Slot tugmasi saqlangan');
+  'speaking: "Slotlar" bo\'limida sana selektori va + Slot tugmasi');
+click('[data-act="speak-tab"][data-tab="videos"]');
 check(text().includes('Speaking topshiriqlari'), 'speaking: topshiriqlar inbox bo\'limi bor');
 check(text().includes("Hozircha topshiriq yo'q"), 'speaking: inbox holati ko\'rinadi');
 
@@ -1745,6 +1762,7 @@ win.localStorage.setItem('et_tg_subs', JSON.stringify([
     lookAwayCount: 2, eyeContactPercent: 87, createdAt: TODAY + 'T10:00:00.000Z' }
 ]));
 forceNav('speaking');
+click('[data-act="speak-tab"][data-tab="videos"]');
 check(qa('.audio-item').length >= 1, 'inbox: Telegram topshirik paydo bo\'ldi');
 check(text().includes('Jasur Karimov'), 'inbox: o\'quvchi ismi ko\'rinadi');
 check(text().includes('Video') && !!q('.speak-card-meta svg'),
@@ -1785,6 +1803,13 @@ check(afterGrade.speakingDebt === 1, 'tg: baholash qarzni 1 ga kamaytirdi (2 →
 const tgAfter = JSON.parse(win.localStorage.getItem('et_tg_subs')).filter(x => x.id === 't1')[0];
 check(tgAfter.status === 'baholandi' && tgAfter.score === 9, 'tg: topshirik baholandi (9)');
 check(tgAfter.feedback === "A'lo talaffuz", 'tg: izoh saqlandi');
+
+/* sessiyalar jurnali — baholangan sessiya yozuvi */
+click('[data-act="speak-tab"][data-tab="log"]');
+check(qa('.speak-log-card').length >= 1 && text().includes('Jasur Karimov'),
+  'jurnal: baholangan sessiya yozuvi ko\'rinadi');
+check(qa('.speak-row').length === 0 && !q('.audio-item'), 'jurnal: boshqa bo\'limlar ko\'rinmaydi');
+click('[data-act="speak-tab"][data-tab="videos"]');
 
 /* jurnalda Speaking satri */
 click('[data-act="nav"][data-screen="grades"]');
@@ -2919,7 +2944,10 @@ await (async () => {
   const sLog = JSON.parse(win.localStorage.getItem('et_speak_log') || '[]');
   check(sLog.length >= 2 && sLog[0].score === 9 && sLog[1].score === 8 && sLog[0].sid === 's77' && sLog[1].sid === 's77',
     'speaking: jurnalda ketma-ket 2 ta sessiya (9 → 8, har biri alohida qator)');
+  click('[data-act="speak-tab"][data-tab="log"]');
   check(text().includes('Speaking sessiyalar jurnali'), 'speaking: sessiyalar jurnali ekranda ko\'rinadi');
+  check(qa('.speak-log-card').length >= 2, 'speaking: jurnalda 2 ta sessiya kartasi');
+  click('[data-act="speak-tab"][data-tab="videos"]');
 
   /* ================= 30b. BEKOR QILISH (qabul qilmaslik) ================= */
   win.onCloudNotifChange('speaking_submissions',
@@ -4323,6 +4351,7 @@ await (async () => {
   check(/Monthly schedule/.test(payEn), 'i18n EN: "Oylik jadval" → "Monthly schedule"');
   check(/Set/.test(payEn), 'i18n EN: "Belgilash" → "Set"');
   forceNav('speaking');
+  click('[data-act="speak-tab"][data-tab="videos"]');
   const spEn = text();
   check(/Speaking submissions \(Inbox\)/.test(spEn), 'i18n EN: Speaking topshiriqlari (Inbox)');
   check(/No submissions yet/.test(spEn), 'i18n EN: bo\'sh topshiriq holati');

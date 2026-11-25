@@ -8,3 +8,6 @@ venv/
 # maxfiy kalitlar (GMAIL_APP_PASSWORD va h.k.)
 .env
 .env.local
+
+# skrinshotlar
+artifacts/

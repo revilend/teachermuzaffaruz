@@ -4093,6 +4093,7 @@ const I18N_EN = {
   "Qayta olish": "Retake",
   "Sayt videolari": "Website videos",
   "Slotlar": "Slots",
+  "Sessiyalar jurnali": "Session log",
   "Guruhlar bo'yicha": "By group",
   "Sayt videolari guruhlar bo'yicha shu yerda; bot topshiriqlari botda ko'rinadi. \"Baholash\" orqali 1–10 ball qo'yiladi, video saqlanadi, ball baholar jurnaliga tushadi va Speaking qarzi 1 ga kamayadi. Video faqat \"O'chirish\" tasdiqlanganda R2 va bazadan o'chadi.": "Website videos appear here grouped by group; bot submissions stay in the bot. Grade 1–10, the video is kept, the score goes to the gradebook and the Speaking debt drops by one. A video is removed from R2 and the database only after the teacher confirms Delete.",
   "yangi speaking videosi": "new speaking video",
@@ -8836,7 +8837,11 @@ function attendanceScreen() {
 }
 
 /* ==================== SPEAKING (1-on-1) SLOTLARI ==================== */
-function ensureSpeakState() { if (!state.speakDate) state.speakDate = todayKey(); }
+function ensureSpeakState() {
+  if (!state.speakDate) state.speakDate = todayKey();
+  if (SPEAK_TABS.indexOf(state.speakTab) < 0) state.speakTab = 'videos';
+}
+const SPEAK_TABS = ['videos', 'log', 'slots'];
 
 function speakRowHTML(x) {
   const st = x.studentId ? studentById(x.studentId) : null;
@@ -8865,35 +8870,58 @@ function speakingScreen() {
   const list = getSpeaking()
     .filter(x => x.date === state.speakDate && (!x.studentId || scopeIds[x.studentId]))
     .sort((a, b) => a.start.localeCompare(b.start));
+  const tab = state.speakTab;
+  const pendingVideos = getTgSubs().filter(function (x) {
+    if (!isWebSubmission(x) || !scopeIds[x.sid]) return false;
+    return x.status !== 'baholandi' && x.status !== 'graded' && x.status !== 'rad_etildi';
+  }).length;
+  const tabs = [
+    { id: 'videos', icon: ICON.video, label: t('Sayt videolari'), count: pendingVideos },
+    { id: 'log', icon: ICON.checkCircle, label: t('Sessiyalar jurnali'), count: 0 },
+    { id: 'slots', icon: ICON.clock, label: t('Slotlar'), count: list.length }
+  ];
+  const subtitle = tab === 'videos'
+    ? `${t('Sayt videolari')} · ${t('Speaking topshiriqlari (Inbox)')}${pendingVideos ? ' • ' + pendingVideos + ' ta baholanmagan' : ''}`
+    : (tab === 'log'
+      ? "So'nggi 15 sessiya • 1–10 ball"
+      : `1-on-1 slotlar • ${list.length} ta slot`);
+
+  const videosTab = `
+  <div class="card">
+    ${renderTgInbox()}
+  </div>
+  <p class="muted small" style="margin-top:10px">Sayt videolari guruhlar bo'yicha shu yerda; bot topshiriqlari botda ko'rinadi. "Baholash" orqali 1–10 ball qo'yiladi, video saqlanadi, ball baholar jurnaliga tushadi va Speaking qarzi 1 ga kamayadi. Video faqat "O'chirish" tasdiqlanganda R2 va bazadan o'chadi.</p>`;
+
+  const logTab = speakingLogHTML() || emptyState("Sessiyalar jurnali hozircha bo'sh");
+
+  const slotsTab = `
+  <div class="selector-row">
+    <span class="selector-label">${t('Sana')}</span>
+    <input class="input" id="sp-date" type="date" value="${esc(state.speakDate)}" />
+  </div>
+  ${list.length
+    ? `<div class="speak-slot-grid">${list.map(speakRowHTML).join('')}</div>`
+    : emptyState("Bu sanada slot yo'q — 'Slot' tugmasini bosing")}`;
 
   return `
   ${backRowHTML('home')}
   <div class="screen-head">
     <div>
       <h2 class="screen-title">${t('Speaking')}</h2>
-      <div class="muted small">1-on-1 slotlar • ${list.length} ta slot</div>
+      <div class="muted small">${esc(subtitle)}</div>
     </div>
-    <button type="button" class="btn btn-primary btn-sm" data-act="open-slot">+ Slot</button>
+    ${tab === 'slots' ? `<button type="button" class="btn btn-primary btn-sm" data-act="open-slot">+ Slot</button>` : ''}
   </div>
 
-  <div class="selector-row">
-    <span class="selector-label">${t('Sana')}</span>
-    <input class="input" id="sp-date" type="date" value="${esc(state.speakDate)}" />
+  <div class="speak-tabs" role="tablist">
+    ${tabs.map(function (x) {
+      return `<button type="button" role="tab" aria-selected="${tab === x.id}" class="speak-tab${tab === x.id ? ' is-active' : ''}" data-act="speak-tab" data-tab="${x.id}">${x.icon}<span>${x.label}</span>${x.count ? `<span class="pill">${x.count}</span>` : ''}</button>`;
+    }).join('')}
   </div>
 
-  <div class="quick-group-title">${ico('clock', 13)} ${t('Slotlar')}</div>
-  ${list.length
-    ? `<div class="speak-slot-grid">${list.map(speakRowHTML).join('')}</div>`
-    : emptyState("Bu sanada slot yo'q — 'Slot' tugmasini bosing")}
-
-  ${speakingLogHTML()}
-
-  <div class="quick-group-title">${ico('video', 13)} ${t('Sayt videolari')} · ${t('Speaking topshiriqlari (Inbox)')}</div>
-  <div class="card">
-    ${renderTgInbox()}
-  </div>
-
-  <p class="muted small" style="margin-top:10px">Sayt videolari guruhlar bo'yicha shu yerda; bot topshiriqlari botda ko'rinadi. "Baholash" orqali 1–10 ball qo'yiladi, video saqlanadi, ball baholar jurnaliga tushadi va Speaking qarzi 1 ga kamayadi. Video faqat "O'chirish" tasdiqlanganda R2 va bazadan o'chadi.</p>
+  ${tab === 'videos' ? videosTab : ''}
+  ${tab === 'log' ? logTab : ''}
+  ${tab === 'slots' ? slotsTab : ''}
   `;
 }
 
@@ -9936,6 +9964,7 @@ function saveSlotScore(id, score) {
   };
   store.set(K.grades, all);
   CloudSync.pushGrade(x.studentId, x.date);
+  logSpeakingSession(x.studentId, x.date, score, 'slot');
 
   closeModal();
   render();
@@ -14944,6 +14973,12 @@ document.addEventListener('click', function (e) {
     },
 
     /* --- Speaking --- */
+    'speak-tab': function () {
+      const tab = btn.getAttribute('data-tab');
+      state.speakTab = SPEAK_TABS.indexOf(tab) >= 0 ? tab : 'videos';
+      render();
+      if (typeof window !== 'undefined' && window.scrollTo) window.scrollTo(0, 0);
+    },
     'open-slot': function () { openSlotModal('create', ''); },
     'slot-assign': function () { openSlotModal('assign', btn.getAttribute('data-id')); },
     'slot-score': function () { openScoreSlot(btn.getAttribute('data-id')); },
