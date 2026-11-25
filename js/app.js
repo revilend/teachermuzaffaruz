@@ -71,6 +71,7 @@ const K = {
   hwCommentsSeen: 'et_hw_comments_seen',
   mock: 'et_mock_results',
   mocks: 'et_mock_defs',
+  mockDeleted: 'et_mock_deleted',
   support: 'et_support_teachers'
 };
 
@@ -224,7 +225,9 @@ const state = {
   mockRole: '',
   supervise: false,
   supportEditId: '',
-  supportDelId: ''
+  supportDelId: '',
+  supportOpenId: '',
+  supportGroupId: ''
 };
 
 const AUTH_SCREENS = ['login'];
@@ -3564,6 +3567,9 @@ function ico(name, size) {
 const I18N_EN = {
   'Support teacherlar': 'Support teachers',
   "Support teacher qo'shish": 'Add support teacher',
+  'Berilgan vazifalar': 'Assigned tasks',
+  'Qabul qilingan topshiriqlar': 'Received submissions',
+  "Hozircha topshiriq yo'q": 'No submissions yet',
   'Support teacherni tahrirlash': 'Edit support teacher',
   'Support teacherni nazorat qilish': 'Supervise support teacher',
   "O'chirilganda support guruhlari Guruhlar va O'quvchilar bo'limlarida ko'rinmaydi.":
@@ -5950,44 +5956,6 @@ function payHistoryHTML(st) {
   }).join('')}</div>`;
 }
 
-/* Asosiy ustoz: support teacherlarni boshqarish va nazorat paneli */
-function supportWatchPanelHTML() {
-  const list = supportTeachers();
-  const on = !!state.supervise;
-  const rows = list.map(function (rec) {
-    const groups = supportRecordGroupIds(rec).map(function (id) { return groupById(id); }).filter(Boolean);
-    return `<div class="sup-watch-row">
-      <div class="row between">
-        <div class="col">
-          <strong>${esc(rec.name)}</strong>
-          <div class="muted small">${esc(rec.login || '')} · ${groups.length} ${t('guruh')}</div>
-        </div>
-        <button type="button" class="btn btn-xs ghost" data-act="support-edit" data-id="${esc(rec.id)}">${ico('brush', 13)} ${t('Ruxsatlar')}</button>
-      </div>
-      ${groups.length
-        ? `<div class="sup-watch-groups">${groups.map(function (g) {
-            return `<button type="button" class="chip-btn" data-act="support-watch-group" data-gid="${esc(g.id)}">${esc(g.name)}</button>`;
-          }).join('')}</div>`
-        : `<div class="muted small">${t('Guruh biriktirilmagan')}</div>`}
-    </div>`;
-  }).join('');
-  return `
-  <div class="section-title">${ico('profile', 15)} Support teacherlar</div>
-  <div class="card sup-watch">
-    <div class="row between">
-      <div class="col">
-        <div class="strong-label">${t('Support teacherni nazorat qilish')}</div>
-        <div class="muted small">${on
-          ? t("Nazorat rejimi yoniq — support guruhlari ko'rinadi.")
-          : t("O'chirilganda support guruhlari Guruhlar va O'quvchilar bo'limlarida ko'rinmaydi.")}</div>
-      </div>
-      <button type="button" class="switch${on ? ' on' : ''}" data-act="toggle-supervise" role="switch"
-              aria-checked="${on}" aria-label="${t('Support teacherni nazorat qilish')}"></button>
-    </div>
-    <div class="sup-watch-list">${list.length ? rows : `<div class="muted small">${t("Hozircha support teacher qo'shilmagan")}</div>`}</div>
-    <button type="button" class="btn btn-primary btn-block" data-act="nav" data-screen="support">${ico('userPlus', 16)} ${t("Support teacher qo'shish")}</button>
-  </div>`;
-}
 
 function teacherHome() {
   applyMonthlyFees();
@@ -6028,9 +5996,8 @@ function teacherHome() {
     <button type="button" class="card quick" data-act="nav" data-screen="groups"><span class="quick-ico tint-purple">${ICON.groups}</span><span>Guruhlar</span></button>
     <button type="button" class="card quick" data-act="open-add-student"><span class="quick-ico tint-slate">${ICON.userPlus}</span><span>O'quvchi qo'shish</span></button>
     <button type="button" class="card quick" data-act="nav" data-screen="mock"><span class="quick-ico tint-violet">${ICON.gradCap}</span><span>${t('Mock testlar')}${navBadgeHTML('mock')}</span></button>
+    <button type="button" class="card quick" data-act="nav" data-screen="support"><span class="quick-ico tint-cyan">${ICON.profile}</span><span>${t('Support teacherlar')}</span></button>
   </div>
-
-  ${supportWatchPanelHTML()}
 
   <button type="button" class="btn btn-primary btn-block" data-act="open-hw">${ico('bookOpen', 16)} Uyga vazifa berish</button>
   <div class="panel-note">${t("Berilgan vazifalar «Uyga vazifalar» bo'limida ko'rinadi.")}</div>
@@ -11174,18 +11141,114 @@ function podcastScript(def) {
 /* So'zni solishtirish uchun: katta-kichik harf va tinish belgilari hisobga
    olinmaydi, lekin har bir harf qat'iy tekshiriladi (Aziz ≠ Azzi). */
 function podcastNormWord(w) {
-  return String(w == null ? '' : w).toLowerCase().replace(/[^\p{L}\p{N}']/gu, '');
+  return String(w == null ? '' : w).toLowerCase()
+    .replace(/[\u2018\u2019\u02BC`´]/g, "'")
+    .replace(/[^\p{L}\p{N}']/gu, '');
 }
 function podcastTokens(text) {
   return String(text == null ? '' : text).replace(/\s+/g, ' ').trim().split(' ')
     .filter(function (w) { return podcastNormWord(w) !== ''; });
 }
+/* Drop belgisi (apostrof) bilan yozilgan qisqartma va uning to'liq shakli bir
+   xil to'g'ri javob hisoblanadi: don't = do not, here's = here is, can't = cannot.
+   Ustoz qaysi shaklda yozganidan qat'i nazar, o'quvchining ikkala shakli ham
+   qabul qilinadi. */
+const PODCAST_CONTRACTIONS = {
+  /* Inkorslar */
+  "ain't": [['am', 'not'], ['is', 'not'], ['are', 'not'], ['have', 'not'], ['has', 'not']],
+  "aren't": [['are', 'not']], "amn't": [['am', 'not']],
+  "can't": [['can', 'not']], "cannot": [['can', 'not']],
+  "couldn't": [['could', 'not']], "daren't": [['dare', 'not']],
+  "didn't": [['did', 'not']], "doesn't": [['does', 'not']], "don't": [['do', 'not']],
+  "hadn't": [['had', 'not']], "hasn't": [['has', 'not']], "haven't": [['have', 'not']],
+  "isn't": [['is', 'not']], "mightn't": [['might', 'not']], "mustn't": [['must', 'not']],
+  "needn't": [['need', 'not']], "oughtn't": [['ought', 'not']], "shan't": [['shall', 'not']],
+  "shouldn't": [['should', 'not']], "usedn't": [['used', 'not']],
+  "wasn't": [['was', 'not']], "weren't": [['were', 'not']],
+  "won't": [['will', 'not']], "wouldn't": [['would', 'not']],
+  /* Boshqa keng tarqalgan qisqartmalar */
+  "let's": [['let', 'us']], "y'all": [['you', 'all']], "ya'll": [['you', 'all']],
+  "'em": [['them']], "'tis": [['it', 'is']], "'twas": [['it', 'was']],
+  "'cause": [['because']], "c'mon": [['come', 'on']], "ma'am": [['madam']],
+  "ne'er": [['never']], "e'er": [['ever']], "o'er": [['over']], "'round": [['around']]
+};
+/* he's = he is / he has, it'd = it would / it had kabi ikki ma'noli shakllar
+   hamda 'll / 've / 're seriyalari uchun barcha variantlar. */
+const PODCAST_BE_BASES = ['he', 'she', 'it', 'that', 'there', 'here', 'what', 'who',
+  'where', 'when', 'why', 'how', 'this', 'someone', 'somebody', 'everyone',
+  'everybody', 'nobody', 'nothing', 'something', 'everything'];
+const PODCAST_WILL_BASES = ['i', 'you', 'he', 'she', 'it', 'we', 'they', 'that',
+  'there', 'what', 'who', 'this', 'someone', 'somebody', 'everyone', 'everybody',
+  'where', 'when', 'how'];
+const PODCAST_WOULD_BASES = ['i', 'you', 'he', 'she', 'it', 'we', 'they', 'that',
+  'there', 'what', 'who', 'where', 'when', 'how', 'someone', 'somebody', 'everyone',
+  'everybody', 'nobody', 'nothing'];
+const PODCAST_HAVE_VERBS = ['could', 'would', 'should', 'might', 'must'];
+PODCAST_BE_BASES.forEach(function (p) {
+  /* 's ham "is", ham "has" ma'nosida bo'lishi mumkin */
+  PODCAST_CONTRACTIONS[p + "'s"] = [[p, 'is'], [p, 'has']];
+});
+PODCAST_WILL_BASES.forEach(function (p) {
+  PODCAST_CONTRACTIONS[p + "'ll"] = [[p, 'will']];
+});
+PODCAST_WOULD_BASES.forEach(function (p) {
+  PODCAST_CONTRACTIONS[p + "'d"] = [[p, 'would'], [p, 'had']];
+});
+['i', 'you', 'we', 'they', 'who', 'there', 'what'].concat(PODCAST_HAVE_VERBS).forEach(function (p) {
+  PODCAST_CONTRACTIONS[p + "'ve"] = [[p, 'have']];
+});
+PODCAST_CONTRACTIONS["i'm"] = [['i', 'am']];
+PODCAST_CONTRACTIONS["we're"] = [['we', 'are']];
+PODCAST_CONTRACTIONS["you're"] = [['you', 'are']];
+PODCAST_CONTRACTIONS["they're"] = [['they', 'are']];
+/* Apostrofsiz yozilgan inkor shakllari ham to'g'ri sanaladi: dont = don't */
+Object.keys(PODCAST_CONTRACTIONS).forEach(function (k) {
+  if (/n't$/.test(k)) {
+    const bare = k.replace(/'/g, '');
+    if (!PODCAST_CONTRACTIONS[bare]) PODCAST_CONTRACTIONS[bare] = PODCAST_CONTRACTIONS[k];
+  }
+});
+/* So'zning barcha mumkin bo'lgan to'liq shakllari (variantlari). */
+function podcastWordVariants(w) {
+  const norm = podcastNormWord(w);
+  if (!norm) return [];
+  return PODCAST_CONTRACTIONS[norm] || [[norm]];
+}
+const PODCAST_VARIANT_CAP = 64;
+/* Har bir qisqartma uchun qaysi ma'no tanlanganini bildiruvchi kombinatsiyalar.
+   Masalan he's → [he is] yoki [he has]; hammasi sinaladi. */
+function podcastVariantCombos(words) {
+  let combos = [[]];
+  words.forEach(function (w) {
+    const count = podcastWordVariants(w).length;
+    if (count <= 1) {
+      combos.forEach(function (c) { c.push(0); });
+      return;
+    }
+    const next = [];
+    combos.forEach(function (c) {
+      for (let k = 0; k < count && next.length < PODCAST_VARIANT_CAP; k++) next.push(c.concat([k]));
+    });
+    combos = next;
+  });
+  return combos.length ? combos : [[]];
+}
+/* Kengaytirilgan tokenlar: norm — solishtirish shakli, word — ko'rsatish matni. */
+function podcastTokenForms(words, combo) {
+  const out = [];
+  words.forEach(function (w, idx) {
+    const variants = podcastWordVariants(w);
+    const forms = variants[(combo && combo[idx]) || 0] || variants[0];
+    forms.forEach(function (form) {
+      out.push({ norm: form, word: variants.length === 1 ? w : form });
+    });
+  });
+  return out;
+}
 /* LCS asosida so'zma-so'z taqqoslash: same / sub (xato) / miss (tushirilgan) / extra */
-function podcastCompare(teacherText, studentText) {
-  const tWords = podcastTokens(teacherText);
-  const sWords = podcastTokens(studentText);
-  const tn = tWords.map(podcastNormWord);
-  const sn = sWords.map(podcastNormWord);
+function podcastAlign(tTok, sTok) {
+  const tn = tTok.map(function (x) { return x.norm; });
+  const sn = sTok.map(function (x) { return x.norm; });
   const n = tn.length, m = sn.length;
   const dp = [];
   for (let i = 0; i <= n; i++) dp.push(new Array(m + 1).fill(0));
@@ -11199,17 +11262,17 @@ function podcastCompare(teacherText, studentText) {
   const flush = function () {
     const len = Math.max(dels.length, ins.length);
     for (let k = 0; k < len; k++) {
-      if (dels[k] != null && ins[k] != null) ops.push({ type: 'sub', wrong: ins[k], right: dels[k] });
-      else if (dels[k] != null) ops.push({ type: 'miss', right: dels[k] });
-      else ops.push({ type: 'extra', wrong: ins[k] });
+      if (dels[k] != null && ins[k] != null) ops.push({ type: 'sub', wrong: sTok[ins[k]].word, right: tTok[dels[k]].word });
+      else if (dels[k] != null) ops.push({ type: 'miss', right: tTok[dels[k]].word });
+      else ops.push({ type: 'extra', wrong: sTok[ins[k]].word });
     }
     dels = []; ins = [];
   };
   while (i < n || j < m) {
-    if (i < n && j < m && tn[i] === sn[j]) { flush(); ops.push({ type: 'same', word: sWords[j] }); i++; j++; continue; }
-    if (j < m && (i >= n || dp[i][j + 1] >= dp[i + 1][j])) { ins.push(sWords[j]); j++; continue; }
-    if (i < n) { dels.push(tWords[i]); i++; continue; }
-    ins.push(sWords[j]); j++;
+    if (i < n && j < m && tn[i] === sn[j]) { flush(); ops.push({ type: 'same', word: sTok[j].word }); i++; j++; continue; }
+    if (j < m && (i >= n || dp[i][j + 1] >= dp[i + 1][j])) { ins.push(j); j++; continue; }
+    if (i < n) { dels.push(i); i++; continue; }
+    ins.push(j); j++;
   }
   flush();
   let same = 0, wrong = 0, missed = 0, extra = 0;
@@ -11224,6 +11287,26 @@ function podcastCompare(teacherText, studentText) {
     ops: ops, same: same, wrong: wrong, missed: missed, extra: extra,
     total: n, percent: percent, cefr: mockCefr(percent)
   };
+}
+/* Har bir qisqartma varianti sinaladi va eng yaxshi natija tanlanadi
+   (masalan he's = he is yoki he has). */
+function podcastCompare(teacherText, studentText) {
+  const tWords = podcastTokens(teacherText);
+  const sWords = podcastTokens(studentText);
+  const sStreams = podcastVariantCombos(sWords).map(function (sc) {
+    return podcastTokenForms(sWords, sc);
+  });
+  let best = null;
+  podcastVariantCombos(tWords).forEach(function (tc) {
+    const tTok = podcastTokenForms(tWords, tc);
+    sStreams.forEach(function (sTok) {
+      const res = podcastAlign(tTok, sTok);
+      const resErr = res.wrong + res.missed + res.extra;
+      const bestErr = best ? best.wrong + best.missed + best.extra : Infinity;
+      if (!best || res.same > best.same || (res.same === best.same && resErr < bestErr)) best = res;
+    });
+  });
+  return best;
 }
 /* Xato so'z ustida qizil chiziq + yonida yashil to'g'ri so'z;
    tushirib qoldirilgan so'zlar joyida qizil rangda qo'shiladi. */
@@ -11338,9 +11421,37 @@ function mockFieldValue(obj, path) {
 }
 
 /* --- Mock ta'riflari (ustoz yaratadi) --- */
+/* O'chirilgan testlar "qabrtoshi" (tombstone) bilan belgilanadi: bulutdagi
+   eski nusxa qayta tortilsa ham ular lokal xotirada tiklanmaydi. */
+function mockTombstones() {
+  const v = store.get(K.mockDeleted, {});
+  return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+}
+function mockTombstoneAt(id) {
+  return Number(mockTombstones()[String(id)] || 0);
+}
+function mockMarkDeleted(id, at) {
+  const key = String(id || '');
+  if (!key) return false;
+  const map = mockTombstones();
+  const stamp = Number(at) || Date.now();
+  if (Number(map[key] || 0) >= stamp) return false;
+  map[key] = stamp;
+  store.set(K.mockDeleted, map);
+  return true;
+}
+/* Test o'chirilgandan keyin (oldinroq saqlangan nusxasi) qayta ko'rinmaydi. */
+function mockDefDeleted(def) {
+  if (!def) return false;
+  const at = mockTombstoneAt(def.id);
+  if (!at) return false;
+  const updated = new Date(def.updatedAt || def.createdAt || 0).getTime();
+  return !isFinite(updated) || updated <= at;
+}
 function mockDefs() {
   const list = store.get(K.mocks, []);
-  return Array.isArray(list) ? list : [];
+  if (!Array.isArray(list)) return [];
+  return list.filter(function (d) { return !mockDefDeleted(d); });
 }
 function mockSortDefs(list) {
   return list.slice().sort(function (a, b) {
@@ -11585,8 +11696,19 @@ function mockSaveDef(def, skipCloud) {
   return row;
 }
 function mockDeleteDef(id) {
-  store.set(K.mocks, mockDefs().filter(function (d) { return String(d.id) !== String(id); }));
-  MockSync.deleteDef(id);
+  const key = String(id || '');
+  if (!key) return;
+  const def = mockDefById(key);
+  mockMarkDeleted(key, Date.now());
+  store.set(K.mocks, mockDefs().filter(function (d) { return String(d.id) !== key; }));
+  if (state.mockBuilder && state.mockBuilder.draft && String(state.mockBuilder.draft.id) === key) {
+    state.mockBuilder = null;
+  }
+  MockSync.deleteDef(key).then(function (ok) {
+    /* Bulutda DELETE ruxsati bo'lmasa — qabrtosh payload yozamiz,
+       shunda boshqa qurilmalar ham uni o'chirilgan deb biladi. */
+    if (!ok) MockSync.tombstoneDef(key, def);
+  });
 }
 
 /* --- Natijalar (urinishlar) --- */
@@ -11649,9 +11771,19 @@ const MockSync = (function () {
       const payload = r && r.payload ? r.payload : null;
       if (!payload || payload.kind !== 'mock' || payload.id == null) return;
       const id = String(payload.id);
+      if (payload.deleted === true) {
+        mockMarkDeleted(id, new Date(payload.updatedAt || (r && r.updated_at) || 0).getTime());
+        if (byId[id]) { delete byId[id]; changed = true; }
+        return;
+      }
+      const next = Object.assign({}, payload, { id: id });
+      if (mockDefDeleted(next)) {
+        if (byId[id]) { delete byId[id]; changed = true; }
+        return;
+      }
       const cur = byId[id];
       if (!cur || String(payload.updatedAt || '') > String(cur.updatedAt || '')) {
-        byId[id] = Object.assign({}, payload, { id: id });
+        byId[id] = next;
         changed = true;
       }
     });
@@ -11707,6 +11839,24 @@ const MockSync = (function () {
       if (res.error) { if (tableMissing(res.error)) enabled = false; return false; }
       return true;
     } catch (e) { return false; }
+  }
+  /* DELETE ishlamasa (RLS ruxsat bermasa) — payload orqali e'lon qilamiz */
+  async function tombstoneDef(id, def) {
+    if (!ready() || !id) return false;
+    const stamp = new Date().toISOString();
+    const row = {
+      id: String(id),
+      title: String((def && def.title) || ''),
+      category: String((def && def.category) || ''),
+      group_ids: [],
+      payload: { kind: 'mock', id: String(id), deleted: true, updatedAt: stamp },
+      updated_at: stamp
+    };
+    try {
+      const res = await client.from('mock_tests').upsert(row, { onConflict: 'id' });
+      if (res.error) { if (tableMissing(res.error)) enabled = false; return false; }
+      return true;
+    } catch (e) { if (tableMissing(e)) enabled = false; return false; }
   }
   async function deleteAttempt(id) {
     if (!ready() || !id) return false;
@@ -11805,7 +11955,8 @@ const MockSync = (function () {
     return changed;
   }
   return {
-    ready: ready, pushDef: pushDef, deleteDef: deleteDef, deleteAttempt: deleteAttempt, push: push,
+    ready: ready, pushDef: pushDef, deleteDef: deleteDef, tombstoneDef: tombstoneDef,
+    deleteAttempt: deleteAttempt, push: push,
     pullMine: pullMine, pullAll: pullAll, subscribe: subscribe, mergeDefs: mergeDefs, mergeAttempts: mergeAttempts
   };
 })();
@@ -13268,44 +13419,115 @@ function mockBDelQuestion(path, idx) {
 /* Diagnostika (smoke testlar uchun) */
 window.__mock = {
   saveDef: mockSaveDef,
+  compare: podcastCompare,
   defs: mockDefs,
   deleteDef: mockDeleteDef,
+  mergeDefs: MockSync.mergeDefs,
   saveSpeakingVideo: mockSaveSpeakingVideo,
   results: mockResults,
   pending: mockPendingCount
 };
 
 /* ==================== SUPPORT TEACHERLAR (faqat asosiy o'qituvchi) ==================== */
-function supportPermChipsHTML(rec) {
-  const perms = supportPermsOf(rec);
-  return SUPPORT_PERM_LIST.map(function (p) {
-    return `<span class="sup-perm${perms[p.key] ? ' on' : ''}">${perms[p.key] ? ico('check', 11) : ico('close', 11)} ${esc(t(p.label))}</span>`;
-  }).join('');
+function supportTeacherGroups(rec) {
+  return supportRecordGroupIds(rec).map(function (id) { return groupById(id); }).filter(Boolean);
 }
-function supportCardHTML(rec) {
-  const groups = supportRecordGroupIds(rec).map(function (id) { return groupById(id); }).filter(Boolean);
-  return `<div class="card sup-card">
+/* Support teacher platformasining nusxasi: ruxsat berilgan amallar */
+function supportGroupQuickItems(rec) {
+  const perms = supportPermsOf(rec);
+  const out = [];
+  if (perms.homework) out.push({ kind: 'homework', label: 'Uyga vazifa berish', icon: ICON.bookOpen, tint: 'tint-blue' });
+  if (perms.attendance) out.push({ kind: 'attendance', label: 'Davomat', icon: ICON.cal, tint: 'tint-emerald' });
+  if (perms.submissions) out.push({ kind: 'submissions', label: 'Topshiriqlar', icon: ICON.clipboardCheck, tint: 'tint-rose' });
+  if (perms.speaking) out.push({ kind: 'speaking', label: 'Speaking', icon: ICON.mic, tint: 'tint-sky' });
+  if (perms.grades) out.push({ kind: 'grades', label: 'Baholar', icon: ICON.grades, tint: 'tint-indigo' });
+  if (perms.mock) out.push({ kind: 'mock', label: 'Mock testlar', icon: ICON.gradCap, tint: 'tint-violet' });
+  if (perms.students || perms.edit_group) out.push({ kind: 'groups', label: 'Sinflar', icon: ICON.groups, tint: 'tint-amber' });
+  if (perms.students) out.push({ kind: 'students', label: "O'quvchilar", icon: ICON.students, tint: 'tint-amber' });
+  if (perms.add_student) out.push({ kind: 'add_student', label: "O'quvchi qo'shish", icon: ico('plus', 20), tint: 'tint-emerald' });
+  if (perms.edit_group) out.push({ kind: 'edit_group', label: 'Guruhni tahrirlash', icon: ico('brush', 20), tint: 'tint-sky' });
+  return out;
+}
+/* Guruh ichida: tezkor amallar + berilgan vazifalar va qabul qilingan
+   topshiriqlar (video, rasm, fayl) — asosiy ustoz hammasini ko'radi. */
+function supportGroupPanelHTML(rec, g) {
+  const items = supportGroupQuickItems(rec);
+  const gid = String(g.id);
+  const hw = getHomework().filter(function (h) { return String(h.groupId) === gid; })
+    .sort(function (a, b) { return String(b.createdAt || '').localeCompare(String(a.createdAt || '')); });
+  const subs = submissionsList().filter(function (s) {
+    const h = submissionHomework(s);
+    return !!h && String(h.groupId) === gid;
+  });
+  return `<div class="sup-group-panel">
+    <div class="quick-grid sup-quick-grid">${items.map(function (q) {
+      return `<button type="button" class="card quick" data-act="support-quick" data-kind="${q.kind}" data-id="${esc(rec.id)}" data-gid="${esc(gid)}"><span class="quick-ico ${q.tint}">${q.icon}</span><span>${esc(t(q.label))}</span></button>`;
+    }).join('')}</div>
+
+    <div class="sup-block">
+      <div class="sup-block-title">${ico('bookOpen', 14)} ${t('Berilgan vazifalar')} <span class="muted small">(${hw.length})</span></div>
+      ${hw.length
+        ? `<div class="sup-task-list">${hw.map(function (h) {
+            return `<div class="sup-task">
+              <div class="row between"><strong>${esc(h.title || '—')}</strong><span class="muted small">${h.dueDate ? fmtDMY(h.dueDate) : ''}</span></div>
+              ${h.description ? `<div class="muted small">${esc(h.description)}</div>` : ''}
+              ${hwMediaHTML(h)}
+            </div>`;
+          }).join('')}</div>`
+        : `<div class="muted small">${t("Hozircha vazifa yo'q")}</div>`}
+    </div>
+
+    <div class="sup-block">
+      <div class="sup-block-title">${ico('clipboardCheck', 14)} ${t('Qabul qilingan topshiriqlar')} <span class="muted small">(${subs.length})</span></div>
+      ${subs.length
+        ? `<div class="sup-task-list">${subs.map(function (s) {
+            const st = submissionStudent(s);
+            const h = submissionHomework(s);
+            return `<div class="sup-task">
+              <div class="row between"><strong>${esc(st ? st.fullName : "O'quvchi")}</strong><span class="muted small">${s.createdAt ? fmtDMY(String(s.createdAt).slice(0, 10)) : ''}</span></div>
+              <div class="muted small">${esc(h ? (h.title || 'Uyga vazifa') : 'Uyga vazifa')}</div>
+              ${submissionFilesHTML(s.files)}
+              ${s.note ? `<p class="sub-note">${ico('message', 13)} ${esc(s.note)}</p>` : ''}
+            </div>`;
+          }).join('')}</div>`
+        : `<div class="muted small">${t("Hozircha topshiriq yo'q")}</div>`}
+    </div>
+  </div>`;
+}
+/* Bo'lim ichida: faqat support teacherlar ismi + tahrirlash/o'chirish.
+   Ism ustiga bosilsa — guruhlar; guruh ustiga bosilsa — tezkor amallar paneli. */
+function supportTeacherRowHTML(rec) {
+  const groups = supportTeacherGroups(rec);
+  const open = String(state.supportOpenId) === String(rec.id);
+  const openGid = open ? String(state.supportGroupId || '') : '';
+  const openGroup = groups.filter(function (g) { return String(g.id) === openGid; })[0] || null;
+  return `<div class="card sup-card sup-list-card">
     <div class="sup-card-head">
-      <div class="avatar">${esc(initials(rec.name))}</div>
-      <div class="col">
-        <div class="s-name">${esc(rec.name)}</div>
-        <div class="muted small">Login: <span class="login-val">${esc(rec.login || '')}</span></div>
-      </div>
-      <span class="chip-class">Support</span>
+      <button type="button" class="sup-name-btn" data-act="support-open" data-id="${esc(rec.id)}" aria-expanded="${open ? 'true' : 'false'}">
+        <span class="avatar">${esc(initials(rec.name))}</span>
+        <span class="col">
+          <span class="s-name">${esc(rec.name)}</span>
+          <span class="muted small"><span class="login-val">${esc(rec.login || '')}</span> · ${groups.length} ${t('guruh')}</span>
+        </span>
+      </button>
+      <span class="sup-row-actions">
+        <button type="button" class="btn btn-xs ghost" data-act="support-edit" data-id="${esc(rec.id)}">${ico('brush', 14)} ${t('Tahrirlash')}</button>
+        <button type="button" class="btn btn-xs danger" data-act="support-del" data-id="${esc(rec.id)}">${ico('trash', 14)} ${t("O'chirish")}</button>
+      </span>
     </div>
-    <div class="sup-card-groups">${groups.length
-      ? groups.map(function (g) { return `<span class="sup-group-pill">${ico('groups', 11)} ${esc(g.name)}</span>`; }).join('')
-      : `<span class="muted small">${t('Guruh biriktirilmagan')}</span>`}</div>
-    <div class="sup-card-perms">${supportPermChipsHTML(rec)}</div>
-    <div class="st-actions">
-      <button type="button" class="btn btn-xs ghost" data-act="support-edit" data-id="${esc(rec.id)}">${ico('brush', 14)} ${t('Tahrirlash')}</button>
-      <button type="button" class="btn btn-xs danger" data-act="support-del" data-id="${esc(rec.id)}">${ico('trash', 14)} ${t("O'chirish")}</button>
-    </div>
+    ${open ? (groups.length
+      ? `<div class="sup-watch-groups">${groups.map(function (g) {
+          const active = String(g.id) === openGid;
+          return `<button type="button" class="chip-btn${active ? ' active' : ''}" data-act="support-open-group" data-id="${esc(rec.id)}" data-gid="${esc(g.id)}">${ico('groups', 12)} ${esc(g.name)}</button>`;
+        }).join('')}</div>`
+      : `<div class="muted small">${t('Guruh biriktirilmagan')}</div>`) : ''}
+    ${open && openGroup ? supportGroupPanelHTML(rec, openGroup) : ''}
   </div>`;
 }
 function supportScreen() {
   if (!isTeacher()) return blockedScreen("Bu bo'lim faqat asosiy o'qituvchi uchun");
   const list = supportTeachers();
+  const on = !!state.supervise;
   return `
   <div class="screen-head">
     <div>
@@ -13314,12 +13536,20 @@ function supportScreen() {
     </div>
     <button type="button" class="btn btn-primary btn-sm" data-act="support-add">+ ${t("Support teacher qo'shish")}</button>
   </div>
-  <div class="card sup-info">
-    <div class="strong-label">${ico('alert', 14)} ${t('Qanday ishlaydi')}</div>
-    <div class="muted small">Support teacher faqat shu yerda biriktirilgan guruhlar va belgilangan ruxsatlar bilan ishlaydi. Uning guruhlari <b>Guruhlar</b> va <b>O'quvchilar</b> bo'limlarida faqat <b>«Support teacherni nazorat qilish»</b> rejimi yoniq bo'lganda ko'rinadi.</div>
+  <div class="card sup-watch">
+    <div class="row between">
+      <div class="col">
+        <div class="strong-label">${t('Support teacherni nazorat qilish')}</div>
+        <div class="muted small">${on
+          ? t("Nazorat rejimi yoniq — support guruhlari ko'rinadi.")
+          : t("O'chirilganda support guruhlari Guruhlar va O'quvchilar bo'limlarida ko'rinmaydi.")}</div>
+      </div>
+      <button type="button" class="switch${on ? ' on' : ''}" data-act="toggle-supervise" role="switch"
+              aria-checked="${on}" aria-label="${t('Support teacherni nazorat qilish')}"></button>
+    </div>
   </div>
   ${list.length
-    ? list.map(supportCardHTML).join('')
+    ? list.map(supportTeacherRowHTML).join('')
     : emptyState("Hozircha support teacher qo'shilmagan — «Support teacher qo'shish» tugmasini bosing", 'profile')}
   `;
 }
@@ -13967,7 +14197,8 @@ document.addEventListener('click', function (e) {
       'reset-pwd', 'save-reset', 'pay-student', 'save-pay', 'debt-add', 'save-add-debt',
       'remind-student', 'remind-debtors', 'backup-dl', 'backup-pick', 'do-restore',
       'start-cleanup', 'do-cleanup', 'run-diagnostics', 'support-add', 'support-edit',
-      'support-save', 'support-del', 'support-do-del', 'toggle-supervise', 'support-watch-group'
+      'support-save', 'support-del', 'support-do-del', 'toggle-supervise', 'support-watch-group',
+      'support-open', 'support-open-group', 'support-quick'
     ];
     if (teacherOnly.indexOf(act) >= 0) {
       toast("Bu amal faqat asosiy o'qituvchi uchun", 'error');
@@ -14075,6 +14306,41 @@ document.addEventListener('click', function (e) {
     'support-save': saveSupportTeacher,
     'support-del': function () { openDeleteSupport(btn.getAttribute('data-id')); },
     'support-do-del': function () { doDeleteSupport(btn.getAttribute('data-id')); },
+    'support-open': function () {
+      const id = String(btn.getAttribute('data-id') || '');
+      state.supportOpenId = String(state.supportOpenId) === id ? '' : id;
+      state.supportGroupId = '';
+      render();
+    },
+    'support-open-group': function () {
+      const gid = String(btn.getAttribute('data-gid') || '');
+      state.supportOpenId = String(btn.getAttribute('data-id') || '');
+      state.supportGroupId = String(state.supportGroupId) === gid ? '' : gid;
+      render();
+    },
+    /* Support teacher platformasi nusxasi: guruh kontekstida amalni ochish */
+    'support-quick': function () {
+      if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
+      const gid = String(btn.getAttribute('data-gid') || '');
+      const kind = String(btn.getAttribute('data-kind') || '');
+      state.supervise = true;
+      if (kind === 'homework') { state.hwGroup = gid; go('homework'); return; }
+      if (kind === 'attendance') { state.attGroup = gid; state.attDate = todayKey(); state.attDraftFor = ''; go('attendance'); return; }
+      if (kind === 'submissions') { state.subGroup = gid; go('submissions'); return; }
+      if (kind === 'speaking') { go('speaking'); return; }
+      if (kind === 'grades') { state.gradeGroup = gid; state.gradeDate = ''; go('grades'); return; }
+      if (kind === 'mock') { go('mock'); return; }
+      if (kind === 'groups') { state.groupDetail = gid; go('groups'); return; }
+      if (kind === 'students') {
+        state.filterGroup = gid;
+        state.filterClass = 'Barchasi';
+        state.search = '';
+        go('students');
+        return;
+      }
+      if (kind === 'add_student') { openAddStudent(); return; }
+      if (kind === 'edit_group') { openEditGroup(gid); return; }
+    },
     'toggle-supervise': function () {
       state.supervise = !state.supervise;
       if (!state.supervise) state.groupDetail = '';

@@ -417,8 +417,8 @@ check(q('#app-header').textContent.includes('Muzaffar Amirov'), 'ustoz: headerda
 check(navLabels().length === 10, 'ustoz: 10 ta nav tabi (' + navLabels().join(', ') + ')');
 
 /* --- Vektor ikonka tizimi: barcha emoji o'rniga SVG badge'lar --- */
-check(qa('.quick-grid .quick-ico').length === 10, 'icon: TEZ AMALLAR gridida 10 ta ikonka badge');
-check(qa('.quick-grid .quick-ico svg').length === 10, "icon: har bir badge ichida SVG (emoji o'rniga)");
+check(qa('.quick-grid .quick-ico').length === 11, 'icon: TEZ AMALLAR gridida 11 ta ikonka badge');
+check(qa('.quick-grid .quick-ico svg').length === 11, "icon: har bir badge ichida SVG (emoji o'rniga)");
 check(['tint-indigo', 'tint-emerald', 'tint-sky', 'tint-amber', 'tint-purple', 'tint-slate', 'tint-rose', 'tint-teal']
   .every(t => qa('.quick-ico.' + t).length === 1),
   'icon: indigo/emerald/sky/amber/purple/slate/rose/teal tints har biri bittadan');
@@ -426,8 +426,10 @@ const quickOrder = qa('.quick-grid .quick[data-screen]').map(b => b.getAttribute
 check(JSON.stringify(quickOrder.slice(0, 5)) ===
   JSON.stringify(['homework', 'attendance', 'submissions', 'speaking', 'grades']),
   'home: tez amallar tartibi — uyga vazifa, davomat, topshiriqlar, speaking, baholar');
-check(quickOrder.length === 9 && qa('.quick-grid .quick').length === 10,
-  'home: qolgan tez amallar beshtalikdan keyin saqlangan (10 ta karta)');
+check(quickOrder.length === 10 && qa('.quick-grid .quick').length === 11,
+  'home: qolgan tez amallar beshtalikdan keyin saqlangan (11 ta karta)');
+check(quickOrder[9] === 'support' && !q('.sup-watch'),
+  'home: "Support teacherlar" bo‘limi Mock testlardan keyin, pastda faqat uyga vazifa berish qoldi');
 
 /* Sayt speaking videosi → ustozga FAQAT matnli Telegram xabari (video/baho tugmalarisiz) */
 const outboxBeforeWebNotice = (cloudStub.db.telegram_outbox || []).length;
@@ -1305,7 +1307,36 @@ check(!q('.mock-history') && !!q('[data-act="mock-cat-open"][data-cat="podcasts"
   'mock natijalar: bo‘limlar ro‘yxatidan Orqaga → Mock bo‘limlariga qaytadi');
 closeStudentView();
 
-/* ================= 11. O'QUVCHI: PAROLNI O'ZGARTIRISH ================= */
+/* Drop belgisi (qisqartma) va to'liq shakl ikkalasi ham to'g'ri: don't = do not */
+const podCmp = win.__mock.compare;
+let podC = podCmp("Here's the plan, don't worry.", 'Here is the plan, do not worry.');
+check(podC.same === podC.total && podC.wrong === 0 && podC.missed === 0 && podC.extra === 0,
+  'mock podcasts: ustoz “here’s/don’t” yozsa, “here is/do not” ham to‘g‘ri sanaladi');
+podC = podCmp('Do not worry, here is the plan.', "Don't worry, here's the plan.");
+check(podC.same === podC.total && podC.wrong === 0 && podC.missed === 0 && podC.extra === 0,
+  'mock podcasts: ustoz “do not/here is” yozsa, “don’t/here’s” ham to‘g‘ri sanaladi');
+podC = podCmp("I can't go, but she doesn’t know.", 'I cannot go, but she does not know.');
+check(podC.same === podC.total && podC.wrong === 0 && podC.missed === 0,
+  'mock podcasts: cannot = can’t, apostrofsiz shakl va egri apostrof ham qabul qilinadi');
+podC = podCmp("I can't swim", 'I can swim');
+check(podC.wrong + podC.missed > 0,
+  'mock podcasts: qisqartma qoidasi haqiqiy xatoni yashirmaydi (can’t ≠ can)');
+podC = podCmp("He's got a car.", 'He has got a car.');
+check(podC.same === podC.total && podC.wrong === 0 && podC.missed === 0,
+  'mock podcasts: he’s = he has varianti ham qabul qilinadi');
+podC = podCmp("It's been a long day.", 'It has been a long day.');
+check(podC.same === podC.total && podC.wrong === 0 && podC.missed === 0,
+  'mock podcasts: it’s = it has varianti ham qabul qilinadi');
+podC = podCmp('I ain’t ready.', 'I am not ready.');
+check(podC.same === podC.total && podC.wrong === 0 && podC.missed === 0,
+  'mock podcasts: ain’t = am not varianti qabul qilinadi');
+podC = podCmp("Y'all should've known.", 'You all should have known.');
+check(podC.same === podC.total && podC.wrong === 0 && podC.missed === 0,
+  'mock podcasts: y’all = you all, should’ve = should have');
+podC = podCmp("He's got a car.", 'She is got a car.');
+check(podC.wrong + podC.missed > 0,
+  'mock podcasts: he’s varianti boshqa olmoshga moslashmaydi');
+
 click('[data-act="nav"][data-screen="profile"]');
 check(text().includes('Parolni o\'zgartirish'), 'student: profilda parol o\'zgartirish tugmasi');
 check(!!q('.list-row .login-val') && !q('.list-row code'), "login: profilda login oddiy matn — kod/badge yo'q");
@@ -1482,6 +1513,23 @@ click('[data-act="mock-del"][data-id="' + builtDef.id + '"]');
 click('[data-act="mock-del-yes"][data-id="' + builtDef.id + '"]');
 check(!(JSON.parse(win.localStorage.getItem('et_mock_defs')) || []).some(d => d.id === builtDef.id),
   'mock ustoz: test o‘chirildi');
+
+/* O'chirilgan test bulutdagi eski nusxadan qayta tiklanmaydi (tombstone) */
+const ghostDef = { id: 'md_ghost_del', title: 'Ghost Test', category: 'podcasts', groupIds: [],
+  mediaUrl: 'https://example.com/a.mp3', script: 'Hello world.' };
+win.__mock.saveDef(ghostDef, true);
+win.__mock.deleteDef(ghostDef.id);
+check(!win.__mock.defs().some(d => d.id === ghostDef.id),
+  'mock: o‘chirilgan podcast lokal ro‘yxatdan butunlay ketdi');
+win.__mock.mergeDefs([{ id: ghostDef.id,
+  payload: Object.assign({}, ghostDef, { kind: 'mock', updatedAt: '2020-01-01T00:00:00.000Z' }) }]);
+check(!win.__mock.defs().some(d => d.id === ghostDef.id),
+  'mock: o‘chirilgan podcast eski bulut nusxasidan qayta tiklanmaydi');
+win.__mock.mergeDefs([{ id: ghostDef.id,
+  payload: { kind: 'mock', id: ghostDef.id, deleted: true, updatedAt: new Date().toISOString() } }]);
+const ghostAgain = JSON.parse(win.localStorage.getItem('et_mock_deleted') || '{}');
+check(!!ghostAgain[ghostDef.id],
+  'mock: bulutdagi “deleted” belgisi lokal qabrtoshga aylanadi');
 
 /* Builder: “Harf / variant qo‘shish” + yozma javob + tahrirda guruh qo‘shish */
 clickAct('mock-add');
@@ -2358,7 +2406,7 @@ await (async () => {
   check(/\.quick\s*\{[^}]*padding:\s*14px/.test(cssText), 'tez amallar: p-3.5 (14px) padding');
   check(/\.quick-ico\s*\{[^}]*width:\s*36px;\s*\n?\s*height:\s*36px/.test(cssText),
     'tez amallar: ikonka badge bir xil 36×36px');
-  check(qa('.quick-grid .quick').length === 10, "tez amallar: 10 ta karta (barchasi bir xil balandlikda)");
+  check(qa('.quick-grid .quick').length === 11, "tez amallar: 11 ta karta (barchasi bir xil balandlikda)");
 
   /* ================= 21. VOICE RUXSAT KALITI (kartada) ================= */
   logout();
@@ -4380,6 +4428,43 @@ await (async () => {
     'support: o\'quvchi qo\'shish va guruh tahrirlash ruxsatlari saqlandi');
   check(!!q('.sup-card') && /Dilshod Karimov/.test(text()),
     'support: qo\'shilgach amaldagi support teacherlar ro\'yxati ko\'rinadi');
+  check(!q('.sup-card .sup-perm') && !!q('[data-act="support-edit"]') && !!q('[data-act="support-del"]'),
+    'support: bo‘lim ro‘yxatida faqat ism, tahrirlash va o‘chirish tugmalari turadi');
+
+  /* Ism → guruhlar → tezkor amallar (support platformasi nusxasi) */
+  click('[data-act="support-open"][data-id="' + supSaved[0].id + '"]');
+  check(qa('.sup-watch-groups .chip-btn').length === 1 && text().includes(sGroup.name),
+    'support: ism ustiga bosilganda biriktirilgan guruh nomlari chiqadi');
+  click('[data-act="support-open-group"][data-gid="' + sGroupId + '"]');
+  check(!!q('.sup-quick-grid') && /Berilgan vazifalar/.test(text()) &&
+        /Qabul qilingan topshiriqlar/.test(text()),
+    'support: guruh nomi ustiga bosilganda tezkor amallar paneli ochiladi');
+  check(!!q('.sup-quick-grid [data-kind="homework"]') && !q('.sup-quick-grid [data-kind="mock"]'),
+    'support: tezkor amallar support teacherning ruxsatlariga mos (mock ruxsati yo‘q)');
+
+  /* Berilgan va qabul qilingan vazifalar: video, rasm, fayl ko'rinadi */
+  const supHwAll = JSON.parse(win.localStorage.getItem('et_homework') || '[]');
+  supHwAll.push({ id: 'sup_hw_media', dbId: 9001, title: 'Support media task', groupId: sGroupId,
+    createdAt: new Date().toISOString(),
+    attachments: [
+      { url: 'https://example.com/lesson.mp4', type: 'video', name: 'lesson.mp4' },
+      { url: 'https://example.com/photo.jpg', type: 'image', name: 'photo.jpg' },
+      { url: 'https://example.com/task.pdf', type: 'pdf', name: 'task.pdf' }] });
+  win.localStorage.setItem('et_homework', JSON.stringify(supHwAll));
+  const supStudentDbId = (firstSupStudent && firstSupStudent.dbId) || (curStudents[0] && curStudents[0].dbId) || 0;
+  const supSubsAll = JSON.parse(win.localStorage.getItem('et_hw_submissions') || '[]');
+  supSubsAll.push({ id: 'sup_sub_media', homeworkDbId: 9001, studentDbId: supStudentDbId,
+    files: [
+      { url: 'https://example.com/answer.mp4', type: 'video', name: 'answer.mp4' },
+      { url: 'https://example.com/answer.jpg', type: 'image', name: 'answer.jpg' }],
+    note: 'Mening javobim', createdAt: new Date().toISOString() });
+  win.localStorage.setItem('et_hw_submissions', JSON.stringify(supSubsAll));
+  forceNav('support');
+  check(!!q('.sup-group-panel video') && !!q('.sup-group-panel .hw-gallery img') &&
+        !!q('.sup-group-panel .hw-doc-link'),
+    'support: asosiy ustoz berilgan vazifadagi video/rasm/faylni ko‘radi');
+  check(!!q('.sup-group-panel .sub-files video') && !!q('.sup-group-panel .sub-files .sub-file-img'),
+    'support: asosiy ustoz qabul qilingan topshiriqdagi video/rasmni ko‘radi');
 
   /* Asosiy ustoz: support guruhi odatda yashirin, nazorat rejimida ko'rinadi */
   forceNav('groups');
@@ -4391,7 +4476,7 @@ await (async () => {
   check(studentCards() === otherStudents.length,
     'support: support guruhi o\'quvchilari O\'quvchilar bo\'limida yashirin (' +
     studentCards() + '/' + curStudents.length + ')');
-  forceNav('home');
+  forceNav('support');
   clickAct('toggle-supervise');
   forceNav('groups');
   check(qa('.group-card').length === curGroups.length && /Dilshod Karimov/.test(text()),
@@ -4401,7 +4486,7 @@ await (async () => {
   check(/Support teacher nazorati/.test(text()) && /Uyga vazifalar/.test(text()) &&
         /Davomat/.test(text()) && /Mock natijalari/.test(text()),
     'support: guruh ichida support vazifalari, davomat va mock bo\'limlari ko\'rinadi');
-  forceNav('home');
+  forceNav('support');
   clickAct('toggle-supervise');
   forceNav('groups');
   check(qa('.group-card').length === curGroups.length - 1,

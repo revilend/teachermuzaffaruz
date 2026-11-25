@@ -598,6 +598,7 @@ img.auth-logo {
 .tint-teal    { background: #f0fdfa; color: #0d9488; }
 .tint-rose    { background: #fff1f2; color: #e11d48; }
 .tint-blue    { background: #eff6ff; color: #2563eb; }
+.tint-cyan    { background: #ecfeff; color: #0891b2; }
 .quick:active { transform: scale(0.97); }
 
 /* ---------- Guruhlar: yumshoq pastel aksent ---------- */
@@ -3353,3 +3354,22 @@ html[data-theme="dark"] .mock-timer.is-low { background: rgba(251, 113, 133, 0.1
 html[data-theme="dark"] .sup-group-badge,
 html[data-theme="dark"] .supervise-banner { background: rgba(129, 140, 248, 0.18); border-color: rgba(129, 140, 248, 0.35); color: #c7d2fe; }
 html[data-theme="dark"] .sup-perm.on { background: rgba(52, 211, 153, 0.16); border-color: rgba(52, 211, 153, 0.32); color: #6ee7b7; }
+
+/* Support teacherlar bo'limi: ism → guruhlar → tezkor amallar */
+.sup-name-btn {
+  display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0;
+  background: none; border: 0; padding: 0; text-align: left; cursor: pointer;
+  color: var(--text); font: inherit;
+}
+.sup-name-btn .col { min-width: 0; }
+.sup-name-btn .s-name { font-size: 14px; font-weight: 700; }
+.sup-row-actions { display: flex; gap: 6px; flex: none; }
+.sup-list-card.is-open { border-color: rgba(79, 70, 229, 0.35); }
+.sup-group-panel { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; padding-top: 10px; border-top: 1px solid var(--line); }
+.sup-quick-grid { grid-auto-rows: auto; }
+.sup-quick-grid .quick { height: auto; min-height: 0; padding: 10px; gap: 6px; }
+.sup-quick-grid .quick-ico { width: 30px; height: 30px; border-radius: 10px; }
+.sup-quick-grid .quick-ico svg { width: 17px; height: 17px; }
+.sup-task-list { display: flex; flex-direction: column; gap: 8px; margin-top: 7px; }
+.sup-task { display: flex; flex-direction: column; gap: 6px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.sup-task .hw-media, .sup-task .sub-files { margin-top: 4px; }
