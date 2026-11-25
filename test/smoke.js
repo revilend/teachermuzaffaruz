@@ -3153,14 +3153,14 @@ await (async () => {
   if (q('[data-act="auth-back"]')) click('[data-act="auth-back"]');
   check(text().includes('English Teacher — Muzaffar Amirov'),
     'landing: sarlavha "English Teacher — Muzaffar Amirov"');
-  check(text().includes("5–11-sinf va repetitorlik guruhlari uchun ingliz tili ta'lim platformasi"),
+  check(text().includes("5–11-sinf o'quvchilari va repetitorlik guruhlari uchun zamonaviy raqamli ingliz tili ta'lim platformasi"),
     'landing: qisqa tavsif matni');
   check(!!q('.landing-hero') && !!q('.landing-title') && !!q('.landing-sub'),
     'landing: hero bloki (sarlavha + tavsif)');
   check(qa('.landing-feature').length === 3, 'landing: 3 ta imkoniyat kartasi (tablarsiz)');
-  check(text().includes('Uyga vazifalar va media darslar') &&
-        text().includes('10 ballik jurnal va davomat') &&
-        text().includes('Telegram bot (@uzbekspeakingcheckbot)'), 'landing: 3 karta sarlavhalari to\u2019liq');
+  check(text().includes('Interaktiv uyga vazifalar') &&
+        text().includes('10 ballik elektron jurnal') &&
+        text().includes('Speaking nazorati (@uzbekspeakingcheckbot)'), 'landing: 3 karta sarlavhalari to\u2019liq');
   check(qa('.landing-feature svg').length === 3, 'landing: har bir kartada SVG ikonka');
   check(!/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(q('.landing').textContent),
     'landing: emoji yo\u2019q (faqat ICON/ico SVG)');
@@ -3223,11 +3223,11 @@ await (async () => {
   if (q('[data-act="auth-back"]')) click('[data-act="auth-back"]');
   check(text().includes('English Teacher — Muzaffar Amirov'),
     'i18n EN: landing sarlavhasi');
-  check(text().includes('An English learning platform for Grade 5–11 and tutoring groups'),
+  check(text().includes('A modern digital English learning platform for grades 5–11 and tutoring groups'),
     'i18n EN: landing tavsifi tarjimasi');
-  check(text().includes('Homework & media lessons') &&
-        text().includes('10-point gradebook & attendance') &&
-        text().includes('Telegram bot (@uzbekspeakingcheckbot)'),
+  check(text().includes('Interactive Homework') &&
+        text().includes('10-Point Digital Gradebook') &&
+        text().includes('Speaking Assessment (@uzbekspeakingcheckbot)'),
     'i18n EN: 3 karta sarlavhalari inglizcha');
   await loginAs('m_amirov', '123');
   check(navLabels().join(',') === 'Home,Students,Homework,Submissions,Mock Tests,Payments,Grades,Attendance,Speaking,Profile',

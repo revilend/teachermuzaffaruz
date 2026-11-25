@@ -3653,19 +3653,19 @@ const I18N_EN = {
   'Guruh taylanmagan': 'No group assigned',
   'Barchasi': 'All',
   /* --- Kirish sahifasi (hero): sarlavha, tavsif, 3 ta ma'lumot kartasi --- */
-  "Teacher Muzaffar Amirov — Ingliz tili ta'lim platformasi":
-    'Teacher Muzaffar Amirov — English Learning Platform',
-  "Ushbu platforma Muzaffar Amirovning 5–11-sinf o'quvchilari uchun mo'ljallangan zamonaviy ta'lim va nazorat tizimidir. O'quvchilar darslarni o'zlashtirishi, vazifalar va speaking topshiriqlarini bajarishi, ota-onalar esa davomat va baholarni real vaqtda kuzatishi mumkin.":
-    "A modern learning and monitoring platform designed for Teacher Muzaffar Amirov's Grade 5–11 students. Track daily lessons, complete speaking assignments, and monitor attendance and grades in real time.",
-  "Yakkama-yakka Speaking va Audio/Video tahlil": '1-on-1 Speaking & Audio/Video Review',
-  "O'quvchilar mavzular bo'yicha speaking topshiriqlarini darsda yoki Telegram bot orqali dumaloq video (krujok) shaklida yuboradilar. Har bir javob 10 ballik tizimda baholanadi va speaking qarzlari avtomatik hisoblanadi.":
-    'Students submit speaking tasks in class or via Telegram bot as round videos (video notes). Every submission is graded on a 10-point scale with automatic speaking debt tracking.',
-  "Kundalik 10 ballik elektron jurnal va Davomat": 'Daily 10-Point Gradebook & Attendance',
-  "Har bir darsdagi faollik, davomat va baholar shaffof elektron jurnalga kiritiladi hamda haftalik va umumiy o'rtacha reyting avtomatik hisoblanadi.":
-    'Class participation, attendance, and grades are recorded in a transparent electronic journal with automatic weekly and overall average calculations.',
-  "Telegram Bot ekotizimi (@uzbekspeakingcheckbot)": 'Telegram Bot Ecosystem (@uzbekspeakingcheckbot)',
-  "Yangi uyga vazifalar, speaking eslatmalari, olingan baholar va ustoz xabarlari bevosita o'quvchining Telegram profiliga tezkor yetkaziladi.":
-    "Instant notifications for new homework, speaking schedules, grades, and teacher messages delivered directly to the student's Telegram.",
+  'English Teacher — Muzaffar Amirov': 'English Teacher — Muzaffar Amirov',
+  "5–11-sinf o'quvchilari va repetitorlik guruhlari uchun zamonaviy raqamli ingliz tili ta'lim platformasi: uyga vazifalar, 10 ballik baholar jurnali, davomat va speaking nazorati — barchasi bitta tizimda.":
+    'A modern digital English learning platform for grades 5–11 and tutoring groups: homework, a 10-point gradebook, attendance and speaking assessment — all in one system.',
+  'Tizimga kirish': 'Sign In', 'Orqaga': 'Back',
+  'Interaktiv uyga vazifalar': 'Interactive Homework',
+  "Video, audio va hujjatlar bilan ishlash, tezlikni boshqarish va topshiriqlarni onlayn yuborish imkoniyati.":
+    'Work with video, audio and documents, adjust playback speed and submit assignments online.',
+  '10 ballik elektron jurnal': '10-Point Digital Gradebook',
+  "Har bir dars uchun baholar, haftalik va umumiy o'rtacha ko'rsatkich hamda aniq davomat statistikasi.":
+    'Lesson-by-lesson grades, weekly and overall averages, and precise attendance statistics.',
+  'Speaking nazorati (@uzbekspeakingcheckbot)': 'Speaking Assessment (@uzbekspeakingcheckbot)',
+  "Video topshiriqlarni sayt va Telegram orqali qabul qilish, baholash va natijalarni tezkor yetkazish.":
+    'Receive video assignments via the website and Telegram, grade them and deliver results instantly.',
   /* --- Profil: faol qurilmalar --- */
   'Faol qurilmalar': 'Active Devices',
   'Bu qurilma': 'This device',
@@ -3691,20 +3691,7 @@ const I18N_EN = {
   'Xabarlar': 'Messages',
   'Topshiriqlar': 'Tasks',
   'Tanlangan jadvalni tozalash': 'Clear Selected Table',
-  /* --- Landing + kirish/tiklash ekranlari --- */
-  'English Teacher — Muzaffar Amirov': 'English Teacher — Muzaffar Amirov',
-  "5–11-sinf va repetitorlik guruhlari uchun ingliz tili ta'lim platformasi: uyga vazifalar, 10 ballik baholar jurnali, davomat va speaking nazorati.":
-    'An English learning platform for Grade 5–11 and tutoring groups: homework, a 10-point gradebook, attendance, and speaking control.',
-  'Tizimga kirish': 'Sign In', 'Orqaga': 'Back',
-  'Uyga vazifalar va media darslar': 'Homework & media lessons',
-  "Video, audio va hujjatlarni saytning o'zida tezlikni boshqarib o'rganish.":
-    'Study video, audio, and documents right on the site with playback speed control.',
-  '10 ballik jurnal va davomat': '10-point gradebook & attendance',
-  "Har bir darsdagi baholar, o'rtacha reyting va qatnashish statistikasi.":
-    'Grades for every lesson, average rating, and attendance statistics.',
-  'Telegram bot (@uzbekspeakingcheckbot)': 'Telegram bot (@uzbekspeakingcheckbot)',
-  'Ovozli va video speaking topshirish hamda baho/xabarlarni tezkor olish.':
-    'Submit voice and video speaking tasks and receive grades and messages instantly.',
+  /* --- Kirish/tiklash ekranlari --- */
   'Kirish — English Teacher': 'Sign In — English Teacher',
   'Login va parolingizni kiriting': 'Enter your login and password',
   'Login yoki parolni unutdingizmi?': 'Forgot your login or password?',
@@ -3775,7 +3762,6 @@ const I18N_EN = {
   "Yuklash ruxsati": "Upload allowed",
   "Uyga vazifa yuklashga ruxsat": "Allow homework upload",
   "Uyga vazifa yuklashga ruxsat yo'q": "Homework upload is not allowed",
-  "Uyga vazifalar va media darslar": "Homework and media lessons",
   "Topshiriqni yuklash": "Upload homework",
   "Topshiriqlar": "Submissions",
   "Izoh (ixtiyoriy)": "Comment (optional)",
@@ -3904,12 +3890,7 @@ const I18N_EN = {
   "Kiritilgan summa qarzdan ayiriladi va o'quvchi kabinetida so'nggi to'lov sifatida ko'rinadi.": "The entered amount is deducted from the debt and shown as the latest payment in the student dashboard.",
   "Ball tanlansa, o'quvchining baholar jurnaliga darhol yoziladi.": "Selecting a score writes it to the student's gradebook immediately.",
   "Baho qo'yish uchun katakchaga bosing.": "Tap a cell to set a grade.",
-  "Har bir darsdagi baholar, o'rtacha reyting va qatnashish statistikasi.": "Grades for every lesson, average rating and attendance statistics.",
   "Muzaffar Amirov baholagach, natijani shu kabinetda ko'rasiz.": "You will see the result in this dashboard after Muzaffar Amirov grades it.",
-  "Ovozli va video speaking topshirish hamda baho/xabarlarni tezkor olish.": "Submit voice and video speaking tasks and get grades/messages quickly.",
-  "Video, audio va hujjatlarni saytning o'zida tezlikni boshqarib o'rganish.": "Study video, audio and documents on the site with adjustable speed.",
-  "10 ballik jurnal va davomat": "10-point gradebook and attendance",
-  "5–11-sinf va repetitorlik guruhlari uchun ingliz tili ta'lim platformasi: uyga vazifalar, 10 ballik baholar jurnali, davomat va speaking nazorati.": "English learning platform for grades 5–11 and tutoring groups: homework, a 10-point gradebook, attendance and speaking control.",
   "Oylik to'lov summasi (so'mda)": "Monthly fee (in sum)",
   "To'lov qarzi (so'mda)": "Payment debt (in sum)",
   "To'lov summasi (so'mda)": "Payment amount (in sum)",
@@ -4004,7 +3985,6 @@ const I18N_EN = {
   "Kiritish": "Enter",
   "Chiqarib yuborish": "Remove",
   "Yangi qurilma aniqlandi — 6 xonali kod Telegram (ustoz) va Gmail orqali yuborildi. Qurilma:": "New device detected — a 6-digit code was sent via Telegram (teacher) and Gmail. Device:",
-  "Telegram bot (@uzbekspeakingcheckbot)": "Telegram bot (@uzbekspeakingcheckbot)",
   "Bu raqamga Telegram bot ulanmagan. Avval @uzbekspeakingcheckbot da /login qiling": "Telegram bot is not linked to this number. Run /login in @uzbekspeakingcheckbot first",
   "Telegram kirishi tekshiruvi majburiy — kirish rad etildi": "Telegram sign-in verification is required — sign-in denied",
   "Telegram navbati yozilmadi — bot sozlanmagan bo'lishi mumkin": "Telegram queue was not written — the bot may not be configured",
@@ -5022,7 +5002,7 @@ function landingScreen() {
     <section class="landing-hero">
       <span class="landing-kicker">${ico('gradCap', 15)} English Teacher</span>
       <h1 class="landing-title">${t('English Teacher — Muzaffar Amirov')}</h1>
-      <p class="landing-sub">${t("5–11-sinf va repetitorlik guruhlari uchun ingliz tili ta'lim platformasi: uyga vazifalar, 10 ballik baholar jurnali, davomat va speaking nazorati.")}</p>
+      <p class="landing-sub">${t("5–11-sinf o'quvchilari va repetitorlik guruhlari uchun zamonaviy raqamli ingliz tili ta'lim platformasi: uyga vazifalar, 10 ballik baholar jurnali, davomat va speaking nazorati — barchasi bitta tizimda.")}</p>
       <button type="button" class="btn btn-primary landing-cta" data-act="auth-login-open">${t('Tizimga kirish')} ${ico('arrowRight', 16)}</button>
     </section>
 
@@ -5030,22 +5010,22 @@ function landingScreen() {
       <article class="landing-feature">
         <span class="landing-fico tint-indigo">${ico('bookOpen', 20)}</span>
         <div class="landing-fbody">
-          <b>${t('Uyga vazifalar va media darslar')}</b>
-          <span>${t("Video, audio va hujjatlarni saytning o'zida tezlikni boshqarib o'rganish.")}</span>
+          <b>${t('Interaktiv uyga vazifalar')}</b>
+          <span>${t("Video, audio va hujjatlar bilan ishlash, tezlikni boshqarish va topshiriqlarni onlayn yuborish imkoniyati.")}</span>
         </div>
       </article>
       <article class="landing-feature">
         <span class="landing-fico tint-emerald">${ico('grades', 20)}</span>
         <div class="landing-fbody">
-          <b>${t('10 ballik jurnal va davomat')}</b>
-          <span>${t("Har bir darsdagi baholar, o'rtacha reyting va qatnashish statistikasi.")}</span>
+          <b>${t('10 ballik elektron jurnal')}</b>
+          <span>${t("Har bir dars uchun baholar, haftalik va umumiy o'rtacha ko'rsatkich hamda aniq davomat statistikasi.")}</span>
         </div>
       </article>
       <article class="landing-feature">
         <span class="landing-fico tone-telegram">${ico('telegram', 20)}</span>
         <div class="landing-fbody">
-          <b>${t('Telegram bot (@uzbekspeakingcheckbot)')}</b>
-          <span>${t('Ovozli va video speaking topshirish hamda baho/xabarlarni tezkor olish.')}</span>
+          <b>${t('Speaking nazorati (@uzbekspeakingcheckbot)')}</b>
+          <span>${t("Video topshiriqlarni sayt va Telegram orqali qabul qilish, baholash va natijalarni tezkor yetkazish.")}</span>
         </div>
       </article>
     </div>
@@ -5226,6 +5206,13 @@ function refreshRecoverCaptcha() {
 function emptyState(text, icoName) {
   return `<div class="empty"><span class="empty-ico">${ICON[icoName] || ICON.clipboardCheck}</span>${esc(text)}</div>`;
 }
+/* Har bir bo'lim ichida asosiy sahifaga qaytish uchun yagona "Orqaga" qatori */
+function backRowHTML(screen) {
+  return `<div class="back-row">
+    <button type="button" class="btn btn-xs ghost" data-act="nav" data-screen="${esc(screen || 'home')}">${ico('arrowLeft', 14)} ${t('Orqaga')}</button>
+  </div>`;
+}
+
 function blockedScreen(msg) {
   return `<div class="blocked"><span class="empty-ico">${ICON.lock}</span>${esc(msg)}</div>`;
 }
@@ -6466,7 +6453,7 @@ function submissionsScreen() {
     .concat(groups.map(function (g) {
       return `<button type="button" class="chip-btn${state.subGroup === g.id ? ' active' : ''}" data-act="sub-group" data-gid="${esc(g.id)}">${esc(g.name)}</button>`;
     })).join('');
-  return `<div class="screen-head"><h2 class="screen-title">${ico('clipboardCheck', 16)} Bajarilgan topshiriqlar</h2></div>
+  return `${backRowHTML('home')}<div class="screen-head"><h2 class="screen-title">${ico('clipboardCheck', 16)} Bajarilgan topshiriqlar</h2></div>
   <div class="sub-filters" id="sub-filters" data-scroll="${Number(state.subScroll) || 0}">${filterChips}</div>
   ${list.length
     ? `<div class="sub-list">${list.map(submissionCardHTML).join('')}</div>`
@@ -6634,6 +6621,7 @@ function paymentsScreen() {
     </div>`;
   }).join('');
   return `
+  ${backRowHTML('home')}
   <div class="screen-head">
     <div>
       <h2 class="screen-title">${ico('creditCard', 16)} To'lovlar</h2>
@@ -6891,6 +6879,7 @@ function groupsScreen() {
     { key: 'tutoring', label: 'Repetitorlik', icon: 'gradCap' }
   ];
   return `
+  ${backRowHTML('home')}
   <div class="screen-head">
     <div>
       <h2 class="screen-title">${isSupport() ? t('Sinflar') : t('Guruhlar')}</h2>
@@ -6961,6 +6950,7 @@ function homeworkScreen() {
   }
 
   return `
+  ${backRowHTML('home')}
   <div class="screen-head">
     <div>
       <h2 class="screen-title">${ico('bookOpen', 16)} ${t('Uyga vazifalar')}</h2>
@@ -7067,6 +7057,7 @@ function studentsScreen() {
   /* Maktab guruhi bepul — qarzdorlik tugmalari umuman kerak emas */
   const showDebtTools = !gf || groupTypeOf(gf) !== 'school';
   return `
+  ${backRowHTML('home')}
   <div class="screen-head">
     <div>
       <h2 class="screen-title">${t("O'quvchilar")}</h2>
@@ -8597,7 +8588,7 @@ function gradesScreen() {
   ensureGradeState();
   const groups = scopedGroups();
   if (!groups.length) {
-    return `<div class="screen-head"><h2 class="screen-title">${t('Baholar')}</h2></div>` + emptyState("Avval guruh yarating", 'grades');
+    return backRowHTML('home') + `<div class="screen-head"><h2 class="screen-title">${t('Baholar')}</h2></div>` + emptyState("Avval guruh yarating", 'grades');
   }
 
   const dates = state.weekOffset !== 0
@@ -8642,6 +8633,7 @@ function gradesScreen() {
   </tr></tfoot>` : '';
 
   return `
+  ${backRowHTML('home')}
   <div class="screen-head">
     <div>
       <h2 class="screen-title">${t('Baholar')}</h2>
@@ -8777,7 +8769,7 @@ function attendanceScreen() {
   ensureAttState();
   const groups = scopedGroups();
   if (!groups.length) {
-    return `<div class="screen-head"><h2 class="screen-title">${t('Davomat')}</h2></div>` + emptyState("Avval guruh yarating", 'cal');
+    return backRowHTML('home') + `<div class="screen-head"><h2 class="screen-title">${t('Davomat')}</h2></div>` + emptyState("Avval guruh yarating", 'cal');
   }
 
   const students = scopedStudents().filter(s => s.groupId === state.attGroup);
@@ -8807,6 +8799,7 @@ function attendanceScreen() {
     </div>`).join('');
 
   return `
+  ${backRowHTML('home')}
   <div class="screen-head">
     <div>
       <h2 class="screen-title">${t('Tezkor davomat')}</h2>
@@ -8873,6 +8866,7 @@ function speakingScreen() {
     .sort((a, b) => a.start.localeCompare(b.start));
 
   return `
+  ${backRowHTML('home')}
   <div class="screen-head">
     <div>
       <h2 class="screen-title">${t('Speaking')}</h2>
@@ -13529,6 +13523,7 @@ function supportScreen() {
   const list = supportTeachers();
   const on = !!state.supervise;
   return `
+  ${backRowHTML('home')}
   <div class="screen-head">
     <div>
       <h2 class="screen-title">${ico('profile', 16)} ${t('Support teacherlar')}</h2>
