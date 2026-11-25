@@ -5968,7 +5968,7 @@ function teacherHome() {
   </section>
 
   <div class="stat-grid">
-    <button type="button" class="card stat" data-act="stat-groups"><span class="stat-ico">${ICON.groups}</span><span class="stat-num">${groups.length}</span><span class="stat-label">Guruhlar</span></button>
+    <button type="button" class="card stat" data-act="stat-groups"><span class="stat-ico">${ICON.groups}</span><span class="stat-num">${groups.length}</span><span class="stat-label">Speaking</span></button>
     <button type="button" class="card stat" data-act="stat-students"><span class="stat-ico">${ICON.students}</span><span class="stat-num">${students.length}</span><span class="stat-label">O'quvchilar</span></button>
     <button type="button" class="card stat" data-act="stat-classes"><span class="stat-ico">${ICON.cal}</span><span class="stat-num">${Object.keys(classSet).length}</span><span class="stat-label">Sinflar</span></button>
   </div>
