@@ -417,18 +417,18 @@ check(q('#app-header').textContent.includes('Muzaffar Amirov'), 'ustoz: headerda
 check(navLabels().length === 10, 'ustoz: 10 ta nav tabi (' + navLabels().join(', ') + ')');
 
 /* --- Vektor ikonka tizimi: barcha emoji o'rniga SVG badge'lar --- */
-check(qa('.quick-grid .quick-ico').length === 11, 'icon: TEZ AMALLAR gridida 11 ta ikonka badge');
-check(qa('.quick-grid .quick-ico svg').length === 11, "icon: har bir badge ichida SVG (emoji o'rniga)");
-check(['tint-indigo', 'tint-emerald', 'tint-sky', 'tint-amber', 'tint-purple', 'tint-slate', 'tint-rose', 'tint-teal']
+check(qa('.quick-grid .quick-ico').length === 10, 'icon: TEZ AMALLAR gridida 10 ta ikonka badge');
+check(qa('.quick-grid .quick-ico svg').length === 10, "icon: har bir badge ichida SVG (emoji o'rniga)");
+check(['tint-indigo', 'tint-emerald', 'tint-sky', 'tint-amber', 'tint-slate', 'tint-rose', 'tint-teal']
   .every(t => qa('.quick-ico.' + t).length === 1),
-  'icon: indigo/emerald/sky/amber/purple/slate/rose/teal tints har biri bittadan');
+  'icon: indigo/emerald/sky/amber/slate/rose/teal tints har biri bittadan');
 const quickOrder = qa('.quick-grid .quick[data-screen]').map(b => b.getAttribute('data-screen'));
 check(JSON.stringify(quickOrder.slice(0, 5)) ===
   JSON.stringify(['homework', 'attendance', 'submissions', 'speaking', 'grades']),
   'home: tez amallar tartibi — uyga vazifa, davomat, topshiriqlar, speaking, baholar');
-check(quickOrder.length === 10 && qa('.quick-grid .quick').length === 11,
-  'home: qolgan tez amallar beshtalikdan keyin saqlangan (11 ta karta)');
-check(quickOrder[9] === 'support' && !q('.sup-watch'),
+check(quickOrder.length === 9 && qa('.quick-grid .quick').length === 10,
+  'home: qolgan tez amallar beshtalikdan keyin saqlangan (10 ta karta, Guruhlar alohida bo\'lim emas)');
+check(quickOrder[8] === 'support' && !q('.sup-watch'),
   'home: "Support teacherlar" bo‘limi Mock testlardan keyin, pastda faqat uyga vazifa berish qoldi');
 
 /* Sayt speaking videosi → ustozga FAQAT matnli Telegram xabari (video/baho tugmalarisiz) */
@@ -465,12 +465,14 @@ check(q('[data-act="filter-group-type"][data-type="all"]').classList.contains('a
   'stat: Guruhlar kartasi ochilganda tur filtri "Barchasi" holatida');
 click('[data-act="nav"][data-screen="home"]');
 clickAct('stat-students');
-check(text().includes("O'quvchilar") && studentCards() === 6, "stat: 'O'quvchilar' kartasi → O'quvchilar ekrani (6 ta)");
-  check(!!q('[data-act="remind-debtors"]'), "qarz: barcha qarzdorlarga eslatma tugmasi bor");
+check(text().includes("O'quvchilar va guruhlarni tahrirlash") && groupCards() === 2 && studentCards() === 0,
+  "stat: 'O'quvchilar' kartasi → tahrirlash bo'limi (guruhlar bor, aralash o'quvchilar yo'q)");
+check(!q('[data-act="remind-debtors"]'),
+  "qarz: tahrirlash bo'limida ommaviy qarzdor eslatma tugmasi YO'Q");
 click('[data-act="nav"][data-screen="home"]');
 clickAct('stat-classes');
-check(studentCards() === 6 && qa('.chips.is-hl').length === 1 && qa('[data-act="filter-class"]').length >= 4,
-  "stat: 'Sinflar' kartasi → O'quvchilar + sinf filtri ajratib ko'rsatildi");
+check(studentCards() === 0 && qa('.chips.is-hl').length === 1 && qa('[data-act="filter-class"]').length >= 4,
+  "stat: 'Sinflar' kartasi → tahrirlash bo'limi + sinf filtri ajratib ko'rsatildi");
 click('[data-act="nav"][data-screen="home"]');
 
 /* --- Bosh sahifa: "So'nggi o'quvchilar" yo'q, tez amallarda yangi bo'limlar --- */
@@ -488,11 +490,12 @@ click('[data-act="nav"][data-screen="home"]');
 
 /* Moliyaviy ma'lumotlar (o'quvchi kartalarida — faqat o'quvchilar ekranida) */
 click('[data-act="nav"][data-screen="students"]');
+click(qa('.group-card').filter(c => c.textContent.includes('General English'))[0]);
 check(qa('.pay-status').length >= 1, "moliya: o'quvchi kartasida to'lov holati ko'rinadi");
 check(!!q('[data-act="pay-student"]'), "moliya: '💵 To'lov kiritish' tugmasi bor");
 
 /* ================= 3. GURUHLAR ================= */
-click('[data-act="nav"][data-screen="groups"]');
+forceNav('groups');
 check(text().includes('Guruhlar'), 'guruhlar: ekran');
 check(groupCards() === 2, 'guruhlar: 2 ta guruh');
 /* Tur bo'yicha ajratish: Maktab / Repetitorlik */
@@ -647,7 +650,7 @@ click('[data-act="nav"][data-screen="home"]');
 const feeSt2 = JSON.parse(win.localStorage.getItem('et_students') || '[]').filter(s => s.groupId === 'g1');
 check(JSON.stringify(feeSt2.map(s => [s.id, s.paymentDebt, s.feePeriod])) === JSON.stringify(feeSt1.map(s => [s.id, s.paymentDebt, s.feePeriod])),
   "moliya: oylik qarz oy ichida takror qo'shilmaydi");
-click('[data-act="nav"][data-screen="groups"]');
+forceNav('groups');
 /* IELTS qaytadan maktab guruhiga o'tkaziladi — to'lov maydoni yashirin, summa 0 */
 click(qa('.group-card').filter(c => c.textContent.includes('IELTS Band 7.0'))[0].querySelector('[data-act="edit-group"]'));
 gtypePick('school');
@@ -663,7 +666,7 @@ click('[data-act="nav"][data-screen="home"]');
 const feeSt3 = JSON.parse(win.localStorage.getItem('et_students') || '[]').filter(s => s.groupId === 'g1');
 check(feeSt3.every(s => Number(s.paymentDebt) === 50000),
   "moliya: maktab guruhida yangi oylik qarz qo'shilmaydi");
-click('[data-act="nav"][data-screen="groups"]');
+forceNav('groups');
 
 /* --- Guruhlar: guruh ichida FAQAT ism + speaking qarzi --- */
 click(qa('.group-card').filter(c => c.textContent.includes('IELTS Band 7.0'))[0]);
@@ -686,8 +689,9 @@ check(groupCards() === 2, "guruh detail: Orqaga → guruhlar ro'yxati qaytdi");
 
 /* --- O'quvchilar: xuddi shu guruhlar ro'yxati + to'liq boshqaruv --- */
 click('[data-act="nav"][data-screen="students"]');
-check(groupCards() === 2 && studentCards() === 6,
-  "o'quvchilar: guruhlar ro'yxati va barcha o'quvchilar birga ko'rinadi");
+if (q('[data-act="filter-group-all"]')) clickAct('filter-group-all');
+check(groupCards() === 2 && studentCards() === 0,
+  "o'quvchilar: guruhlar ro'yxati ko'rinadi, aralash o'quvchi ismlari ko'rsatilmaydi");
 click(qa('.group-card').filter(c => c.textContent.includes('IELTS Band 7.0'))[0]);
 check(studentCards() === 2 && text().includes('IELTS Band 7.0 guruhidagi'),
   "o'quvchilar → guruh: faqat IELTS o'quvchilari (2 ta) va guruh sarlavhasi");
@@ -697,29 +701,34 @@ check(qa('[data-act="voice-toggle"]').length === 2 && qa('[data-act="web-speakin
 check(!q('[data-act="remind-debtors"]') && !q('[data-act="nav"][data-screen="debtors"]'),
   "o'quvchilar → maktab guruhi: qarzdor tugmalari ko'rinmaydi");
 clickAct('filter-group-all');
-check(studentCards() === 6 && groupCards() === 2 && !q('[data-act="filter-group-all"]'),
+check(studentCards() === 0 && groupCards() === 2 && !q('[data-act="filter-group-all"]'),
   "o'quvchilar: 'Barcha o'quvchilar' → filtr tozalandi, guruhlar ro'yxati qaytdi");
 click(qa('.group-card').filter(c => c.textContent.includes('General English'))[0]);
-check(studentCards() === 4 && !!q('[data-act="remind-debtors"]') && !!q('[data-act="nav"][data-screen="debtors"]'),
-  "o'quvchilar → repetitorlik guruhi: to'liq ro'yxat va qarzdor tugmalari");
+check(studentCards() === 4 && !q('[data-act="remind-debtors"]') && !q('[data-act="nav"][data-screen="debtors"]'),
+  "o'quvchilar → repetitorlik guruhi: to'liq ro'yxat, ommaviy qarzdor tugmalari YO'Q");
 check(qa('[data-act="pay-student"]').length >= 1 && qa('[data-act="debt-add"]').length >= 1,
   "o'quvchilar → repetitorlik guruhi: to'lov qo'shish tugmalari ko'rinadi");
 clickAct('filter-group-all');
 
 /* ================= 4. O'QUVCHILAR ================= */
 click('[data-act="nav"][data-screen="students"]');
-check(text().includes("O'quvchilar"), 'o\'quvchilar: ekran');
-check(studentCards() === 6, 'o\'quvchilar: 6 ta mock o\'quvchi');
+check(text().includes("O'quvchilar va guruhlarni tahrirlash"), 'o\'quvchilar: tahrirlash ekrani');
+check(groupCards() === 2 && studentCards() === 0, 'o\'quvchilar: avval guruhlar ro\'yxati (aralash ismlarsiz)');
+click(qa('.group-card').filter(c => c.textContent.includes('General English'))[0]);
+check(studentCards() === 4, 'o\'quvchilar → General English: 4 ta o\'quvchi');
 check(text().includes('Jasur Karimov'), 'o\'quvchilar: ism ko\'rinadi');
 check(text().includes('Login') && text().includes('jasur'), 'o\'quvchilar: login ko\'rinadi');
 check(!text().includes('Ota-ona'), 'moliya/kontakt: ota-ona bloki yo\'q');
-check(qa('[data-act="reset-pwd"]').length === 6, 'o\'quvchilar: har kartada "Parolni yangilash"');
+check(qa('[data-act="reset-pwd"]').length === 4, 'o\'quvchilar: har kartada "Parolni yangilash"');
 
-/* sinf filtri */
+/* sinf filtri (guruh ichida) */
+clickAct('filter-group-all');
+click(qa('.group-card').filter(c => c.textContent.includes('IELTS Band 7.0'))[0]);
 click('[data-act="filter-class"][data-class="11-sinf"]');
 check(studentCards() === 2, 'filtr: 11-sinf = 2 ta');
 click('[data-act="filter-class"][data-class="Barchasi"]');
-check(studentCards() === 6, 'filtr: Barchasi = 6 ta');
+check(studentCards() === 2, 'filtr: Barchasi = guruhning 2 ta o\'quvchisi');
+clickAct('filter-group-all');
 
 /* --- Jonli qidiruv (harf yozilishi bilan, Enter'siz) --- */  /* Redizayn: qidiruv ikonkasi placeholder'dan olib, CSS orqali input ichiga ko'chirildi */
   check(q('#s-search').placeholder === "O'quvchi ismini kiriting..." &&
@@ -732,7 +741,7 @@ check(studentCards() === 1 && text().includes('Jasur Karimov'), "qidiruv: 1 ta h
 setVal('#s-search', 'ma');
 check(text().includes('Malika Yusupova') && studentCards() >= 1, "qidiruv: davomiy qidiruv ishlaydi");
 setVal('#s-search', '');
-check(studentCards() === 6, "qidiruv: tozalandi → barcha o'quvchilar qaytdi");
+check(studentCards() === 0 && groupCards() === 2, "qidiruv: tozalandi → guruhlar ro'yxati qaytdi");
 
 /* ================= 4a. QARZ QO'SHISH (JIMJIT) + ESLATMA ================= */
 let debtQueueCalls = 0;
@@ -744,12 +753,15 @@ win.__cloud.queueMessages = function (rows) {
   return Promise.resolve([]);
 };
 click('[data-act="nav"][data-screen="students"]');
+click(qa('.group-card').filter(c => c.textContent.includes('IELTS Band 7.0'))[0]);
 const schoolCard4 = qa('.student-card').filter(c => c.textContent.includes('Malika Yusupova'))[0];
 check(!schoolCard4.querySelector('[data-act="debt-add"]') &&
       !schoolCard4.querySelector('[data-act="pay-student"]') &&
       !schoolCard4.querySelector('.pay-status') &&
       !schoolCard4.querySelector('[data-act="remind-student"]'),
   "maktab guruhi kartasida pul/qarz/to'lov tugmalari umuman yo'q");
+clickAct('filter-group-all');
+click(qa('.group-card').filter(c => c.textContent.includes('General English'))[0]);
 const azizCard4 = qa('.student-card').filter(c => c.textContent.includes('Aziz Rahimov'))[0];
 check(!!azizCard4.querySelector('[data-act="debt-add"]') &&
       !!azizCard4.querySelector('[data-act="pay-student"]'),
@@ -781,7 +793,7 @@ check(lastDebtRows[0].text.includes("<b>To'lov eslatmasi!</b>") &&
 /* ================= 4b. QARZDORLAR EKRANI ================= */
 addDebtTo('Nilufar Ergasheva', 50000);
 check(debtQueueCalls === 1, "ikkinchi qarz ham jimjit qo'shildi");
-click('[data-act="nav"][data-screen="debtors"]');
+forceNav('debtors');
 check(text().includes('Qarzdorlar') && qa('.debtor-card').length === 2,
   "qarzdorlar: alohida ekranda 2 ta qarzdor");
 check(text().includes('50 000 so\'m') && text().includes('umumiy qarz'),
@@ -809,7 +821,7 @@ check(/Oxirgi to'lov: <b>\d{2}\.\d{2}\.\d{4}<\/b>/.test(qa('.debtor-card').filte
 const payLocal = JSON.parse(win.localStorage.getItem('et_payments') || '[]');
 check(payLocal.length === 1 && payLocal[0].amount === 20000, "qarzdorlar: to'lov tarixga yozildi");
 click('[data-act="nav"][data-screen="students"]');
-check(studentCards() === 6, "qarzdorlar: '← Orqaga' o'quvchilarga qaytardi");
+check(studentCards() === 4, "qarzdorlar: '← Orqaga' o'quvchilarga (tanlangan guruh) qaytardi");
 
 
 /* ================= 5. YANGI O'QUVCHI + LOGIN/PAROL ================= */
@@ -825,7 +837,9 @@ setVal('#f-slogin', 'gulnoza');
 setVal('#f-spass', '1234');
 clickAct('save-student');
 check(q('#modal-overlay').hidden === true, 'modal: saqlanib yopildi');
-check(studentCards() === 7, 'o\'quvchilar: yangi o\'quvchi qo\'shildi (7 ta)');
+clickAct('filter-group-all');
+click(qa('.group-card').filter(c => c.textContent.includes('IELTS Band 7.0'))[0]);
+check(studentCards() === 3, 'o\'quvchilar: yangi o\'quvchi guruhiga qo\'shildi (3 ta)');
 check(text().includes('gulnoza'), 'o\'quvchilar: yangi login ko\'rinadi');
 
 /* takrorlanuvchi login */
@@ -945,6 +959,8 @@ check(qa('tbody tr').length === 4, 'jurnal: g2 da 4 ta o\'quvchi');
 
 /* ================= 9. USTOZ: PAROL YANGILASH ================= */
 click('[data-act="nav"][data-screen="students"]');
+if (q('[data-act="filter-group-all"]')) clickAct('filter-group-all');
+click(qa('.group-card').filter(c => c.textContent.includes('General English'))[0]);
 const nilCard = qa('.student-card').filter(c => c.textContent.includes('Nilufar Ergasheva'))[0];
 click(nilCard.querySelector('[data-act="reset-pwd"]'));
 check(q('#modal-overlay').hidden === false, 'reset: modal ochildi');
@@ -1375,6 +1391,7 @@ check(text().includes('Jasur Karimov'), 'change: yangi parol bilan kirdi');
 logout();
 await loginAs('m_amirov', '123');
 click('[data-act="nav"][data-screen="students"]');
+click(qa('.group-card').filter(c => c.textContent.includes('General English'))[0]);
 check(text().includes('Nilufar Ergasheva'), 'ustoz: qayta kirdi');
 
 check(!!q('.s-contact .login-val') && !q('.s-contact code'), "login: o'quvchi kartasida login oddiy matn — kod badge yo'q");
@@ -1698,7 +1715,8 @@ check(filterChips.includes('5-sinf') && filterChips.includes('11-sinf'), 'sinf: 
 check(!filterChips.includes('IELTS') && !filterChips.includes('4-sinf'), "sinf: filtrda IELTS/4-sinf yo'q");
 
 /* --- 3. Speaking qarzi (ustoz +/-) --- */
-const nStud = JSON.parse(win.localStorage.getItem('et_students')).length;
+click(qa('.group-card').filter(c => c.textContent.includes('General English'))[0]);
+const nStud = JSON.parse(win.localStorage.getItem('et_students')).filter(s => s.groupId === 'g2').length;
 check(qa('[data-act="debt-plus"]').length === nStud, 'qarz: ' + nStud + ' ta [+] tugma');
 check(qa('[data-act="debt-minus"]').length === nStud, 'qarz: ' + nStud + ' ta [-] tugma');
 check(text().includes('Speaking qarzi'), 'qarz: "Speaking qarzi" yozuvi ro\'yxatda');
@@ -1936,6 +1954,8 @@ closeStudentView();
 logout();
 await loginAs('m_amirov', '123');
 click('[data-act="nav"][data-screen="students"]');
+if (q('[data-act="filter-group-all"]')) clickAct('filter-group-all');
+click(qa('.group-card').filter(c => c.textContent.includes('General English'))[0]);
 check(qa('[data-act="open-chat"]').length === studentCards(), "chat: har o'quvchi kartasida 'Xabar yozish' tugmasi");
 click(qa('[data-act="open-chat"]').filter(b => b.getAttribute('data-sid') === 's3')[0]);
 check(q('#modal-overlay').hidden === false, "chat: ustoz xabar modali ochildi");
@@ -2001,6 +2021,8 @@ check(win.__cloud.messagesAvailable() === true, 'cloud: messages jadvali bulutda
 logout();
 await loginAs('m_amirov', '123');
 click('[data-act="nav"][data-screen="students"]');
+if (q('[data-act="filter-group-all"]')) clickAct('filter-group-all');
+click(qa('.group-card').filter(c => c.textContent.includes('IELTS Band 7.0'))[0]);
 const nStudBeforeDel = studentCards();
 check(qa('[data-act="del-student"]').length === nStudBeforeDel, "o'chirish: har o'quvchi kartasida '🗑 O'chirish' tugmasi");
 let delCard = qa('.student-card').filter(c => c.textContent.includes('Gulnoza Ismoilova'))[0];
@@ -2039,7 +2061,7 @@ check(Object.keys(attAfterDel).every(dk => !attAfterDel[dk] || !attAfterDel[dk][
 check(!qa('.student-card').some(c => c.textContent.includes('Gulnoza')), "o'chirish: karta ham yo'qoldi");
 
 /* ================= 18. GURUHNI O'CHIRISH (tasdiq bilan) ================= */
-click('[data-act="nav"][data-screen="groups"]');
+forceNav('groups');
 const nGrpBeforeDel = groupCards();
 check(qa('[data-act="del-group"]').length === nGrpBeforeDel, "guruh: har kartada '🗑 O'chirish' tugmasi");
 const grpCard = qa('.group-card').filter(c => c.textContent.includes('IELTS Band 7.0'))[0];
@@ -2156,6 +2178,8 @@ await (async () => {
   forceNav('groups');
   check(text().includes('RESTORED GROUP'), 'zaxira: guruhlar ekrani yangilandi');
   forceNav('students');
+  if (!q('.student-card') && qa('.group-card')[0]) click(qa('.group-card')[0]);
+  if (!q('.student-card') && q('#s-search')) setVal('#s-search', 'Restored');
   check(text().includes('Restored Student'), "zaxira: o'quvchilar ekrani yangilandi");
 
   /* Tiklangan hisob bilan kirish */
@@ -2406,12 +2430,14 @@ await (async () => {
   check(/\.quick\s*\{[^}]*padding:\s*14px/.test(cssText), 'tez amallar: p-3.5 (14px) padding');
   check(/\.quick-ico\s*\{[^}]*width:\s*36px;\s*\n?\s*height:\s*36px/.test(cssText),
     'tez amallar: ikonka badge bir xil 36×36px');
-  check(qa('.quick-grid .quick').length === 11, "tez amallar: 11 ta karta (barchasi bir xil balandlikda)");
+  check(qa('.quick-grid .quick').length === 10, "tez amallar: 10 ta karta (barchasi bir xil balandlikda)");
 
   /* ================= 21. VOICE RUXSAT KALITI (kartada) ================= */
   logout();
   await loginAs('m_amirov', '123');
   click('[data-act="nav"][data-screen="students"]');
+  if (q('[data-act="filter-group-all"]')) clickAct('filter-group-all');
+  click(qa('.group-card')[0]);
   const swEl = q('[data-act="voice-toggle"]');
   check(!!swEl, "voice: o'quvchi kartasida ruxsat kaliti bor");
   check(!!swEl && !swEl.classList.contains('on') && swEl.getAttribute('aria-checked') === 'false',
@@ -2804,6 +2830,8 @@ await (async () => {
 
   /* ================= 29. O\'QUVCHINI TAHRIRLASH (guruhni almashtirish) ================= */
   forceNav('students');
+  if (q('[data-act="filter-group-all"]')) clickAct('filter-group-all');
+  if (!q('[data-act="edit-student"]') && qa('.group-card')[0]) click(qa('.group-card')[0]);
   check(!!q('[data-act="edit-student"]'), "tahrirlash: o'quvchi kartasida Tahrirlash tugmasi bor");
   const gradesBefore = win.localStorage.getItem('et_grades');
   const attBefore = win.localStorage.getItem('et_attendance');
@@ -2923,15 +2951,21 @@ await (async () => {
   /* ================= 31. XAVFSIZLIK: XSS / HONEYPOT / initData / BRUTE-FORCE ================= */
   /* XSS: foydalanuvchi kirgan HTML DOM ga xavfsiz matn sifatida chiqadi */
   forceNav('students');
+  if (q('[data-act="filter-group-all"]')) clickAct('filter-group-all');
+  if (q('[data-act="filter-group-all"]')) clickAct('filter-group-all');
+  /* Guruhsiz o'quvchi faqat qidiruv orqali ko'rinadi */
+  setVal('#s-search', 'Restored');
   click(q('[data-act="edit-student"]'));
   setVal('#es-name', '<img src=x onerror="alert(1)">');
   clickAct('save-edit-student');
+  setVal('#s-search', '<img');
   check(qa('#screen img').length === 0 && text().includes('<img src=x'),
     'xss: ismdagi HTML render qilinmaydi — xavfsiz matn sifatida ko\'rinadi');
   check(!doc.querySelector('#screen [onerror]'), 'xss: onerror atributi DOM ga kirmadi');
   click(q('[data-act="edit-student"]'));
   setVal('#es-name', 'Restored Student');
   clickAct('save-edit-student');
+  setVal('#s-search', '');
 
   logout();
   click('[data-act="auth-login-open"]');
@@ -3057,6 +3091,7 @@ await (async () => {
   logout();
   await loginAs('m_amirov', '123');
   forceNav('students');
+  if (!q('.student-card') && q('#s-search')) setVal('#s-search', 'Restored');
   const cardOn = qa('.student-card').filter(c => c.textContent.indexOf('Restored Student') >= 0)[0];
   check(!!cardOn && cardOn.textContent.indexOf('Onlayn: Android • Chrome') >= 0 &&
         !!cardOn.querySelector('.s-presence.is-on svg'),
@@ -3067,6 +3102,7 @@ await (async () => {
   jOld.lastSeen = new Date(Date.now() - 20 * 60000).toISOString();
   win.localStorage.setItem('et_students', JSON.stringify(rowsOld));
   forceNav('students');
+  if (!q('.student-card') && q('#s-search')) setVal('#s-search', 'Restored');
   const cardOld = qa('.student-card').filter(c => c.textContent.indexOf('Restored Student') >= 0)[0];
   check(!!cardOld && cardOld.textContent.replace(/\s+/g, ' ').indexOf('20 daqiqa oldin • Android') >= 0 &&
         !!cardOld.querySelector('.s-presence svg'),
@@ -3076,6 +3112,7 @@ await (async () => {
   rowsNone.filter(x => x.id === 's77')[0].lastSeen = null;
   win.localStorage.setItem('et_students', JSON.stringify(rowsNone));
   forceNav('students');
+  if (!q('.student-card') && q('#s-search')) setVal('#s-search', 'Restored');
   const cardNone = qa('.student-card').filter(c => c.textContent.indexOf('Restored Student') >= 0)[0];
   check(!!cardNone && cardNone.textContent.indexOf('Onlayn') < 0 && cardNone.textContent.indexOf('daqiqa oldin') < 0,
     "karta: last_seen bo'sh → qurilma satri chiqmaydi");
@@ -3259,23 +3296,25 @@ await (async () => {
   /* ============ 28. PREMIUM KARTALAR + OVERFLOW + SVG + EN DINAMIK MATNLAR ============ */
   /* O'quvchi kartalari: 2x2 tugma grid + ichki blokcha + gradient avatar */
   click('[data-act="nav"][data-screen="students"]');
-  check(qa('.student-card .st-actions').length === 6,
+  if (q('[data-act="filter-group-all"]')) clickAct('filter-group-all');
+  click(qa('.group-card').filter(c => c.textContent.includes('General English'))[0]);
+  check(qa('.student-card .st-actions').length === 4,
     'kartа: har o‘quvchi kartasida .st-actions (2x2 grid) bloki');
-  check(qa('.student-card .st-actions .btn').length === 24,
-    'karta: 4 tugma × 6 karta = 24 (setkada, bir qatorda EMAS)');
-  check(qa('.student-card .st-inset').length === 6,
+  check(qa('.student-card .st-actions .btn').length === 16,
+    'karta: 4 tugma × 4 karta = 16 (setkada, bir qatorda EMAS)');
+  check(qa('.student-card .st-inset').length === 4,
     'karta: Speaking qarzi + ruxsat ichki .st-inset blokchada');
-  check(qa('.student-card .st-avatar').length === 6,
+  check(qa('.student-card .st-avatar').length === 4,
     'karta: har kartada gradient doira-avatar (.st-avatar)');
   check(qa('.student-card .st-avatar').every(a => /^[A-Z]{1,2}$/.test(a.textContent.trim())),
     'karta: avatar ichida ism bosh harflari (ZY/XA kabi)');
-  check(qa('.student-card > .st-head').length === 6 &&
-        qa('.student-card > .st-head .st-avatar').length === 6 &&
-        qa('.student-card > .st-head .chip-class').length === 6,
+  check(qa('.student-card > .st-head').length === 4 &&
+        qa('.student-card > .st-head .st-avatar').length === 4 &&
+        qa('.student-card > .st-head .chip-class').length === 4,
     'karta: 1-qator .st-head — avatar + ism/guruh/login + sinf badge, to\'liq qator');
-  check(qa('.student-card > .st-inset').length === 6,
+  check(qa('.student-card > .st-inset').length === 4,
     'karta: 2-qator .st-inset — to\'liq 100% kenglikda (avatar ustunidan mustaqil)');
-  check(qa('.student-card > .st-actions').length === 6 && qa('.student-card > .st-actions .btn').length === 24,
+  check(qa('.student-card > .st-actions').length === 4 && qa('.student-card > .st-actions .btn').length === 16,
     'karta: 3-qator .st-actions — to\'liq kenglikda 2x2 setka');
   check(!q('.student-card [data-act="reset-pwd"]').textContent.includes('Parolni yangilash') &&
         q('.student-card [data-act="reset-pwd"]').textContent.includes('Parol'),
@@ -3306,7 +3345,7 @@ await (async () => {
     'i18n EN: "Parol" tugmasi → "Password" (qisqa, qirqilmaydi)');
   check(text().includes('Edit') && text().includes('Delete') && !text().includes('Tahrirlash'),
     'i18n EN: "Tahrirlash"→"Edit", "O\'chirish"→"Delete"');
-  check(q('.screen-title').textContent.trim() === 'Students' && !text().includes("O'QUVCHILAR"),
+  check(q('.screen-title').textContent.trim() === 'Students and groups editing' && !text().includes("O'QUVCHILAR"),
     'i18n EN: "O\'QUVCHILAR" → "STUDENTS"');
   click('[data-act="nav"][data-screen="home"]');
   clickAct('open-hw');
@@ -3763,6 +3802,9 @@ await (async () => {
   const allChip = q('[data-act="filter-class"][data-class="Barchasi"]');
   if (allChip && !allChip.classList.contains('active')) click(allChip);
   if (q('#s-search') && q('#s-search').value) setVal('#s-search', '');
+  if (await until(() => !!q('[data-act="edit-student"]'), 500)) { /* kartalar async chiziladi */ }
+  /* Guruhsiz o'quvchi faqat qidiruv orqali ko'rinadi */
+  if (!q('[data-act="edit-student"]') && q('#s-search')) setVal('#s-search', 'restore');
   if (await until(() => !!q('[data-act="edit-student"]'), 2000)) { /* kartalar async chiziladi */ }
   const anyEditBtn = q('[data-act="edit-student"]');
   check(!!anyEditBtn, 'topshiriq: o‘quvchi kartalarida “Tahrirlash” tugmasi bor');
@@ -4118,6 +4160,7 @@ await (async () => {
   await loginAs('m_amirov', teacherPass32);
   /* Ruxsatni o'chirish: ustoz toggle'i bir marta o'chiriladi (baza + lokal) */
   forceNav('students');
+  if (!q('[data-act="edit-student"]') && q('#s-search')) setVal('#s-search', 'restore');
   const anyEditBtn2 = q('[data-act="edit-student"]');
   click(anyEditBtn2);
   check(q('[data-act="hw-upload-toggle"]').getAttribute('aria-checked') === 'true' ||
@@ -4526,6 +4569,8 @@ await (async () => {
   check(!!gAfter && /\(sup\)$/.test(gAfter.name),
     'support: ruxsat bilan guruh nomi o\'zgartirildi');
   forceNav('students');
+  if (q('[data-act="filter-group-all"]')) clickAct('filter-group-all');
+  if (!q('.student-card') && qa('.group-card')[0]) click(qa('.group-card')[0]);
   check(studentCards() === sGroupStudents.length &&
         (firstSupStudent ? text().includes(firstSupStudent.fullName) : true),
     'support: faqat o\'z guruhi o\'quvchilarini ko\'radi');

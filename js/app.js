@@ -3624,6 +3624,7 @@ const I18N_EN = {
   "To'lovlar": "Payments",
   'Bosh sahifa': 'Home', 'Bosh': 'Home', 'Guruhlar': 'Groups',
   "O'quvchilar": 'Students', "O'quvchi": 'Students',
+  "O'quvchilar va guruhlarni tahrirlash": 'Students and groups editing',
   'Baholar jurnali': 'Gradebook', 'Baholar': 'Grades',
   'Davomat': 'Attendance', 'Tezkor davomat': 'Attendance',
   'Speaking slotlari': 'Speaking Slots', 'Speaking (1-on-1)': 'Speaking',
@@ -5981,8 +5982,7 @@ function teacherHome() {
     <button type="button" class="card quick" data-act="nav" data-screen="speaking"><span class="quick-ico tint-sky">${ICON.mic}</span><span>Speaking slotlari${navBadgeHTML('speaking')}</span></button>
     <button type="button" class="card quick" data-act="nav" data-screen="grades"><span class="quick-ico tint-indigo">${ICON.grades}</span><span>Baholar jurnali</span></button>
     <button type="button" class="card quick" data-act="nav" data-screen="payments"><span class="quick-ico tint-teal">${ICON.creditCard}</span><span>To'lovlar</span></button>
-    <button type="button" class="card quick" data-act="nav" data-screen="students"><span class="quick-ico tint-amber">${ICON.gradCap}</span><span>O'quvchilar</span></button>
-    <button type="button" class="card quick" data-act="nav" data-screen="groups"><span class="quick-ico tint-purple">${ICON.groups}</span><span>Guruhlar</span></button>
+    <button type="button" class="card quick" data-act="nav" data-screen="students"><span class="quick-ico tint-amber">${ICON.gradCap}</span><span>O'quvchilar va guruhlarni tahrirlash</span></button>
     <button type="button" class="card quick" data-act="open-add-student"><span class="quick-ico tint-slate">${ICON.userPlus}</span><span>O'quvchi qo'shish</span></button>
     <button type="button" class="card quick" data-act="nav" data-screen="mock"><span class="quick-ico tint-violet">${ICON.gradCap}</span><span>${t('Mock testlar')}${navBadgeHTML('mock')}</span></button>
     <button type="button" class="card quick" data-act="nav" data-screen="support"><span class="quick-ico tint-cyan">${ICON.profile}</span><span>${t('Support teacherlar')}</span></button>
@@ -7033,7 +7033,8 @@ function filteredStudents() {
   const q = state.search.trim().toLowerCase();
   return scopedStudents().filter(s => {
     const byClass = state.filterClass === 'Barchasi' || s.schoolClass === state.filterClass;
-    const byGroup = !state.filterGroup || s.groupId === state.filterGroup;
+    /* ID turi (matn/son) farq qilsa ham guruh filtri ishlaydi */
+    const byGroup = !state.filterGroup || String(s.groupId) === String(state.filterGroup);
     const byQuery = !q || String(s.fullName).toLowerCase().indexOf(q) >= 0;
     const byHwAllow = !state.filterHwAllow || s.homeworkUploadAllowed === true;
     return byClass && byGroup && byQuery && byHwAllow;
@@ -7056,16 +7057,19 @@ function studentsScreen() {
   const gf = state.filterGroup ? groupById(state.filterGroup) : null;
   const allGroups = scopedGroups();
   const allStudents = scopedStudents();
-  /* Maktab guruhi bepul — qarzdorlik tugmalari umuman kerak emas */
-  const showDebtTools = !gf || groupTypeOf(gf) !== 'school';
+  /* Guruh tanlanmaguncha o'quvchilar aralash ro'yxati ko'rsatilmaydi */
+  const showList = !!gf || !!String(state.search || '').trim();
   return `
   ${backRowHTML('home')}
-  <div class="screen-head">
-    <div>
-      <h2 class="screen-title">${t("O'quvchilar")}</h2>
+  <div class="screen-head" style="flex-wrap:wrap">
+    <div style="min-width:0">
+      <h2 class="screen-title">${t("O'quvchilar va guruhlarni tahrirlash")}</h2>
       <div class="muted small" id="students-count"></div>
     </div>
-    ${supportCanAddStudent() ? `<button type="button" class="btn btn-primary btn-sm" data-act="open-add-student">+ Qo'shish</button>` : ''}
+    <div class="row" style="gap:6px;flex-shrink:0">
+      ${supportCanAddStudent() ? `<button type="button" class="btn btn-primary btn-sm" data-act="open-add-student">+ O'quvchi</button>` : ''}
+      ${supportCanEditGroup() ? `<button type="button" class="btn btn-primary btn-sm" data-act="open-add-group">+ Guruh</button>` : ''}
+    </div>
   </div>
 
   ${gf ? `<div class="card row between" style="margin-bottom:9px">
@@ -7080,19 +7084,13 @@ function studentsScreen() {
     <input class="input" id="s-search" type="search" placeholder="${t("O'quvchi ismini kiriting...")}" value="${esc(state.search)}" />
   </div>
 
-  ${(showDebtTools && isTeacher()) ? `<button type="button" class="btn btn-primary btn-block debtors-btn" data-act="remind-debtors">
-    <span class="debtors-ico">${ico('megaphone', 18)}</span> Barcha qarzdorlarga eslatma yuborish
-  </button>
-  <button type="button" class="btn btn-ghost btn-block" data-act="nav" data-screen="debtors">${ico('creditCard', 16)} Qarzdorlar ro'yxati</button>` : ''}
-
   <div class="chips${state.classHint ? ' is-hl' : ''}">
     ${chips.map(c => `<button type="button" class="chip-btn ${state.filterClass === c ? 'active' : ''}" data-act="filter-class" data-class="${esc(c)}">${esc(tClass(c))}</button>`).join('')}
     <button type="button" class="chip-btn hw-allow-chip${state.filterHwAllow ? ' active' : ''}" data-act="filter-hw-allow"
             aria-pressed="${state.filterHwAllow ? 'true' : 'false'}">${ico('upload', 13)} ${t('Yuklash ruxsati')}</button>
   </div>
 
-  <div id="students-list">${studentListHTML()}</div>
-  <button type="button" class="btn btn-ghost btn-block" data-act="nav" data-screen="groups">${ico('groups', 16)} Guruhlar</button>
+  ${showList ? `<div id="students-list">${studentListHTML()}</div>` : ''}
   `;
 }
 
@@ -14977,8 +14975,11 @@ document.addEventListener('input', function (e) {
   const t = e.target;
   if (!t) return;
   if (t.id === 's-search') {
+    const hadQuery = !!String(state.search || '').trim();
     state.search = t.value;
-    refreshStudentList();
+    const hasQuery = !!String(t.value || '').trim();
+    /* Ro'yxat hali render qilinmagan yoki qidiruv bo'sh↔to'la o'zgargan bo'lsa — qayta chizamiz */
+    if (!$('#students-list') || hadQuery !== hasQuery) render(); else refreshStudentList();
   } else if (t.id === 'fp-contact') {
     state.resetContact = t.value;
   } else if (t.id === 'grade-note') {
