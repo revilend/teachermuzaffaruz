@@ -4792,8 +4792,10 @@ function renderTopNavTabs() {
 /* ==================== CLOUDFLARE TURNSTILE ==================== */
 const TURNSTILE_SITE_KEY = '0x4AAAAAAGDZyGmTRBp6DcVs';
 const TURNSTILE_VERIFY_URL = R2_UPLOAD_URL + '/verify-turnstile';
-/* workers.dev ba'zi ISP'larda osilib qoladi — 5 soniyadan keyin so'rov bekor qilinadi */
-const TURNSTILE_VERIFY_TIMEOUT_MS = 5000;
+/* workers.dev ba'zi ISP'larda osilib qoladi — 2.5 soniyadan keyin so'rov bekor qilinadi.
+   Tekshiruv vidjet tokeni bergan bo'lsa fail-open, shuning uchun qisqa kutish
+   kirishni sekinlashtirmaydi (parol xeshi, urinishlar qulfi va 2FA himoyasi qoladi). */
+const TURNSTILE_VERIFY_TIMEOUT_MS = 2500;
 
 function turnstileReady() {
   return !!(window.turnstile && typeof window.turnstile.render === 'function');
