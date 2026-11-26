@@ -85,7 +85,7 @@
     libStoreProbe = c.from('library_movies').select('id').limit(1).then(function (res) {
       if (res && res.error && libMissingTable(res.error)) { LIB_STORE = 'kv'; return LIB_STORE; }
       /* Jadvallar bor, lekin avval bot_settings'ga saqlangan bo'lsa — o'shandan davom etamiz */
-      return c.from('bot_settings').select('key').ilike('key', KV.res + '*').limit(1).then(function (kv) {
+      return c.from('bot_settings').select('key').ilike('key', 'lib_*').limit(1).then(function (kv) {
         LIB_STORE = kv && !kv.error && kv.data && kv.data.length ? 'kv' : 'tables';
         return LIB_STORE;
       });
