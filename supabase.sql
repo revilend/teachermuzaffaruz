@@ -473,3 +473,87 @@ alter table public.mock_attempts enable row level security;
 drop policy if exists "mock_attempts anon all" on public.mock_attempts;
 create policy "mock_attempts anon all" on public.mock_attempts
   for all to anon, authenticated using (true) with check (true);
+
+-- ============================================================
+-- 18. FOYDALI MANBALAR VA FILMLAR
+-- ============================================================
+-- Ustoz repititorlik guruhlariga fayl/manba va film yuklaydi.
+create table if not exists public.library_resources (
+  id          bigint generated always as identity primary key,
+  group_id    bigint not null references public.groups (id) on delete cascade,
+  title       text not null default '',
+  files       jsonb not null default '[]'::jsonb,   -- [{url, type, name, size}]
+  created_at  timestamptz not null default now()
+);
+create index if not exists library_resources_group_idx
+  on public.library_resources (group_id, created_at desc);
+
+create table if not exists public.library_movies (
+  id          bigint generated always as identity primary key,
+  group_id    bigint not null references public.groups (id) on delete cascade,
+  title       text not null default '',
+  video_url   text not null,
+  video_name  text not null default '',
+  created_at  timestamptz not null default now()
+);
+create index if not exists library_movies_group_idx
+  on public.library_movies (group_id, created_at desc);
+
+-- Subtitrlar: ustoz yuklagan (lang='manual') yoki bot avtomatik tayyorlagan.
+-- status: pending → processing → ready | failed
+create table if not exists public.library_movie_cues (
+  id          bigint generated always as identity primary key,
+  movie_id    bigint not null references public.library_movies (id) on delete cascade,
+  lang        text not null default '',
+  status      text not null default 'pending' check (status in ('pending', 'processing', 'ready', 'failed')),
+  cues        jsonb not null default '[]'::jsonb,   -- [{start, end, text}]
+  job_id      text,
+  error       text,
+  updated_at  timestamptz not null default now(),
+  unique (movie_id)
+);
+create index if not exists library_movie_cues_status_idx
+  on public.library_movie_cues (status, updated_at);
+
+-- Faqat uzluksiz (pauzasiz, o'tkazib yuborishsiz) ko'rilgan vaqt.
+create table if not exists public.library_movie_watch (
+  id              bigint generated always as identity primary key,
+  movie_id        bigint not null references public.library_movies (id) on delete cascade,
+  student_id      bigint not null references public.students (id) on delete cascade,
+  seconds         integer not null default 0,
+  streak_seconds  integer not null default 0,
+  last_position   integer not null default 0,
+  updated_at      timestamptz not null default now(),
+  unique (movie_id, student_id)
+);
+create index if not exists library_movie_watch_student_idx
+  on public.library_movie_watch (student_id, updated_at desc);
+
+alter table public.library_resources enable row level security;
+alter table public.library_movies enable row level security;
+alter table public.library_movie_cues enable row level security;
+alter table public.library_movie_watch enable row level security;
+
+drop policy if exists "library_resources anon all" on public.library_resources;
+create policy "library_resources anon all" on public.library_resources
+  for all to anon, authenticated using (true) with check (true);
+
+drop policy if exists "library_movies anon all" on public.library_movies;
+create policy "library_movies anon all" on public.library_movies
+  for all to anon, authenticated using (true) with check (true);
+
+drop policy if exists "library_movie_cues anon all" on public.library_movie_cues;
+create policy "library_movie_cues anon all" on public.library_movie_cues
+  for all to anon, authenticated using (true) with check (true);
+
+drop policy if exists "library_movie_watch anon all" on public.library_movie_watch;
+create policy "library_movie_watch anon all" on public.library_movie_watch
+  for all to anon, authenticated using (true) with check (true);
+
+grant all on public.library_resources to anon, authenticated, service_role;
+grant all on public.library_movies to anon, authenticated, service_role;
+grant all on public.library_movie_cues to anon, authenticated, service_role;
+grant all on public.library_movie_watch to anon, authenticated, service_role;
+grant all on all sequences in schema public to anon, authenticated, service_role;
+
+notify pgrst, 'reload schema';

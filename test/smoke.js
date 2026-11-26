@@ -17,6 +17,7 @@ function check(cond, msg) {
 
 const dataJs = fs.readFileSync(path.join(root, 'js', 'data.js'), 'utf8');
 const appJs = fs.readFileSync(path.join(root, 'js', 'app.js'), 'utf8');
+const libJs = fs.readFileSync(path.join(root, 'js', 'library.js'), 'utf8');
 
 /* ============ TEST FIXTURE (faqat test uchun — ilovada demo seed YO'Q) ============ */
 const F_DAYS = ['Dushanba', 'Seshanba', 'Chorshanba', 'Payshanba', 'Juma', 'Shanba', 'Yakshanba'];
@@ -226,13 +227,21 @@ Object.defineProperty(win.navigator, 'userAgent', {
   value: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
   configurable: true
 });
-win.eval(appJs);
+win.eval(appJs + '\n' + libJs);
 
 const q = sel => doc.querySelector(sel);
 const qa = sel => Array.from(doc.querySelectorAll(sel));
 const text = () => q('#screen').textContent;
 const click = el => { const node = typeof el === 'string' ? q(el) : el; if (!node) throw new Error('click: topilmadi -> ' + el); node.dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true })); };
 const clickAct = act => click(q('[data-act="' + act + '"]'));
+const untilLib = async (fn, ms) => {
+  const end = Date.now() + (ms || 3000);
+  while (Date.now() < end) {
+    try { if (fn()) return true; } catch (e) {}
+    await new Promise(r => setTimeout(r, 40));
+  }
+  return false;
+};
 const setVal = (sel, val) => { const el = q(sel); if (!el) throw new Error('setVal: ' + sel + ' topilmadi'); el.value = val; el.dispatchEvent(new win.Event('input', { bubbles: true })); };
 const changeVal = (sel, val) => { const el = q(sel); if (!el) throw new Error('changeVal: ' + sel + ' topilmadi'); el.value = val; el.dispatchEvent(new win.Event('change', { bubbles: true })); };
 const setCheck = (sel, checked) => { const el = q(sel); if (!el) throw new Error('setCheck: ' + sel + ' topilmadi'); el.checked = !!checked; el.dispatchEvent(new win.Event('change', { bubbles: true })); };
@@ -417,8 +426,8 @@ check(q('#app-header').textContent.includes('Muzaffar Amirov'), 'ustoz: headerda
 check(navLabels().length === 10, 'ustoz: 10 ta nav tabi (' + navLabels().join(', ') + ')');
 
 /* --- Vektor ikonka tizimi: barcha emoji o'rniga SVG badge'lar --- */
-check(qa('.quick-grid .quick-ico').length === 10, 'icon: TEZ AMALLAR gridida 10 ta ikonka badge');
-check(qa('.quick-grid .quick-ico svg').length === 10, "icon: har bir badge ichida SVG (emoji o'rniga)");
+check(qa('.quick-grid .quick-ico').length === 12, 'icon: TEZ AMALLAR gridida 12 ta ikonka badge');
+check(qa('.quick-grid .quick-ico svg').length === 12, "icon: har bir badge ichida SVG (emoji o'rniga)");
 check(['tint-indigo', 'tint-emerald', 'tint-sky', 'tint-amber', 'tint-slate', 'tint-rose', 'tint-teal']
   .every(t => qa('.quick-ico.' + t).length === 1),
   'icon: indigo/emerald/sky/amber/slate/rose/teal tints har biri bittadan');
@@ -426,10 +435,175 @@ const quickOrder = qa('.quick-grid .quick[data-screen]').map(b => b.getAttribute
 check(JSON.stringify(quickOrder.slice(0, 5)) ===
   JSON.stringify(['homework', 'attendance', 'submissions', 'speaking', 'grades']),
   'home: tez amallar tartibi — uyga vazifa, davomat, topshiriqlar, speaking, baholar');
-check(quickOrder.length === 9 && qa('.quick-grid .quick').length === 10,
-  'home: qolgan tez amallar beshtalikdan keyin saqlangan (10 ta karta, Guruhlar alohida bo\'lim emas)');
-check(quickOrder[8] === 'support' && !q('.sup-watch'),
+check(quickOrder.length === 11 && qa('.quick-grid .quick').length === 12,
+  'home: qolgan tez amallar beshtalikdan keyin saqlangan (12 ta karta, Guruhlar alohida bo\'lim emas)');
+check(quickOrder[10] === 'support' && !q('.sup-watch'),
   'home: "Support teacherlar" bo‘limi Mock testlardan keyin, pastda faqat uyga vazifa berish qoldi');
+check(quickOrder.indexOf('resources') >= 0 && quickOrder.indexOf('movies') >= 0,
+  "home: tez amallarda 'Foydali manbalar' va 'Filmlar' bo'limlari bor");
+
+/* ================= 6b. FOYDALI MANBALAR VA FILMLAR ================= */
+{
+  check(!!win.LibraryApp, 'library: modul yuklandi');
+
+  /* Subtitr faylini qat'iy tekshirish (SRT va VTT) */
+  const srtOk = '1\n00:00:01,000 --> 00:00:03,500\nHello world\n\n2\n00:00:04,000 --> 00:00:06,000\n<You> second line\n';
+  const parsed = win.LibraryApp.parseCues(srtOk);
+  check(parsed.ok && parsed.cues.length === 2 && parsed.cues[0].text === 'Hello world' &&
+        parsed.cues[1].text === 'second line' &&
+        parsed.cues[0].start === 1 && parsed.cues[0].end === 3.5,
+    'library: SRT subtitr vaqt belgilari va matni aniq ajratiladi');
+  const vttOk = 'WEBVTT\n\n00:00:02.000 --> 00:00:04.000\nVTT line\n';
+  check(win.LibraryApp.parseCues(vttOk).ok, 'library: VTT subtitr ham qabul qilinadi');
+  check(!win.LibraryApp.parseCues('1\n00:00:05,000 --> 00:00:02,000\nTeskari\n').ok,
+    'library: tugash vaqti boshlanishdan oldin bo‘lsa rad etiladi');
+  check(!win.LibraryApp.parseCues('1\nnot a time --> x\nText\n').ok,
+    'library: vaqt belgisi buzuq subtitr rad etiladi');
+  check(!win.LibraryApp.parseCues('1\n00:00:01,000 --> 00:00:02,000\n   \n').ok,
+    'library: bo‘sh matnli subtitr rad etiladi');
+
+  /* Uzluksiz ko‘rish: pauza va o‘tkazib yuborish hisoblanmaydi */
+  const wp = { total: 0, streak: 0, milestone: 0, lastPos: 0 };
+  win.LibraryApp.watchStep(wp, 1, true, false);
+  win.LibraryApp.watchStep(wp, 2, true, false);
+  win.LibraryApp.watchStep(wp, 30, true, false); /* 28 s oldinga o‘tkazildi */
+  win.LibraryApp.watchStep(wp, 31, true, false);
+  win.LibraryApp.watchStep(wp, 32, false, false); /* pauza */
+  check(Math.round(wp.total * 10) / 10 === 3 && Math.round(wp.streak * 10) / 10 === 1,
+    'library: faqat uzluksiz ijro hisoblanadi — o‘tkazib yuborilgan va pauza vaqti qo‘shilmaydi');
+
+  const watchRowsBefore = cloudStub.db.telegram_outbox.length;
+  await win.LibraryApp.notifyWatch({ title: 'Test film' },
+    { fullName: 'Aziz Rahimov', dbId: 1, telegramChatId: 1001 }, 300, 600);
+  const watchMsgs = cloudStub.db.telegram_outbox.slice(watchRowsBefore);
+  check(watchMsgs.length === 2 &&
+        watchMsgs.some(r => String(r.chat_id) === '0') &&
+        watchMsgs.some(r => String(r.chat_id) === '1001') &&
+        watchMsgs.every(r => /uzluksiz/i.test(r.text || '')),
+    'library: ko‘rilgan daqiqalar haqida ustozga ham, o‘quvchiga ham Telegram xabari yuboriladi');
+
+  /* R2 yuklash/o‘chirishni stub bilan almashtiramiz */
+  const prevLibFetch = win.fetch;
+  const libCalls = [];
+  win.fetch = function (url, opts) {
+    const method = String((opts && opts.method) || 'GET');
+    libCalls.push({ url: String(url), method: method });
+    return Promise.resolve({
+      ok: true, status: 200,
+      json: function () {
+        return Promise.resolve({ ok: true, url: 'https://pub-836df3817ab64cee9075b55d51fe6061.r2.dev/library/' + libCalls.length + '_file.bin' });
+      }
+    });
+  };
+
+  forceNav('resources');
+  check(text().includes('Foydali manbalar') && !!q('[data-lib-act="add-resource"]'),
+    "library: 'Foydali manbalar' ekrani va 'Manba qo'shish' tugmasi");
+  click('[data-lib-act="add-resource"]');
+  check(q('#modal-overlay').hidden === false && !!q('#lib-res-group') && !!q('#lib-res-files'),
+    'library: manba qo‘shish modali (guruh + fayl maydoni)');
+  const grpOpts = Array.from(q('#lib-res-group').options).map(o => o.textContent);
+  check(grpOpts.length === 1 && grpOpts[0].includes('General English'),
+    'library: faqat repititorlik guruhi tanlanadi (maktab guruhi ro‘yxatda yo‘q)');
+
+  const libFileInput = (sel, files) => {
+    const el = q(sel);
+    Object.defineProperty(el, 'files', { configurable: true, value: files });
+    el.dispatchEvent(new win.Event('change', { bubbles: true }));
+    return el;
+  };
+  setVal('#lib-res-title', 'Grammar qo‘llanma');
+  libFileInput('#lib-res-files', [
+    new win.File([new Uint8Array([1])], 'grammar.pdf', { type: 'application/pdf' }),
+    new win.File([new Uint8Array([2])], 'rules.png', { type: 'image/png' })
+  ]);
+  click('[data-lib-act="save-resource"]');
+  check(await untilLib(() => q('#modal-overlay') && q('#modal-overlay').hidden === true, 6000),
+    'library: manba muvaffaqiyatli yuklanib modal yopildi');
+  check(cloudStub.db.library_resources.length === 1 &&
+        cloudStub.db.library_resources[0].group_id === 2,
+    'library: manba Supabase jadvaliga guruh bilan yozildi');
+  check(q('#screen').textContent.includes('Grammar qo‘llanma') &&
+        q('#screen').textContent.includes('grammar.pdf'),
+    'library: yuklangan manba va fayl nomi ro‘yxatda ko‘rinadi');
+  const resNotice = cloudStub.db.telegram_outbox.filter(r => /YANGI FOYDALI MANBA/.test(r.text || ''));
+  check(resNotice.length >= 1 && resNotice.every(r => r.status === 'pending'),
+    'library: manba yuklanganda o‘quvchi telegram botiga xabar navbatga qo‘yildi');
+
+  /* Ortiqcha (sinov) manba — o‘chirishni tekshirish uchun */
+  const resCountBefore = cloudStub.db.library_resources.length;
+  click('[data-lib-act="add-resource"]');
+  setVal('#lib-res-title', 'Sinov manba');
+  libFileInput('#lib-res-files', [new win.File([new Uint8Array([3])], 'tmp.docx', { type: '' })]);
+  click('[data-lib-act="save-resource"]');
+  check(await untilLib(() => q('#modal-overlay') && q('#modal-overlay').hidden === true, 6000),
+    'library: ikkinchi manba ham yuklandi');
+  const tmpRes = qa('[data-lib-act="del-resource"]');
+  click(tmpRes[0]);
+  click('[data-lib-act="do-del-resource"]');
+  check(await untilLib(() => q('#modal-overlay') && q('#modal-overlay').hidden === true, 6000),
+    'library: manba o‘chirish tasdiqlandi');
+  check(cloudStub.db.library_resources.length === resCountBefore &&
+        libCalls.some(c => c.method === 'DELETE'),
+    'library: o‘chirilgan manba bazadan ham, R2 xotiradan ham olib tashlandi');
+
+  /* Film qo‘shish (subtitr fayli bilan) */
+  forceNav('movies');
+  check(text().includes('Filmlar') && !!q('[data-lib-act="add-movie"]'),
+    "library: 'Filmlar' ekrani va 'Film qo'shish' tugmasi");
+  click('[data-lib-act="add-movie"]');
+  check(!!q('#lib-movie-file') && (q('#lib-movie-file').getAttribute('accept') || '').includes('video/*'),
+    'library: film modalida video fayl maydoni (video/*)');
+  setVal('#lib-movie-title', 'The Pursuit of Happyness');
+  libFileInput('#lib-movie-file', [new win.File([new Uint8Array([9])], 'film.mp4', { type: 'video/mp4' })]);
+  libFileInput('#lib-movie-subs', [new win.File([srtOk], 'film.srt', { type: 'text/plain' })]);
+  click('[data-lib-act="save-movie"]');
+  check(await untilLib(() => q('#modal-overlay') && q('#modal-overlay').hidden === true, 8000),
+    'library: film subtitr fayli bilan yuklandi');
+  check(cloudStub.db.library_movies.length === 1 && cloudStub.db.library_movie_cues.length === 1 &&
+        cloudStub.db.library_movie_cues[0].status === 'ready' &&
+        cloudStub.db.library_movie_cues[0].cues.length === 2,
+    'library: film va tekshirilgan subtitr cue‘lari bazaga yozildi');
+  const movieNotice = cloudStub.db.telegram_outbox.filter(r => /YANGI FILM/.test(r.text || ''));
+  check(movieNotice.length >= 1, 'library: film yuklanganda o‘quvchiga Telegram xabari ketdi');
+
+  /* Pleyer: ±10 s, subtitr, to‘liq ekran */
+  click('[data-lib-act="movie-open"]');
+  check(!!q('#lib-movie-video') && !!q('[data-lib-act="ply-back"]') &&
+        !!q('[data-lib-act="ply-fwd"]') && !!q('[data-lib-act="ply-fs"]') &&
+        !!q('[data-lib-act="ply-play"]'),
+    'library: pleyerda pauza, ±10 soniya va to‘liq ekran tugmalari bor');
+  check(!q('#lib-movie-video').hasAttribute('controls'),
+    'library: pleyer o‘z boshqaruv panelidan foydalanadi (native controls yo‘q)');
+  click('[data-lib-act="ply-cc"]');
+  check(q('#lib-btn-cc').getAttribute('aria-pressed') === 'true',
+    'library: subtitr yoqish/o‘chirish tugmasi holati o‘zgaradi');
+  await untilLib(() => q('#lib-btn-cc').getAttribute('aria-pressed') === 'true', 1500);
+  click('[data-lib-act="movie-back"]');
+  check(!!q('[data-lib-act="add-movie"]'), 'library: filmdan orqaga — filmlar ro‘yxati qaytdi');
+
+  /* Filmni butunlay o‘chirish (subtitle cue va ko‘rish yozuvlari ham) */
+  cloudStub.rows('library_movie_watch').push({ id: 77, movie_id: cloudStub.db.library_movies[0].id, student_id: 1, seconds: 120 });
+  click('[data-lib-act="del-movie"]');
+  click('[data-lib-act="do-del-movie"]');
+  check(await untilLib(() => q('#modal-overlay') && q('#modal-overlay').hidden === true, 6000),
+    'library: film o‘chirish tasdiqlandi');
+  check(cloudStub.db.library_movies.length === 0 && cloudStub.db.library_movie_cues.length === 0 &&
+        cloudStub.db.library_movie_watch.length === 0,
+    'library: film o‘chirilganda subtitle va ko‘rish yozuvlari ham bazadan o‘chdi');
+
+  /* O‘quvchida ko‘rinishi uchun bitta film qoldiramiz */
+  forceNav('movies');
+  click('[data-lib-act="add-movie"]');
+  setVal('#lib-movie-title', 'English Film');
+  libFileInput('#lib-movie-file', [new win.File([new Uint8Array([7])], 'lesson.mp4', { type: 'video/mp4' })]);
+  click('[data-lib-act="save-movie"]');
+  check(await untilLib(() => q('#modal-overlay') && q('#modal-overlay').hidden === true, 8000),
+    'library: subtitrsiz film ham yuklanadi (avtomatik rejim uchun)');
+
+  win.fetch = prevLibFetch;
+  forceNav('home');
+}
 
 /* Sayt speaking videosi → ustozga FAQAT matnli Telegram xabari (video/baho tugmalarisiz) */
 const outboxBeforeWebNotice = (cloudStub.db.telegram_outbox || []).length;
@@ -996,7 +1170,23 @@ check(text().includes('8-sinf') && text().includes('General English'), 'student:
 check(q('#app-header').textContent.includes("O'quvchi"), 'student: headerda "O\'quvchi"');
 check(navLabels().length === 2 && navLabels().join(',') === 'Kabinet,Profil', 'student: nav faqat Kabinet + Profil');
 
-check(qa('.student-action').length === 6, 'student: kabinetda 6 ta asosiy bo\'lim kartasi');
+check(qa('.student-action').length === 8, 'student: kabinetda 8 ta bo\'lim kartasi (6 ta asosiy + manbalar + filmlar)');
+check(!!q('[data-act="student-view"][data-view="resources"]') &&
+      !!q('[data-act="student-view"][data-view="movies"]'),
+  "student: 'Foydali manbalar' va 'Filmlar' bo'limlari repetitorlik o'quvchisiga ko'rinadi");
+openStudentView('resources');
+check(await untilLib(() => text().includes('Grammar qo‘llanma'), 5000),
+  'student: ustoz yuklagan manba foydali manbalar bo‘limida ko‘rinadi');
+closeStudentView();
+openStudentView('movies');
+check(!!q('[data-lib-act="movie-open"]') && text().includes('English Film'),
+  'student: ustoz yuklagan film filmlar bo‘limida ko‘rinadi');
+click('[data-lib-act="movie-open"]');
+check(!!q('#lib-movie-video') && !!q('[data-lib-act="ply-fs"]') && !!q('[data-lib-act="ply-back"]') &&
+      !!q('[data-lib-act="ply-fwd"]') && !!q('[data-lib-act="ply-cc"]'),
+  'student: film pleyerida to‘liq ekran, ±10 s va subtitr tugmalari bor');
+click('[data-lib-act="movie-back"]');
+closeStudentView();
 check(!text().includes('Tez amallar'), 'student: "Tez amallar" sarlavhasi yo\'q');
 openStudentView('grades');
 check(text().includes('Baholar') && qa('.grade-row').length > 0, 'student: baholar ichki oynasi');
@@ -1056,7 +1246,7 @@ check(q('#screen').firstElementChild && q('#screen').firstElementChild.classList
   "kabinet tartibi: profil kartasi eng birinchi o'rinda (maktab guruhi)");
 check(!q('.pay-banner'), "kabinet tartibi: maktab guruhida to'lov banneri umuman yo'q");
 check(!!q('.student-actions') && q('.student-actions').children.length === 6,
-  "kabinet tartibi: 6 ta bo'lim kartasi (2x2 grid) profil kartasidan keyin");
+  "kabinet tartibi: maktab guruhi o'quvchisida 6 ta karta (manbalar/filmlar yo'q)");
 
 /* --- Repetitorlik guruhi (g2) o'quvchisi: to'lov bo'limi ko'rinadi --- */
 logout();
@@ -1069,6 +1259,8 @@ check(!!q('.pay-banner') && /to'lov|To'langan/i.test(text()),
   check(at('hero-card') === 0, "kabinet tartibi: profil kartasi 1-o'rinda (repetitorlik)");
   check(at('pay-banner') === 1, "kabinet tartibi: to'lov banneri 2-o'rinda (repetitorlik)");
   check(at('student-actions') > at('pay-banner'), "kabinet tartibi: bo'lim kartalari to'lovdan keyin");
+  check(q('.student-actions').children.length === 8,
+    "kabinet tartibi: repetitorlik o'quvchisida 8 ta karta (manbalar + filmlar qo'shilgan)");
   /* EN rejimda qarz banneri va to'lov tugmasi to'liq inglizchada */
   clickAct('toggle-lang');
   const pbEn = (q('.pay-banner') || {}).textContent || '';
@@ -2465,7 +2657,7 @@ await (async () => {
   check(/\.quick\s*\{[^}]*padding:\s*14px/.test(cssText), 'tez amallar: p-3.5 (14px) padding');
   check(/\.quick-ico\s*\{[^}]*width:\s*36px;\s*\n?\s*height:\s*36px/.test(cssText),
     'tez amallar: ikonka badge bir xil 36×36px');
-  check(qa('.quick-grid .quick').length === 10, "tez amallar: 10 ta karta (barchasi bir xil balandlikda)");
+  check(qa('.quick-grid .quick').length === 12, "tez amallar: 12 ta karta (barchasi bir xil balandlikda)");
 
   /* ================= 21. VOICE RUXSAT KALITI (kartada) ================= */
   logout();

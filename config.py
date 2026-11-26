@@ -38,6 +38,9 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY", "sb_publishable_PHMC_kfQfu5BLFgDOzHsjw_
 
 PAYMENTS_CHANNEL_ID = os.getenv("PAYMENTS_CHANNEL_ID", "")
 
+# Filmlar uchun avtomatik subtitr (AssemblyAI). Kalit bo'lmasa ustoz .vtt/.srt yuklaydi.
+ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY", "")
+
 # Gmail bildirishnomalari (App Password — Google hisob sozlamalaridan olinadi)
 GMAIL_USER = os.getenv("GMAIL_USER", "")
 GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "")

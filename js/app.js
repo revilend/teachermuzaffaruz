@@ -4694,7 +4694,9 @@ function scrLabel(s) {
     speaking: 'Speaking (1-on-1)',
     submissions: 'Bajarilgan topshiriqlar',
     profile: 'Profil',
-    mock: 'Mock testlar'
+    mock: 'Mock testlar',
+    resources: 'Foydali manbalar',
+    movies: 'Filmlar'
   }[s] || '';
 }
 function renderHeader() {
@@ -6009,6 +6011,8 @@ function teacherHome() {
     <button type="button" class="card quick" data-act="nav" data-screen="payments"><span class="quick-ico tint-teal">${ICON.creditCard}</span><span>To'lovlar</span></button>
     <button type="button" class="card quick" data-act="nav" data-screen="students"><span class="quick-ico tint-amber">${ICON.gradCap}</span><span>O'quvchilar va guruhlarni tahrirlash</span></button>
     <button type="button" class="card quick" data-act="open-add-student"><span class="quick-ico tint-slate">${ICON.userPlus}</span><span>O'quvchi qo'shish</span></button>
+    <button type="button" class="card quick" data-act="nav" data-screen="resources"><span class="quick-ico tint-cyan">${ICON.folder}</span><span>${t('Foydali manbalar')}</span></button>
+    <button type="button" class="card quick" data-act="nav" data-screen="movies"><span class="quick-ico tint-violet">${ICON.video}</span><span>${t('Filmlar')}</span></button>
     <button type="button" class="card quick" data-act="nav" data-screen="mock"><span class="quick-ico tint-violet">${ICON.gradCap}</span><span>${t('Mock testlar')}${navBadgeHTML('mock')}</span></button>
     <button type="button" class="card quick" data-act="nav" data-screen="support"><span class="quick-ico tint-cyan">${ICON.profile}</span><span>${t('Support teacherlar')}</span></button>
   </div>
@@ -6251,6 +6255,11 @@ function studentPortal() {
     speaking: { title: t('Speaking topshirish'), html: speakingHTML },
     chat: { title: t("O'qituvchi bilan suhbat"), html: chatHTML }
   };
+  /* Foydali manbalar va Filmlar — faqat repetitorlik guruhi o'quvchilariga */
+  if (g && !isSchoolGroup(g) && window.LibraryApp) {
+    studentViews.resources = { title: t('Foydali manbalar'), html: window.LibraryApp.studentResourcesHTML(st) };
+    studentViews.movies = { title: t('Filmlar'), html: window.LibraryApp.studentMoviesHTML(st) };
+  }
   const activeView = state.studentView && studentViews[state.studentView] ? state.studentView : '';
   if (activeView) {
     return `
@@ -6300,6 +6309,14 @@ function studentPortal() {
       <span class="student-action-label">${t("O'qituvchi bilan suhbat")}</span>
       ${chatUnreadFor(st.id) ? `<span class="nav-badge student-action-badge">${chatUnreadFor(st.id)}</span>` : ''}
     </button>
+    ${g && !isSchoolGroup(g) ? `<button type="button" class="card student-action" data-act="student-view" data-view="resources">
+      <span class="quick-ico tint-cyan">${ICON.folder}</span>
+      <span class="student-action-label">${t('Foydali manbalar')}</span>
+    </button>
+    <button type="button" class="card student-action" data-act="student-view" data-view="movies">
+      <span class="quick-ico tint-violet">${ICON.video}</span>
+      <span class="student-action-label">${t('Filmlar')}</span>
+    </button>` : ''}
   </div>`;
 
   return `
@@ -13847,6 +13864,7 @@ function render() {
   syncLoginLock();
   applyCurrentLang();
   autoGrowTextareas();
+  if (window.LibraryApp && window.LibraryApp.afterRender) window.LibraryApp.afterRender(scr);
 }
 
 /* ==================== CHAT (Ustoz ↔ O'quvchi) ==================== */

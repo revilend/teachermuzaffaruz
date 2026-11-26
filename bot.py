@@ -3008,6 +3008,191 @@ async def outbox_watcher():
 
 
 # ============================================================
+# FILM SUBTITRLARI — avtomatik transkripsiya (AssemblyAI)
+# ============================================================
+# Sayt `library_movie_cues` jadvaliga status='pending' qator yozadi.
+# Bot video havolasini AssemblyAI'ga yuboradi, tayyor bo'lgach SRT'ni
+# qat'iy tekshirib, vaqt belgilangan cue'larga aylantirib saqlaydi.
+AAI_BASE = "https://api.assemblyai.com/v2"
+_RE_TS = re.compile(
+    r"(\d{1,3}):(\d{2}):(\d{2})[.,](\d{1,3})\s*-->\s*(\d{1,3}):(\d{2}):(\d{2})[.,](\d{1,3})"
+)
+
+
+def parse_srt_cues(raw: str) -> list:
+    """SRT/VTT matnini qat'iy tekshirib [{start,end,text}] qaytaradi.
+
+    Buzuq vaqt belgilari, bo'sh matn va 1 soatdan uzun cue'lar tashlanadi.
+    """
+    txt = str(raw or "").replace("\ufeff", "").replace("\r\n", "\n").replace("\r", "\n")
+    if not txt.strip():
+        return []
+    cues, bad = [], 0
+    for block in re.split(r"\n{2,}", txt):
+        lines = [ln for ln in block.split("\n") if ln.strip()]
+        if not lines:
+            continue
+        if lines[0].strip().upper().startswith("WEBVTT"):
+            lines = lines[1:]
+            if not lines:
+                continue
+        idx = 1 if lines[0].strip().isdigit() else 0
+        if idx >= len(lines):
+            bad += 1
+            continue
+        m = _RE_TS.search(lines[idx])
+        if not m:
+            bad += 1
+            continue
+        try:
+            start = (int(m.group(1)) * 3600 + int(m.group(2)) * 60 + int(m.group(3))
+                     + int((m.group(4) + "000")[:3]) / 1000)
+            end = (int(m.group(5)) * 3600 + int(m.group(6)) * 60 + int(m.group(7))
+                   + int((m.group(8) + "000")[:3]) / 1000)
+        except (TypeError, ValueError):
+            bad += 1
+            continue
+        text = " ".join(ln.strip() for ln in lines[idx + 1:])
+        text = re.sub(r"<[^>]*>", "", text)
+        text = re.sub(r"\{\\[^}]*\}", "", text).strip()
+        if not text or end <= start or (end - start) > 3600:
+            bad += 1
+            continue
+        cues.append({"start": round(start, 3), "end": round(end, 3), "text": text})
+    if not cues or bad > len(cues):
+        return []
+    cues.sort(key=lambda c: (c["start"], c["end"]))
+    unique = []
+    for c in cues:
+        if unique and c["start"] == unique[-1]["start"] and c["text"] == unique[-1]["text"]:
+            continue
+        unique.append(c)
+    return unique[:10000]
+
+
+def _aai_headers() -> dict:
+    return {"authorization": config.ASSEMBLYAI_API_KEY, "content-type": "application/json"}
+
+
+async def movie_subs_tick() -> int:
+    """pending → transkripsiya yuborish, processing → natijani yig'ish."""
+    if not config.ASSEMBLYAI_API_KEY:
+        try:
+            rows = (supabase.table("library_movie_cues").select("id")
+                    .eq("status", "pending").limit(20).execute().data or [])
+            for r in rows:
+                (supabase.table("library_movie_cues")
+                 .update({"status": "failed", "error": "ASSEMBLYAI_API_KEY sozlanmagan",
+                          "updated_at": datetime.now(timezone.utc).isoformat()})
+                 .eq("id", r["id"]).execute())
+        except Exception:
+            pass
+        return 0
+
+    done = 0
+    try:
+        pending = (supabase.table("library_movie_cues").select("id, movie_id")
+                   .eq("status", "pending").order("id").limit(3).execute().data or [])
+    except Exception as e:
+        if "PGRST205" in str(e) or "library_movie_cues" in str(e):
+            return 0
+        logging.warning(f"movie_subs pending: {e}")
+        return 0
+    try:
+        processing = (supabase.table("library_movie_cues").select("id, movie_id, job_id")
+                      .eq("status", "processing").order("id").limit(3).execute().data or [])
+    except Exception:
+        processing = []
+
+    if not pending and not processing:
+        return 0
+
+    async with aiohttp.ClientSession(headers=_aai_headers()) as session:
+        for row in pending:
+            try:
+                mv = (supabase.table("library_movies").select("video_url")
+                      .eq("id", row["movie_id"]).limit(1).execute().data or [])
+                url = str((mv[0] if mv else {}).get("video_url") or "")
+                if not url.lower().startswith(("http://", "https://")):
+                    raise RuntimeError("video havolasi noto'g'ri")
+                payload = {
+                    "audio_url": url,
+                    "language_detection": True,
+                    "punctuate": True,
+                    "format_text": True,
+                }
+                async with session.post(f"{AAI_BASE}/transcript", json=payload) as resp:
+                    data = await resp.json(content_type=None)
+                if resp.status >= 400 or not data.get("id"):
+                    raise RuntimeError(str(data.get("error") or f"HTTP {resp.status}"))
+                (supabase.table("library_movie_cues")
+                 .update({"status": "processing", "job_id": data["id"], "error": None,
+                          "updated_at": datetime.now(timezone.utc).isoformat()})
+                 .eq("id", row["id"]).execute())
+            except Exception as e:
+                logging.warning(f"movie_subs submit #{row['id']}: {e}")
+                try:
+                    (supabase.table("library_movie_cues")
+                     .update({"status": "failed", "error": str(e)[:400],
+                              "updated_at": datetime.now(timezone.utc).isoformat()})
+                     .eq("id", row["id"]).execute())
+                except Exception:
+                    pass
+
+        for row in processing:
+            job = str(row.get("job_id") or "")
+            if not job:
+                try:
+                    (supabase.table("library_movie_cues")
+                     .update({"status": "failed", "error": "job_id yo'q"})
+                     .eq("id", row["id"]).execute())
+                except Exception:
+                    pass
+                continue
+            try:
+                async with session.get(f"{AAI_BASE}/transcript/{job}") as resp:
+                    data = await resp.json(content_type=None)
+                if resp.status >= 400:
+                    raise RuntimeError(str(data.get("error") or f"HTTP {resp.status}"))
+                status = str(data.get("status") or "")
+                if status in ("queued", "processing"):
+                    continue
+                if status != "completed":
+                    raise RuntimeError(str(data.get("error") or "transkripsiya xatosi"))
+                async with session.get(f"{AAI_BASE}/transcript/{job}/srt") as sres:
+                    srt = await sres.text()
+                cues = parse_srt_cues(srt)
+                if not cues:
+                    raise RuntimeError("subtitr bo'sh yoki buzuq")
+                lang = str(data.get("language_code") or "auto")
+                (supabase.table("library_movie_cues")
+                 .update({"status": "ready", "cues": cues, "lang": lang, "error": None,
+                          "updated_at": datetime.now(timezone.utc).isoformat()})
+                 .eq("id", row["id"]).execute())
+                done += 1
+            except Exception as e:
+                logging.warning(f"movie_subs poll #{row['id']}: {e}")
+                try:
+                    (supabase.table("library_movie_cues")
+                     .update({"status": "failed", "error": str(e)[:400],
+                              "updated_at": datetime.now(timezone.utc).isoformat()})
+                     .eq("id", row["id"]).execute())
+                except Exception:
+                    pass
+    return done
+
+
+async def movie_subs_watcher():
+    await asyncio.sleep(15)
+    while True:
+        try:
+            await movie_subs_tick()
+        except Exception as e:
+            logging.warning(f"movie subs watcher loop: {e}")
+        await asyncio.sleep(12)
+
+
+# ============================================================
 # Gmail (smtplib) — email_outbox orqali xat yuborish
 # ============================================================
 # Ustozning Gmail manzili keshi (bot_settings.admin_email — 60 soniya)
@@ -3193,6 +3378,7 @@ async def main():
     _bg_tasks.add(asyncio.create_task(mock_attempts_watcher()))    # mock natijasi → ustozga
     _bg_tasks.add(asyncio.create_task(speaking_web_watcher()))     # sayt speaking → ustozga
     _bg_tasks.add(asyncio.create_task(outbox_watcher()))     # telegram_outbox eslatmalari
+    _bg_tasks.add(asyncio.create_task(movie_subs_watcher()))  # film avtomatik subtitrlari
     _bg_tasks.add(asyncio.create_task(email_outbox_watcher()))  # Gmail xatlari
     _bg_tasks.add(asyncio.create_task(reminders_watcher()))  # uyga vazifa / to'lov eslatmalari
 
