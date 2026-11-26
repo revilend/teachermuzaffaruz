@@ -6897,31 +6897,23 @@ function groupsScreen() {
   const students = scopedStudents();
   const detail = state.groupDetail ? all.filter(function (g) { return g.id === state.groupDetail; })[0] : null;
   if (detail) return groupDebtDetailScreen(detail, students);
-  const typeF = state.groupTypeFilter === 'school' || state.groupTypeFilter === 'tutoring'
-    ? state.groupTypeFilter : 'all';
-  const groups = typeF === 'all' ? all : all.filter(g => groupTypeOf(g) === typeF);
-  const typeChips = [
-    { key: 'all', label: 'Barchasi', icon: 'groups' },
-    { key: 'school', label: 'Maktab', icon: 'building' },
-    { key: 'tutoring', label: 'Repetitorlik', icon: 'gradCap' }
-  ];
+  /* Bu bo'limda faqat guruh nomlari qoladi — tahrirlash/o'chirish/qo'shish
+     va qo'shimcha ma'lumotlar (tur, kun/vaqt, to'lov) ko'rsatilmaydi. */
   return `
   ${backRowHTML('home')}
   <div class="screen-head">
     <div>
       <h2 class="screen-title">${isSupport() ? t('Sinflar') : t('Guruhlar')}</h2>
-      <div class="muted small">${groups.length} ta ${isSupport() ? 'sinf' : 'guruh'}${typeF === 'all' ? '' : typeF === 'school' ? ' · maktab' : ' · repetitorlik'}</div>
+      <div class="muted small">${all.length} ta ${isSupport() ? 'sinf' : 'guruh'}</div>
     </div>
-    ${isTeacher() ? `<button type="button" class="btn btn-primary btn-sm" data-act="open-add-group">+ Guruh</button>` : ''}
   </div>
   ${isTeacher() && state.supervise ? `<div class="card supervise-banner">
     <span>${ico('eye', 15)} ${t("Support teacherni nazorat qilish rejimi yoniq — support guruhlari ko'rinadi.")}</span>
     <button type="button" class="btn btn-xs ghost" data-act="toggle-supervise">${t("O'chirish")}</button>
   </div>` : ''}
-  <div class="chips groups-type-chips">
-    ${typeChips.map(c => `<button type="button" class="chip-btn${typeF === c.key ? ' active' : ''}" data-act="filter-group-type" data-type="${c.key}" aria-pressed="${typeF === c.key ? 'true' : 'false'}">${ico(c.icon, 13)} ${c.label}</button>`).join('')}
-  </div>
-  ${groups.length ? groups.map(g => groupCard(g, students, { act: 'group-detail', hint: t('Bosib, speaking qarzini belgilash') })).join('') : emptyState(typeF === 'school' ? "Maktab guruhi yo'q" : typeF === 'tutoring' ? "Repetitorlik guruhi yo'q" : "Hozircha guruh yo'q", 'groups')}
+  ${all.length
+    ? `<div class="groups-name-list">${all.map(g => `<button type="button" class="card group-card group-name-row" data-act="group-detail" data-gid="${esc(g.id)}" title="${esc(t('Bosib, speaking qarzini belgilash'))}"><span class="groups-name">${esc(g.name)}</span></button>`).join('')}</div>`
+    : emptyState("Hozircha guruh yo'q", 'groups')}
   `;
 }
 
@@ -11571,21 +11563,44 @@ function mockLetter(i) {
 function mockNormAnswer(v) {
   return String(v == null ? '' : v).trim().toLowerCase().replace(/\s+/g, ' ');
 }
-/* Bitta javob varianti va uning qavs ichidagi muqobili:
-   "color (colour)" → "color (colour)", "color", "colour" */
-function mockAnswerPartVariants(part) {
-  const base = mockNormAnswer(String(part == null ? '' : part).replace(/（/g, '(').replace(/）/g, ')'));
-  if (!base) return [];
-  const out = [base];
-  const stripped = mockNormAnswer(base.replace(/\([^)]*\)/g, ' '));
-  if (stripped) out.push(stripped);
-  const re = /\(([^)]*)\)/g;
-  let m;
-  while ((m = re.exec(base))) {
-    const inner = mockNormAnswer(m[1]);
-    if (inner) out.push(inner);
-  }
+/* Qavs ichidagi muqobilni JOYIDA hisobga olish:
+   "hadn't (had not) finished" → "hadn't finished", "had not finished";
+   "color (colour)" → "color", "colour". Qavs ichidagi "/" yoki "|"
+   ham alohida variant sifatida olinadi. */
+function mockExpandAnswerParens(text) {
+  const src = String(text == null ? '' : text).replace(/（/g, '(').replace(/）/g, ')');
+  const out = [];
+  const seen = {};
+  const push = function (s) {
+    const v = mockNormAnswer(s);
+    if (!v || seen[v]) return;
+    seen[v] = 1;
+    out.push(v);
+  };
+  const join = function (a, b) { return a && b ? a + ' ' + b : (a || b); };
+  const walk = function (s, guard) {
+    const m = /\(([^()]*)\)/.exec(s);
+    if (!m || guard > 10) { push(s); return; }
+    const before = s.slice(0, m.index).replace(/\s+$/, '');
+    const after = s.slice(m.index + m[0].length).replace(/^\s+/, '');
+    /* 1) qavs butunlay tashlab yuboriladi */
+    walk(join(before, after), guard + 1);
+    const inner = mockSplitAnswerVariants(m[1]).map(mockNormAnswer).filter(Boolean);
+    inner.forEach(function (word) {
+      /* 2) qavs ichidagi so'z oldingi so'z o'rnida turadi */
+      const prev = /(\S+)$/.exec(before);
+      if (prev) {
+        walk(join(join(before.slice(0, prev.index).replace(/\s+$/, ''), word), after), guard + 1);
+      }
+      /* 3) qavs ichidagi so'z qo'shimcha variant sifatida qo'shiladi */
+      walk(join(join(before, word), after), guard + 1);
+    });
+  };
+  walk(src, 0);
   return out;
+}
+function mockAnswerPartVariants(part) {
+  return mockExpandAnswerParens(part);
 }
 /* | va / faqat qavs tashqarisida variantlarni ajratadi:
    "color (colour/gray) | hue" → ["color (colour/gray)", "hue"] */
@@ -11616,11 +11631,28 @@ function mockAcceptedAnswers(q) {
   return out;
 }
 function mockIsWritten(q) { return !!q && q.type === 'written'; }
+/* Javobni so'zlarga ajratib, qisqartmalarning to'liq shakllarini ham hisobga
+   oladi: hadn't = had not, don't = do not, he's = he is / he has. */
+function mockAnswerStreams(text) {
+  const words = podcastTokens(text);
+  if (!words.length) return [];
+  const out = [];
+  podcastVariantCombos(words).forEach(function (combo) {
+    const canon = podcastTokenForms(words, combo).map(function (f) { return f.norm; }).join(' ');
+    if (canon && out.indexOf(canon) < 0) out.push(canon);
+  });
+  return out;
+}
+function mockSameAnswer(a, b) {
+  const aStreams = mockAnswerStreams(a);
+  const bStreams = mockAnswerStreams(b);
+  return aStreams.some(function (x) { return bStreams.indexOf(x) >= 0; });
+}
 function mockCheckAnswer(q, given) {
   if (!q) return false;
   if (mockIsWritten(q)) {
-    const val = mockNormAnswer(given);
-    return !!val && mockAcceptedAnswers(q).indexOf(val) >= 0;
+    if (!mockNormAnswer(given)) return false;
+    return mockAcceptedAnswers(q).some(function (acc) { return mockSameAnswer(acc, given); });
   }
   if (given == null || given === '') return false;
   return Number(given) === Number(q.ans);

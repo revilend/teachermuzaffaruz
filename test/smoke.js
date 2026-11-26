@@ -461,8 +461,9 @@ check(!!q('[data-act="stat-groups"]') && !!q('[data-act="stat-students"]') && !!
   "stat: Guruhlar/O'quvchilar/Sinflar kartalari interaktiv (button)");
 clickAct('stat-groups');
 check(text().includes('Guruhlar') && groupCards() === 2, "stat: 'Guruhlar' kartasi → Guruhlar ekrani (2 ta)");
-check(q('[data-act="filter-group-type"][data-type="all"]').classList.contains('active'),
-  'stat: Guruhlar kartasi ochilganda tur filtri "Barchasi" holatida');
+check(qa('[data-act="edit-group"]').length === 0 && qa('[data-act="del-group"]').length === 0 &&
+      qa('[data-act="open-add-group"]').length === 0,
+  "stat: Guruhlar bo'limida tahrirlash/o'chirish/qo'shish tugmalari YO'Q");
 click('[data-act="nav"][data-screen="home"]');
 clickAct('stat-students');
 check(text().includes("O'quvchilar va guruhlarni tahrirlash") && groupCards() === 2 && studentCards() === 0,
@@ -498,26 +499,21 @@ check(!!q('[data-act="pay-student"]'), "moliya: '💵 To'lov kiritish' tugmasi b
 forceNav('groups');
 check(text().includes('Guruhlar'), 'guruhlar: ekran');
 check(groupCards() === 2, 'guruhlar: 2 ta guruh');
-/* Tur bo'yicha ajratish: Maktab / Repetitorlik */
-check(qa('[data-act="filter-group-type"]').length === 3,
-  'guruh turi: Guruhlar ekranida 3 ta tur filtri chipi (Barchasi/Maktab/Repetitorlik)');
-click('[data-act="filter-group-type"][data-type="school"]');
-check(groupCards() === 1 && text().includes('IELTS Band 7.0') && !text().includes('General English'),
-  'guruh turi: "Maktab" filtri faqat maktab guruhini qoldiradi');
-click('[data-act="filter-group-type"][data-type="tutoring"]');
-check(groupCards() === 1 && text().includes('General English') && !text().includes('IELTS Band 7.0'),
-  'guruh turi: "Repetitorlik" filtri faqat repetitor guruhini qoldiradi');
-click('[data-act="filter-group-type"][data-type="all"]');
-check(groupCards() === 2 && text().includes('IELTS Band 7.0') && text().includes('General English'),
-  'guruh turi: "Barchasi" filtri ikkala guruhni qaytaradi');
-check(text().includes('Maktab guruhi') && text().includes('Repetitor guruhi'),
-  "guruh turi: ustoz kartalarida '🏫 Maktab guruhi' (ko'k) + '🎓 Repetitor guruhi' (binafsha) nishoni");
-check(qa('.gc-type.is-school').length === 1 && qa('.gc-type.is-tutoring').length === 1,
-  'guruh turi: har guruh turiga mos .gc-type klassi');
-check(text().includes('IELTS Band 7.0') && text().includes('18:00'), 'guruhlar: nom + dars vaqti');
-check(text().includes('Oylik to\'lov'), "moliya: guruh kartasida oylik to'lov ko'rinadi");
+/* Guruhlar bo'limida faqat guruh nomlari qoladi */
+check(qa('.group-card .groups-name').length === 2 &&
+  text().includes('IELTS Band 7.0') && text().includes('General English'),
+  "guruhlar: faqat guruh nomlari ko'rinadi");
+check(!text().includes('18:00') && !text().includes("Oylik to'lov") && !q('.gc-type') &&
+  !text().includes('Maktab guruhi') && !text().includes('Repetitor guruhi'),
+  "guruhlar: kun/vaqt, oylik to'lov va guruh turi nishoni YO'Q");
+check(qa('[data-act="edit-group"]').length === 0 && qa('[data-act="del-group"]').length === 0 &&
+  qa('[data-act="open-add-group"]').length === 0,
+  "guruhlar: tahrirlash/o'chirish/qo'shish tugmalari olib tashlangan");
 
 /* --- Kunlik vaqt picker: har bir kun uchun alohida <input type=time> --- */
+/* Guruh qo'shish/tahrirlash endi O'quvchilar bo'limidagi guruh kartalarida */
+forceNav('students');
+if (q('[data-act="filter-group-all"]')) clickAct('filter-group-all');
 clickAct('open-add-group');
 check(q('#modal-overlay').hidden === false && qa('#f-days input').length === 7,
   "guruh: modalda haftaning 7 ta kuni (Dushanba–Yakshanba)");
@@ -650,7 +646,7 @@ click('[data-act="nav"][data-screen="home"]');
 const feeSt2 = JSON.parse(win.localStorage.getItem('et_students') || '[]').filter(s => s.groupId === 'g1');
 check(JSON.stringify(feeSt2.map(s => [s.id, s.paymentDebt, s.feePeriod])) === JSON.stringify(feeSt1.map(s => [s.id, s.paymentDebt, s.feePeriod])),
   "moliya: oylik qarz oy ichida takror qo'shilmaydi");
-forceNav('groups');
+forceNav('students');
 /* IELTS qaytadan maktab guruhiga o'tkaziladi — to'lov maydoni yashirin, summa 0 */
 click(qa('.group-card').filter(c => c.textContent.includes('IELTS Band 7.0'))[0].querySelector('[data-act="edit-group"]'));
 gtypePick('school');
@@ -1244,6 +1240,11 @@ win.__mock.saveDef({
   tasks: [{ id: 'tk2', title: 'Task 1', questions: [
     { id: 'lw1', type: 'written', text: 'How many visitors came?', answer: '25 (twenty five) | twenty-five' },
     { id: 'lw3', type: 'written', text: 'What colour is the car?', answer: 'color (colour)' },
+    { id: 'lw4', type: 'written', text: 'She ___ (not / finish) her homework.', answer: "hadn't (had not) finished" },
+    { id: 'lw5', type: 'written', text: 'They ___ (not / like) tea.', answer: "didn't" },
+    { id: 'lw6', type: 'written', text: 'He ___ (not / swim) yet.', answer: "can't" },
+    { id: 'lw7', type: 'written', text: 'Where are you from?', answer: 'Tashkent' },
+    { id: 'lw8', type: 'written', text: 'She ___ (not / come) yesterday.', answer: 'did not' },
     { id: 'lw2', text: 'Which letter is correct?', opts: ['A opt', 'B opt', 'C opt', 'D opt', 'E opt'], ans: 4 }
   ] }]
 }, true);
@@ -1254,15 +1255,23 @@ check(qa('[data-act="mock-pick"][data-mq="lw2"]').length === 5,
   'mock listening: 5 ta harf varianti (A–E) ko‘rsatiladi');
 setVal('[data-mock-ans="lw1"]', '  Twenty   Five ');
 setVal('[data-mock-ans="lw3"]', 'Color');
+setVal('[data-mock-ans="lw4"]', 'Had not finished');
+setVal('[data-mock-ans="lw5"]', 'Did not');
+setVal('[data-mock-ans="lw6"]', 'cannot');
+setVal('[data-mock-ans="lw7"]', 'tashkent');
+setVal('[data-mock-ans="lw8"]', "Didn't");
 click('[data-act="mock-pick"][data-mq="lw2"][data-mopt="4"]');
 check(q('[data-act="mock-submit"]').disabled === false,
   'mock listening: yozma javob va E varianti bilan “Yuborish” faol');
 clickAct('mock-submit');
-check(/3\/3/.test(text()), 'mock listening: yozma javob normalizatsiya qilinib avtomatik baholandi (3/3)');
+check(/8\/8/.test(text()), 'mock listening: yozma javob normalizatsiya qilinib avtomatik baholandi (8/8)');
 clickAct('mock-review');
 check(text().includes('twenty five') && text().includes('E opt'), 'mock listening: yozma va harfli javoblar tahlilda ko‘rsatiladi');
-check(qa('.mock-rev.is-ok').length === 3,
+check(qa('.mock-rev.is-ok').length === 8,
   'mock listening: qavsdagi so‘z ham, qavsdan tashqaridagi so‘z ham alohida to‘g‘ri deb qabul qilindi');
+check(text().includes("hadn't (had not) finished"), 'mock listening: qisqartma va uning to‘liq shakli (had not finished) ham to‘g‘ri');
+check(text().includes("didn't") && text().includes("can't") && text().includes('did not'),
+  'mock listening: qavssiz qisqartma — didn’t/did not, can’t/cannot hamda katta-kichik harf farqi to‘g‘ri qabul qilindi');
 clickAct('mock-home');
 click('[data-act="mock-cat-back"]');
 
@@ -2086,7 +2095,8 @@ check(Object.keys(attAfterDel).every(dk => !attAfterDel[dk] || !attAfterDel[dk][
 check(!qa('.student-card').some(c => c.textContent.includes('Gulnoza')), "o'chirish: karta ham yo'qoldi");
 
 /* ================= 18. GURUHNI O'CHIRISH (tasdiq bilan) ================= */
-forceNav('groups');
+forceNav('students');
+if (q('[data-act="filter-group-all"]')) clickAct('filter-group-all');
 const nGrpBeforeDel = groupCards();
 check(qa('[data-act="del-group"]').length === nGrpBeforeDel, "guruh: har kartada '🗑 O'chirish' tugmasi");
 const grpCard = qa('.group-card').filter(c => c.textContent.includes('IELTS Band 7.0'))[0];
@@ -2829,7 +2839,8 @@ await (async () => {
     'grid: group-card overflow hidden (ramkadan chiqmaydi)');
   check(/\.meta-row > span \{[^}]*overflow-wrap: anywhere/.test(cssN),
     'grid: kunlar matni wrap bo\'ladi (qirqilmaydi)');
-  forceNav('groups');
+  forceNav('students');
+  if (q('[data-act="filter-group-all"]')) clickAct('filter-group-all');
   check(!!q('.gc-actions'), 'grid: karta tugmalari .gc-actions konteynerida');
   const gcBtns = qa('.gc-actions .btn').map(b => b.textContent.trim());
   check(gcBtns.length === 4 && /Baholar/.test(gcBtns[0]) && /Davomat/.test(gcBtns[1]) &&
@@ -4385,7 +4396,7 @@ await (async () => {
   };
   forceNav('students');
   if (openAct('open-add-student')) scanModal('modal:add-student');
-  forceNav('groups');
+  forceNav('students');
   if (openAct('open-add-group')) scanModal('modal:add-group');
   forceNav('home');
   if (openAct('open-hw')) scanModal('modal:homework');
@@ -4580,8 +4591,9 @@ await (async () => {
   forceNav('support');
   clickAct('toggle-supervise');
   forceNav('groups');
-  check(qa('.group-card').length === curGroups.length && /Dilshod Karimov/.test(text()),
-    'support: "Support teacherni nazorat qilish" yoniq — guruh va support ismi ko\'rinadi');
+  check(qa('.group-card').length === curGroups.length &&
+        curGroups.every(g => text().includes(g.name)),
+    'support: "Support teacherni nazorat qilish" yoniq — barcha guruh nomlari ko\'rinadi');
   const g1Card = qa('.group-card').filter(c => c.getAttribute('data-gid') === sGroupId)[0];
   click(g1Card);
   check(/Support teacher nazorati/.test(text()) && /Uyga vazifalar/.test(text()) &&
@@ -4614,9 +4626,13 @@ await (async () => {
   check(!/Biriktirilgan guruhlar/.test(supHomeText),
     'support: "biriktirilgan o\'quvchilar/guruhlar" bo\'limi paneldan olib tashlangan');
   forceNav('groups');
-  check(/Sinflar/.test(text()) && !!q('[data-act="edit-group"]') &&
-        !q('[data-act="del-group"]') && !q('[data-act="open-add-group"]'),
-    'support: Sinflar bo\'limi ochiladi, faqat tahrirlash mumkin (qo\'shish/o\'chirish yo\'q)');
+  check(/Sinflar/.test(text()) && qa('.group-card .groups-name').length > 0 &&
+        !q('[data-act="edit-group"]') && !q('[data-act="del-group"]'),
+    'support: Sinflar bo\'limida faqat guruh nomlari ko\'rinadi (tahrirlash yo\'q)');
+  forceNav('students');
+  if (q('[data-act="filter-group-all"]')) clickAct('filter-group-all');
+  check(!!q('[data-act="edit-group"]') && !q('[data-act="del-group"]'),
+    'support: guruhni tahrirlash O\'quvchilar bo\'limida, o\'chirish yo\'q');
   clickAct('edit-group');
   check(!!q('#f-gname') && !!q('.modal-head h3') && /Guruhni tahrirlash/.test(q('.modal-head h3').textContent),
     'support: ruxsat bilan guruhni tahrirlash formasi ochiladi');
@@ -4656,7 +4672,8 @@ await (async () => {
   forceNav('home');
   check(!q('[data-act="open-add-student"]') && !/Guruhni tahrirlash/.test(text()),
     'support: ruxsat o\'chirilganda tez amallardan o\'quvchi qo\'shish va guruh tahrirlash yo\'qoladi');
-  forceNav('groups');
+  forceNav('students');
+  if (q('[data-act="filter-group-all"]')) clickAct('filter-group-all');
   check(!q('[data-act="edit-group"]'),
     'support: ruxsatsiz guruhni tahrirlash tugmasi ko\'rinmaydi');
   supRecs[0].perms.add_student = true;
