@@ -28,7 +28,8 @@ function createStub(seed) {
       if (f.op === 'in') return (f.val || []).map(String).indexOf(String(v)) >= 0;
       if (f.op === 'ilike') {
         const hay = String(v == null ? '' : v).toLowerCase();
-        const pat = String(f.val == null ? '' : f.val).toLowerCase();
+        /* PostgREST `*` ni `%` kabi qabul qiladi */
+        const pat = String(f.val == null ? '' : f.val).replace(/\*/g, '%').toLowerCase();
         if (pat.indexOf('%') < 0) return hay === pat;
         const rx = new RegExp('^' + pat.split('%').map(function (part) {
           return part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -58,9 +59,12 @@ function createStub(seed) {
     }
     if (q.op === 'upsert') {
       const list = Array.isArray(q.payload) ? q.payload : [q.payload];
+      const keys = q.conflict ? String(q.conflict).split(',').map(function (s) { return s.trim(); }) : null;
       const out = list.filter(Boolean).map(function (r) {
         const row = Object.assign({}, r);
-        const i = row.id == null ? -1 : rows.findIndex(function (x) { return String(x.id) === String(row.id); });
+        const i = keys
+          ? rows.findIndex(function (x) { return keys.every(function (k) { return String(x[k]) === String(row[k]); }); })
+          : (row.id == null ? -1 : rows.findIndex(function (x) { return String(x.id) === String(row.id); }));
         if (i >= 0) { rows[i] = Object.assign({}, rows[i], row); return Object.assign({}, rows[i]); }
         if (row.id == null) row.id = ++seq[q.table];
         rows.push(row);
@@ -108,7 +112,7 @@ function createStub(seed) {
       insert: function (p) { q.op = 'insert'; q.payload = p; return builder; },
       update: function (p) { q.op = 'update'; q.payload = p; return builder; },
       delete: function () { q.op = 'delete'; return builder; },
-      upsert: function (p) { q.op = 'upsert'; q.payload = p; return builder; },
+      upsert: function (p, opts) { q.op = 'upsert'; q.payload = p; q.conflict = opts && opts.onConflict; return builder; },
       eq: function (c, v) { q.filters.push({ op: 'eq', col: c, val: v }); return builder; },
       neq: function (c, v) { q.filters.push({ op: 'neq', col: c, val: v }); return builder; },
       in: function (c, v) { q.filters.push({ op: 'in', col: c, val: v }); return builder; },

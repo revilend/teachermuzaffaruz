@@ -67,6 +67,68 @@
     return libClientCache;
   }
 
+  /* ---------------- saqlash qatlami ----------------
+     Asosiy yo'l — `library_*` jadvallari. Agar ustoz SQL qismini hali
+     ishga tushirmagan bo'lsa (PGRST205), ma'lumot mavjud `bot_settings`
+     jadvalida `lib_*` kalitlari bilan saqlanadi — bo'lim SQLsiz ham ishlaydi. */
+  var LIB_STORE = '';            /* '' | 'tables' | 'kv' */
+  var libStoreProbe = null;
+  var KV = { res: 'lib_res_', mov: 'lib_mov_', cue: 'lib_cue_', watch: 'lib_watch_' };
+
+  function libMissingTable(err) {
+    var m = String((err && (err.message || err.details || err)) || '');
+    return /PGRST205|schema cache|does not exist|could not find the table/i.test(m);
+  }
+  function libStoreMode(c) {
+    if (LIB_STORE) return Promise.resolve(LIB_STORE);
+    if (libStoreProbe) return libStoreProbe;
+    libStoreProbe = c.from('library_movies').select('id').limit(1).then(function (res) {
+      if (res && res.error && libMissingTable(res.error)) { LIB_STORE = 'kv'; return LIB_STORE; }
+      /* Jadvallar bor, lekin avval bot_settings'ga saqlangan bo'lsa — o'shandan davom etamiz */
+      return c.from('bot_settings').select('key').ilike('key', KV.res + '*').limit(1).then(function (kv) {
+        LIB_STORE = kv && !kv.error && kv.data && kv.data.length ? 'kv' : 'tables';
+        return LIB_STORE;
+      });
+    }).catch(function () { LIB_STORE = 'tables'; return LIB_STORE; });
+    return libStoreProbe;
+  }
+  function libKvId(prefix) {
+    return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  }
+  function libKvParse(row) {
+    try { return JSON.parse(row && row.value ? row.value : 'null'); } catch (e) { return null; }
+  }
+  async function libKvList(c, pattern) {
+    var res = await c.from('bot_settings').select('key,value').ilike('key', pattern);
+    if (res && res.error) throw res.error;
+    return (res && res.data) || [];
+  }
+  async function libKvKeys(c, pattern) {
+    var res = await c.from('bot_settings').select('key').ilike('key', pattern);
+    if (res && res.error) throw res.error;
+    return (res && res.data) || [];
+  }
+  async function libKvGet(c, key) {
+    var res = await c.from('bot_settings').select('key,value').eq('key', key).limit(1);
+    if (res && res.error) throw res.error;
+    var row = res && res.data && res.data[0];
+    return row ? libKvParse(row) : null;
+  }
+  async function libKvPut(c, key, value) {
+    var raw = typeof value === 'string' ? value : JSON.stringify(value);
+    var res = await c.from('bot_settings').upsert({ key: key, value: raw }, { onConflict: 'key' });
+    if (res && res.error) throw res.error;
+  }
+  async function libKvDelete(c, pattern) {
+    var res = await c.from('bot_settings').delete().ilike('key', pattern);
+    if (res && res.error) throw res.error;
+  }
+  function libCueParts(key, movieDbId) {
+    var rest = String(key).slice((KV.cue + movieDbId + '_').length);
+    var bits = rest.split('_');
+    return { status: bits[0] || 'pending', lang: bits[1] || '' };
+  }
+
   /* ---------------- lokal saqlash ---------------- */
   function readList(key) {
     var v = store.get(key, []);
@@ -199,7 +261,12 @@
     var groupDb = stu ? groupDbId(stu.groupId) : null;
     if (stu && groupDb == null) return Promise.resolve(false);
 
-    libPullPromise = (function () {
+    libPullPromise = (async function () {
+      var mode = await libStoreMode(c);
+      if (mode === 'kv') {
+        await libPullKv(c, stu, groupDb);
+        return JSON.stringify([resourcesAll(), moviesAll(), cuesMetaAll(), watchAll()]) !== before;
+      }
       var rq = c.from('library_resources').select('*').order('created_at', { ascending: false });
       if (stu) rq = rq.eq('group_id', groupDb);
       var mq = c.from('library_movies').select('*').order('created_at', { ascending: false });
@@ -240,6 +307,48 @@
     })();
     libPullPromise.then(function () { libPullPromise = null; }, function () { libPullPromise = null; });
     return libPullPromise;
+  }
+
+  async function libPullKv(c, stu, groupDb) {
+    var resRows = (await libKvList(c, KV.res + '*')).map(libKvParse).filter(Boolean);
+    var movRows = (await libKvList(c, KV.mov + '*')).map(libKvParse).filter(Boolean);
+    if (stu) {
+      resRows = resRows.filter(function (r) { return String(r.group_id) === String(groupDb); });
+      movRows = movRows.filter(function (m) { return String(m.group_id) === String(groupDb); });
+    }
+    var desc = function (a, b) { return String(b.created_at || '').localeCompare(String(a.created_at || '')); };
+    resRows.sort(desc);
+    movRows.sort(desc);
+    writeList(KEYS.resources, resRows.map(mapResource));
+    writeList(KEYS.movies, movRows.map(mapMovie));
+
+    if (!movRows.length) {
+      writeList(KEYS.cues, []);
+      if (stu) writeList(KEYS.watch, []);
+      return;
+    }
+    var movieIds = movRows.map(function (m) { return String(m.id); });
+    var cueKeys = await libKvKeys(c, KV.cue + '*');
+    var metas = cueKeys.map(function (row) {
+      var mid = String(row.key || '').slice(KV.cue.length);
+      var movieId = mid.split('_')[0];
+      var p = libCueParts(row.key, movieId);
+      return { id: row.key, movie_id: movieId, status: p.status, lang: p.lang, error: '', updated_at: '' };
+    }).filter(function (m) { return movieIds.indexOf(String(m.movie_id)) >= 0; });
+    metas.sort(function (a, b) { return (a.status === 'ready' ? 0 : 1) - (b.status === 'ready' ? 0 : 1); });
+    var seen = {};
+    var unique = metas.filter(function (m) {
+      if (seen[String(m.movie_id)]) return false;
+      seen[String(m.movie_id)] = true;
+      return true;
+    });
+    writeList(KEYS.cues, unique.map(mapCueMeta));
+
+    if (stu) {
+      var wRows = (await libKvList(c, KV.watch + '*')).map(libKvParse).filter(Boolean)
+        .filter(function (w) { return String(w.student_id) === String(stu.dbId); });
+      writeList(KEYS.watch, wRows.map(mapWatch));
+    }
   }
 
   function libRefreshIf(scr) {
@@ -502,11 +611,20 @@
         var up = await uploadFileToR2(files[i], 'library/' + gdb + '/resources');
         uploaded.push({ url: up.url, type: libFileKind(files[i]), name: files[i].name || up.name || '', size: Number(files[i].size) || 0 });
       }
-      var res = await c.from('library_resources').insert({
-        group_id: gdb, title: title, files: uploaded
-      }).select();
-      if (res.error) throw res.error;
-      var row = mapResource((res.data && res.data[0]) || { id: 'local' + Date.now(), group_id: gdb, title: title, files: uploaded });
+      var mode = await libStoreMode(c);
+      var row;
+      if (mode === 'kv') {
+        var kid = libKvId('r');
+        var rawRes = { id: kid, group_id: gdb, title: title, files: uploaded, created_at: new Date().toISOString() };
+        await libKvPut(c, KV.res + kid, rawRes);
+        row = mapResource(rawRes);
+      } else {
+        var res = await c.from('library_resources').insert({
+          group_id: gdb, title: title, files: uploaded
+        }).select();
+        if (res.error) throw res.error;
+        row = mapResource((res.data && res.data[0]) || { id: 'local' + Date.now(), group_id: gdb, title: title, files: uploaded });
+      }
       writeList(KEYS.resources, [row].concat(resourcesAll().filter(function (x) { return x.id !== row.id; })));
       try { await notifyResourceAdded(row, uploaded.length); } catch (e) { /* xabar ixtiyoriy */ }
       closeModal();
@@ -603,22 +721,43 @@
       if (hint) hint.textContent = t('Video yuklanmoqda…');
       videoUp = await uploadFileToR2(video, 'library/' + gdb + '/movies');
 
-      var res = await c.from('library_movies').insert({
-        group_id: gdb,
-        title: title,
-        video_url: videoUp.url,
-        video_name: String(video.name || '')
-      }).select();
-      if (res.error) throw res.error;
-      var row = mapMovie((res.data && res.data[0]) || { id: 'local' + Date.now(), group_id: gdb, title: title, video_url: videoUp.url });
+      var mode = await libStoreMode(c);
+      var row;
+      if (mode === 'kv') {
+        var mid = libKvId('m');
+        var rawMov = {
+          id: mid, group_id: gdb, title: title,
+          video_url: videoUp.url, video_name: String(video.name || ''),
+          created_at: new Date().toISOString()
+        };
+        await libKvPut(c, KV.mov + mid, rawMov);
+        row = mapMovie(rawMov);
+      } else {
+        var res = await c.from('library_movies').insert({
+          group_id: gdb,
+          title: title,
+          video_url: videoUp.url,
+          video_name: String(video.name || '')
+        }).select();
+        if (res.error) throw res.error;
+        row = mapMovie((res.data && res.data[0]) || { id: 'local' + Date.now(), group_id: gdb, title: title, video_url: videoUp.url });
+      }
       writeList(KEYS.movies, [row].concat(moviesAll().filter(function (x) { return x.id !== row.id; })));
 
       if (cues.length && row.dbId != null) {
-        var cRes = await c.from('library_movie_cues').insert({
-          movie_id: row.dbId, lang: 'manual', status: 'ready', cues: cues
-        }).select();
-        if (!cRes.error) {
-          writeList(KEYS.cues, cuesMetaAll().concat([mapCueMeta(cRes.data[0])]));
+        if (mode === 'kv') {
+          await libKvDelete(c, KV.cue + row.dbId + '_*');
+          await libKvPut(c, KV.cue + row.dbId + '_ready_manual',
+            { lang: 'manual', cues: cues, updated_at: new Date().toISOString() });
+          writeList(KEYS.cues, cuesMetaAll().filter(function (x) { return String(x.movieDbId) !== String(row.dbId); })
+            .concat([mapCueMeta({ id: 'k' + row.dbId, movie_id: row.dbId, lang: 'manual', status: 'ready' })]));
+        } else {
+          var cRes = await c.from('library_movie_cues').insert({
+            movie_id: row.dbId, lang: 'manual', status: 'ready', cues: cues
+          }).select();
+          if (!cRes.error) {
+            writeList(KEYS.cues, cuesMetaAll().concat([mapCueMeta(cRes.data[0])]));
+          }
         }
       }
       try { await notifyMovieAdded(row); } catch (e) { /* xabar ixtiyoriy */ }
@@ -662,8 +801,13 @@
       if (row.dbId != null) {
         var c = libClient();
         if (c) {
-          var res = await c.from('library_resources').delete().eq('id', row.dbId);
-          if (res.error) throw res.error;
+          var mode = await libStoreMode(c);
+          if (mode === 'kv') {
+            await libKvDelete(c, KV.res + row.dbId);
+          } else {
+            var res = await c.from('library_resources').delete().eq('id', row.dbId);
+            if (res.error) throw res.error;
+          }
         }
       }
       writeList(KEYS.resources, resourcesAll().filter(function (x) { return x.id !== id; }));
@@ -685,10 +829,17 @@
       await deleteCloudFiles([row.videoUrl]);
       var c = libClient();
       if (c && row.dbId != null) {
-        try { await c.from('library_movie_watch').delete().eq('movie_id', row.dbId); } catch (e) {}
-        try { await c.from('library_movie_cues').delete().eq('movie_id', row.dbId); } catch (e) {}
-        var res = await c.from('library_movies').delete().eq('id', row.dbId);
-        if (res.error) throw res.error;
+        var mode = await libStoreMode(c);
+        if (mode === 'kv') {
+          await libKvDelete(c, KV.mov + row.dbId);
+          await libKvDelete(c, KV.cue + row.dbId + '_*');
+          await libKvDelete(c, KV.watch + row.dbId + '_*');
+        } else {
+          try { await c.from('library_movie_watch').delete().eq('movie_id', row.dbId); } catch (e) {}
+          try { await c.from('library_movie_cues').delete().eq('movie_id', row.dbId); } catch (e) {}
+          var res = await c.from('library_movies').delete().eq('id', row.dbId);
+          if (res.error) throw res.error;
+        }
       }
       writeList(KEYS.movies, moviesAll().filter(function (x) { return x.id !== id; }));
       writeList(KEYS.cues, cuesMetaAll().filter(function (x) { return String(x.movieDbId) !== String(row.dbId); }));
@@ -884,14 +1035,23 @@
   }
 
   /* Boshqa qurilmada ko'rilgan vaqt yo'qolmasin: bulutdagi kattaroq qiymatni olamiz */
+  async function cloudWatchGet(c, movieDbId, studentId) {
+    var mode = await libStoreMode(c);
+    if (mode === 'kv') {
+      var row = await libKvGet(c, KV.watch + movieDbId + '_' + studentId);
+      return row ? { seconds: Number(row.seconds) || 0 } : null;
+    }
+    var res = await c.from('library_movie_watch').select('*')
+      .eq('movie_id', movieDbId).eq('student_id', studentId).limit(1);
+    return res && !res.error && res.data ? res.data[0] : null;
+  }
   function restoreWatchFromCloud(movie, st) {
     var c = libClient();
     if (!c || !movie || !st || movie.dbId == null || st.dbId == null) return;
-    c.from('library_movie_watch').select('*')
-      .eq('movie_id', movie.dbId).eq('student_id', st.dbId).limit(1)
-      .then(function (res) {
-        if (!res || res.error || !res.data || !res.data[0] || !libPlayer) return;
-        var cloudSec = Number(res.data[0].seconds) || 0;
+    cloudWatchGet(c, movie.dbId, st.dbId)
+      .then(function (row) {
+        if (!row || !libPlayer) return;
+        var cloudSec = Number(row.seconds) || 0;
         var session = Math.max(0, libPlayer.total - libPlayer.base);
         if (cloudSec + session > libPlayer.total) {
           libPlayer.total = cloudSec + session;
@@ -1009,6 +1169,11 @@
     };
     (async function () {
       try {
+        var mode = await libStoreMode(c);
+        if (mode === 'kv') {
+          await libKvPut(c, KV.watch + payload.movie_id + '_' + payload.student_id, payload);
+          return;
+        }
         if (rec.dbId != null) {
           await c.from('library_movie_watch').update(payload).eq('id', rec.dbId);
         } else {
@@ -1102,6 +1267,21 @@
     var c = libClient();
     if (!c || movieDbId == null) return null;
     try {
+      var mode = await libStoreMode(c);
+      if (mode === 'kv') {
+        var rows = await libKvList(c, KV.cue + movieDbId + '_*');
+        if (!rows.length) return null;
+        rows.sort(function (a, b) { return (/ready/.test(a.key) ? 0 : 1) - (/ready/.test(b.key) ? 0 : 1); });
+        var krow = rows[0];
+        var p = libCueParts(krow.key, movieDbId);
+        var data = libKvParse(krow) || {};
+        return {
+          status: p.status,
+          lang: data.lang || p.lang || '',
+          error: data.error || '',
+          cues: normCues(data.cues)
+        };
+      }
       var res = await c.from('library_movie_cues').select('*').eq('movie_id', movieDbId).limit(1);
       if (res.error || !res.data || !res.data[0]) return null;
       var row = res.data[0];
@@ -1190,15 +1370,33 @@
     var c = libClient();
     if (!c) { setSubStatus(t('Subtitr mavjud emas')); return; }
     try {
-      var existing = await c.from('library_movie_cues').select('*').eq('movie_id', movieDbId).limit(1);
-      var row = existing.data && existing.data[0];
-      if (!existing.error && !row) {
-        await c.from('library_movie_cues').insert({ movie_id: movieDbId, status: 'pending', lang: 'auto' });
-      } else if (row && row.status === 'failed') {
-        /* Kalit keyin sozlangan bo'lsa — qayta urinish uchun qayta navbatga qo'yamiz */
-        await c.from('library_movie_cues').update({
-          status: 'pending', error: null, job_id: null, updated_at: new Date().toISOString()
-        }).eq('movie_id', movieDbId);
+      var mode = await libStoreMode(c);
+      if (mode === 'kv') {
+        var rows = await libKvList(c, KV.cue + movieDbId + '_*');
+        var hasWork = rows.some(function (r) {
+          var st = libCueParts(r.key, movieDbId).status;
+          return st === 'pending' || st === 'processing' || st === 'ready';
+        });
+        var failed = rows.filter(function (r) { return libCueParts(r.key, movieDbId).status === 'failed'; });
+        if (!rows.length) {
+          await libKvPut(c, KV.cue + movieDbId + '_pending',
+            { updated_at: new Date().toISOString() });
+        } else if (!hasWork && failed.length) {
+          await libKvDelete(c, KV.cue + movieDbId + '_failed');
+          await libKvPut(c, KV.cue + movieDbId + '_pending',
+            { updated_at: new Date().toISOString() });
+        }
+      } else {
+        var existing = await c.from('library_movie_cues').select('*').eq('movie_id', movieDbId).limit(1);
+        var row = existing.data && existing.data[0];
+        if (!existing.error && !row) {
+          await c.from('library_movie_cues').insert({ movie_id: movieDbId, status: 'pending', lang: 'auto' });
+        } else if (row && row.status === 'failed') {
+          /* Kalit keyin sozlangan bo'lsa — qayta urinish uchun qayta navbatga qo'yamiz */
+          await c.from('library_movie_cues').update({
+            status: 'pending', error: null, job_id: null, updated_at: new Date().toISOString()
+          }).eq('movie_id', movieDbId);
+        }
       }
     } catch (e) { /* quyida polling davom etadi */ }
     startSubsPolling(movieDbId);
@@ -1371,6 +1569,10 @@
     deleteCloudFile: deleteCloudFile,
     fetchCues: fetchCues,
     pull: libPull,
+    _useStore: function (mode) {
+      if (mode) { LIB_STORE = mode; libStoreProbe = null; }
+      return LIB_STORE;
+    },
     watchStep: libWatchStep,
     notifyWatch: notifyWatch
   };

@@ -601,6 +601,44 @@ check(quickOrder.indexOf('resources') >= 0 && quickOrder.indexOf('movies') >= 0,
   check(await untilLib(() => q('#modal-overlay') && q('#modal-overlay').hidden === true, 8000),
     'library: subtitrsiz film ham yuklanadi (avtomatik rejim uchun)');
 
+  /* SQL hali ishga tushmagan holat: ma'lumot bot_settings (lib_*) ichida saqlanadi */
+  win.LibraryApp._useStore('kv');
+  forceNav('resources');
+  click('[data-lib-act="add-resource"]');
+  setVal('#lib-res-title', 'KV manba');
+  libFileInput('#lib-res-files', [new win.File([new Uint8Array([5])], 'kv.pdf', { type: 'application/pdf' })]);
+  click('[data-lib-act="save-resource"]');
+  check(await untilLib(() => q('#modal-overlay') && q('#modal-overlay').hidden === true, 6000),
+    'library (zaxira): jadval bo‘lmaganda manba yuklanadi');
+  const kvResRows = cloudStub.db.bot_settings.filter(r => /^lib_res_/.test(r.key));
+  check(kvResRows.length === 1 && JSON.parse(kvResRows[0].value).group_id === 2 &&
+        JSON.parse(kvResRows[0].value).files.length === 1,
+    'library (zaxira): manba bot_settings ichida guruh va fayl bilan saqlandi');
+
+  forceNav('movies');
+  click('[data-lib-act="add-movie"]');
+  setVal('#lib-movie-title', 'KV film');
+  libFileInput('#lib-movie-file', [new win.File([new Uint8Array([6])], 'kv.mp4', { type: 'video/mp4' })]);
+  libFileInput('#lib-movie-subs', [new win.File([srtOk], 'kv.srt', { type: 'text/plain' })]);
+  click('[data-lib-act="save-movie"]');
+  check(await untilLib(() => q('#modal-overlay') && q('#modal-overlay').hidden === true, 8000),
+    'library (zaxira): film va subtitr jadval bo‘lmaganda ham yuklanadi');
+  const kvMovRows = cloudStub.db.bot_settings.filter(r => /^lib_mov_/.test(r.key));
+  const kvCueRows = cloudStub.db.bot_settings.filter(r => /^lib_cue_.*_ready_manual$/.test(r.key));
+  check(kvMovRows.length === 1 && kvCueRows.length === 1 &&
+        JSON.parse(kvCueRows[0].value).cues.length === 2,
+    'library (zaxira): film va tekshirilgan cue‘lar bot_settings ichida saqlandi');
+  const kvCues = await win.LibraryApp.fetchCues(JSON.parse(kvMovRows[0].value).id);
+  check(kvCues && kvCues.status === 'ready' && kvCues.cues.length === 2 &&
+        kvCues.cues[0].text === 'Hello world',
+    'library (zaxira): pleyer subtitrni bot_settings kalitidan to‘g‘ri o‘qiydi');
+  click('[data-lib-act="del-movie"]');
+  click('[data-lib-act="do-del-movie"]');
+  check(await untilLib(() => q('#modal-overlay') && q('#modal-overlay').hidden === true, 6000),
+    'library (zaxira): film o‘chirildi');
+  check(cloudStub.db.bot_settings.filter(r => /^lib_(mov|cue|watch)_/.test(r.key)).length === 0,
+    'library (zaxira): o‘chirishda film, cue va ko‘rish kalitlari ham tozalandi');
+
   win.fetch = prevLibFetch;
   forceNav('home');
 }

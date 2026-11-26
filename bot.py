@@ -3074,8 +3074,156 @@ def _aai_headers() -> dict:
     return {"authorization": config.ASSEMBLYAI_API_KEY, "content-type": "application/json"}
 
 
+LIB_CUE_PREFIX = "lib_cue_"
+LIB_MOV_PREFIX = "lib_mov_"
+
+
+def _lib_missing(e) -> bool:
+    msg = str(e)
+    return "PGRST205" in msg or "library_movie_cues" in msg or "schema cache" in msg
+
+
+def _kv_parse(row) -> dict:
+    try:
+        value = json.loads(str((row or {}).get("value") or "null"))
+        return value if isinstance(value, dict) else {}
+    except (TypeError, ValueError):
+        return {}
+
+
+def _kv_put(key: str, value: dict) -> None:
+    (supabase.table("bot_settings")
+     .upsert({"key": key, "value": json.dumps(value, ensure_ascii=False)}).execute())
+
+
+def _kv_get(key: str):
+    rows = (supabase.table("bot_settings").select("key,value")
+            .eq("key", key).limit(1).execute().data or [])
+    return _kv_parse(rows[0]) if rows else None
+
+
+def _kv_delete(key: str) -> None:
+    supabase.table("bot_settings").delete().eq("key", key).execute()
+
+
+def _kv_keys(pattern: str) -> list:
+    return (supabase.table("bot_settings").select("key")
+            .like("key", pattern).execute().data or [])
+
+
+def _kv_values(pattern: str) -> list:
+    return (supabase.table("bot_settings").select("key,value")
+            .like("key", pattern).execute().data or [])
+
+
+def _kv_movie_id(key: str) -> str:
+    return str(key)[len(LIB_CUE_PREFIX):].split("_")[0]
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+async def _kv_fail(key: str, message: str) -> None:
+    """pending/processing kalitini failed kaliti bilan almashtiradi."""
+    mid = _kv_movie_id(key)
+    try:
+        _kv_delete(key)
+        _kv_put(f"{LIB_CUE_PREFIX}{mid}_failed", {"error": message[:400], "updated_at": _now_iso()})
+    except Exception as e:
+        logging.warning(f"movie_subs kv fail: {e}")
+
+
+async def _movie_subs_tick_kv() -> int:
+    """Jadval bo'lmaganda: subtitr navbati bot_settings (lib_cue_*) ichida."""
+    try:
+        pending = _kv_keys(f"{LIB_CUE_PREFIX}*_pending")
+    except Exception as e:
+        logging.warning(f"movie_subs kv scan: {e}")
+        return 0
+
+    if not config.ASSEMBLYAI_API_KEY:
+        for row in pending[:20]:
+            await _kv_fail(row["key"], "ASSEMBLYAI_API_KEY sozlanmagan")
+        return 0
+
+    try:
+        processing = _kv_values(f"{LIB_CUE_PREFIX}*_processing")
+    except Exception:
+        processing = []
+    if not pending and not processing:
+        return 0
+
+    done = 0
+    async with aiohttp.ClientSession(headers=_aai_headers()) as session:
+        for row in pending[:3]:
+            key = row["key"]
+            mid = _kv_movie_id(key)
+            try:
+                movie = _kv_get(LIB_MOV_PREFIX + mid) or {}
+                url = str(movie.get("video_url") or "")
+                if not url.lower().startswith(("http://", "https://")):
+                    raise RuntimeError("video havolasi noto'g'ri")
+                payload = {
+                    "audio_url": url,
+                    "language_detection": True,
+                    "punctuate": True,
+                    "format_text": True,
+                }
+                async with session.post(f"{AAI_BASE}/transcript", json=payload) as resp:
+                    data = await resp.json(content_type=None)
+                if resp.status >= 400 or not data.get("id"):
+                    raise RuntimeError(str(data.get("error") or f"HTTP {resp.status}"))
+                _kv_delete(key)
+                _kv_put(f"{LIB_CUE_PREFIX}{mid}_processing",
+                        {"job_id": data["id"], "updated_at": _now_iso()})
+            except Exception as e:
+                logging.warning(f"movie_subs kv submit #{mid}: {e}")
+                await _kv_fail(key, str(e))
+
+        for row in processing[:3]:
+            key = row["key"]
+            mid = _kv_movie_id(key)
+            job = str(_kv_parse(row).get("job_id") or "")
+            if not job:
+                await _kv_fail(key, "job_id yo'q")
+                continue
+            try:
+                async with session.get(f"{AAI_BASE}/transcript/{job}") as resp:
+                    data = await resp.json(content_type=None)
+                if resp.status >= 400:
+                    raise RuntimeError(str(data.get("error") or f"HTTP {resp.status}"))
+                status = str(data.get("status") or "")
+                if status in ("queued", "processing"):
+                    continue
+                if status != "completed":
+                    raise RuntimeError(str(data.get("error") or "transkripsiya xatosi"))
+                async with session.get(f"{AAI_BASE}/transcript/{job}/srt") as sres:
+                    srt = await sres.text()
+                cues = parse_srt_cues(srt)
+                if not cues:
+                    raise RuntimeError("subtitr bo'sh yoki buzuq")
+                lang = str(data.get("language_code") or "auto")
+                _kv_delete(key)
+                _kv_put(f"{LIB_CUE_PREFIX}{mid}_ready_{lang}",
+                        {"lang": lang, "cues": cues, "updated_at": _now_iso()})
+                done += 1
+            except Exception as e:
+                logging.warning(f"movie_subs kv poll #{mid}: {e}")
+                await _kv_fail(key, str(e))
+    return done
+
+
 async def movie_subs_tick() -> int:
     """pending → transkripsiya yuborish, processing → natijani yig'ish."""
+    try:
+        (supabase.table("library_movie_cues").select("id").limit(1).execute())
+    except Exception as e:
+        if _lib_missing(e):
+            return await _movie_subs_tick_kv()
+        logging.warning(f"movie_subs probe: {e}")
+        return 0
+
     if not config.ASSEMBLYAI_API_KEY:
         try:
             rows = (supabase.table("library_movie_cues").select("id")
