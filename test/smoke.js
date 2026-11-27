@@ -5174,6 +5174,28 @@ await (async () => {
   win.turnstile = prevTurnstile;
   win.fetch = prevFetchTs;
 
+  /* (9) O'quvchi paneli: nusxalash / skrinshot himoyasi — faqat o'quvchiga, ustozga emas */
+  {
+    const guardCss = fs.readFileSync(path.join(root, 'css', 'styles.css'), 'utf8');
+    check(/function copyGuardSync\(\)[\s\S]{0,400}data-copy-guard/.test(appJs) &&
+          /u\.role === 'student'/.test((appJs.match(/function copyGuardSync\(\)[\s\S]{0,400}/) || [''])[0]),
+      'himoya: data-copy-guard faqat o‘quvchi roli uchun o‘rnatiladi');
+    check(/document\.addEventListener\('copy', copyGuardBlock, true\)/.test(appJs) &&
+          /document\.addEventListener\('cut', copyGuardBlock, true\)/.test(appJs),
+      'himoya: nusxalash (copy/cut) hodisalari to‘sib qo‘yilgan');
+    check(/key === 'PrintScreen'/.test(appJs) && /copyGuardClearClipboard/.test(appJs),
+      'himoya: PrintScreen bosilganda almashish xotirasi tozalanadi');
+    check(/html\[data-copy-guard="student"\] body[\s\S]{0,200}user-select:\s*none/.test(guardCss) &&
+          /html\[data-copy-guard="student"\] input[\s\S]{0,220}user-select:\s*text/.test(guardCss),
+      'himoya: o‘quvchi panelida matn tanlash yopiq, kiritish maydonlarida ochiq');
+    check(/@media print[\s\S]{0,260}html\[data-copy-guard="student"\] body > \*/.test(guardCss),
+      'himoya: chop etish orqali nusxa olish to‘sib qo‘yilgan');
+    const idxSrc = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+    check(/js\/app\.js\?v=20261127_copyguard/.test(idxSrc) &&
+          /css\/styles\.css\?v=20261127_copyguard/.test(idxSrc),
+      'himoya: kesh versiyalari yangilandi (CSS + app.js)');
+  }
+
   console.log(failed ? '\n' + failed + ' ta test YIQILDI' : '\nBarcha testlar o\'tdi ✓');
   process.exit(failed ? 1 : 0);
 })();

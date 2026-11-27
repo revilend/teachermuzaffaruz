@@ -2992,6 +2992,66 @@ function linkedStudent() {
   return studentById(u.studentId);
 }
 
+/* ==================== O'QUVCHI PANELI: NUSXALASH / EKRAN SURATI HIMOYASI ====================
+   Faqat o'quvchi sessiyasida ishlaydi (data-copy-guard="student").
+   O'qituvchi va support panelida hech qanday cheklov yo'q — avvalgi tartib saqlanadi. */
+let copyGuardOn = false;
+let copyGuardWarnAt = 0;
+function copyGuardToast() {
+  const now = Date.now();
+  if (now - copyGuardWarnAt < 2500) return;
+  copyGuardWarnAt = now;
+  toast("O'quvchi panelida nusxalash va ekran surati olish cheklangan", 'error');
+}
+function copyGuardSync() {
+  const u = currentUser();
+  copyGuardOn = !!u && u.role === 'student';
+  document.documentElement.setAttribute('data-copy-guard', copyGuardOn ? 'student' : 'off');
+}
+/* Javob yozish maydonlarida o'z matnini tahrirlash erkin qoladi */
+function copyGuardEditable(el) {
+  if (!el || !el.tagName) return false;
+  const tag = el.tagName.toLowerCase();
+  return tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable === true;
+}
+function copyGuardBlock(e) {
+  if (!copyGuardOn || copyGuardEditable(e.target)) return;
+  e.preventDefault();
+  copyGuardToast();
+}
+function copyGuardClearClipboard() {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText('');
+  } catch (e) { /* ruxsat yo'q — jim o'tiladi */ }
+}
+document.addEventListener('copy', copyGuardBlock, true);
+document.addEventListener('cut', copyGuardBlock, true);
+document.addEventListener('dragstart', copyGuardBlock, true);
+document.addEventListener('selectstart', copyGuardBlock, true);
+document.addEventListener('contextmenu', function (e) {
+  if (!copyGuardOn) return;
+  e.preventDefault();
+  copyGuardToast();
+}, true);
+document.addEventListener('keydown', function (e) {
+  if (!copyGuardOn) return;
+  const key = String(e.key || '');
+  /* PrintScreen: skrinshot olinishini to'xtatib bo'lmaydi, lekin almashish xotirasi
+     tozalanadi va foydalanuvchi ogohlantiriladi. */
+  if (key === 'PrintScreen' || key === 'Snapshot') {
+    e.preventDefault();
+    copyGuardClearClipboard();
+    setTimeout(copyGuardClearClipboard, 80);
+    copyGuardToast();
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && /^(c|x|a|p|s)$/i.test(key)) {
+    if (copyGuardEditable(e.target)) return;
+    e.preventDefault();
+    copyGuardToast();
+  }
+}, true);
+
 /* ==================== SUPPORT TEACHER (yordamchi o'qituvchi) ====================
    Asosiy o'qituvchi support teacher qo'shadi, unga guruhlar biriktiradi va
    ruxsatlarni belgilaydi. Support teacher faqat o'z guruhlari va ruxsat
@@ -13982,6 +14042,8 @@ function render() {
   if (!currentUser()) scr = 'login';
   else if (!canAccess(scr)) scr = 'home';
   state.screen = scr;
+  /* O'quvchi panelida nusxalash/skrinshot himoyasi (ustozda o'chirilgan) */
+  copyGuardSync();
   /* Rol almashganda mock ko'rinish holati qolib ketmasin */
   const mockRole = isTeacher() ? 'teacher' : 'student';
   if (state.mockRole !== mockRole) {
