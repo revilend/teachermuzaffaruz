@@ -3515,3 +3515,72 @@ html[data-theme="dark"] .sup-perm.on { background: rgba(52, 211, 153, 0.16); bor
 .lib-player-wrap:fullscreen .lib-subtitle { font-size: 26px; bottom: 26px; }
 .lib-player-wrap:fullscreen .lib-controls { padding: 10px 18px; }
 .lib-player-wrap:fullscreen .lib-watch-info { padding: 0 18px 12px; }
+
+/* ==================== KOMPYUTER (DESKTOP): BOSH SAHIFA JOYLASHUVI ====================
+   Ustoz paneli: stat kartalari va tez amallar zichlashib qolmasin, "Uyga vazifa
+   berish" tugmasi ajralib tursin, bosishda esa ekran siljib/o'ynab ketmasin. */
+
+/* Scrollbar paydo bo'lib/yo'qolib turganda sahifa yon tomonga sakramasin */
+html { scrollbar-gutter: stable; }
+
+/* Grid ichida .card + .card marginlari kartalarni pastga surib yubormasin */
+.stat-grid > .card + .card,
+.quick-grid > .card + .card { margin-top: 0; }
+
+/* "Uyga vazifa berish" tugmasi tez amallar gridiga yopishmasin */
+#screen > .btn-block[data-act="open-hw"] { margin: 26px 0 16px; }
+#screen > .panel-note { margin: 0 0 18px; }
+
+/* Kartalar faqat kerakli xossalarni animatsiya qiladi (transition: all emas) */
+.card, .quick, .stat, .btn {
+  transition: transform .16s var(--ease), box-shadow .16s var(--ease),
+              background-color .16s var(--ease), border-color .16s var(--ease),
+              color .16s var(--ease);
+}
+
+@media (min-width: 768px) {
+  .section-title { margin: 24px 2px 12px; }
+
+  /* 3 ta stat karta — keng va bir xil balandlikda (12 ustunli siqilish yo'q) */
+  .stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: stretch; }
+  .stat { padding: 24px 16px 20px; min-height: 132px; }
+
+  /* Tez amallar: 3 ustun, qatorlar kontentga moslashadi, matn kesilmaydi */
+  .quick-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; grid-auto-rows: 1fr; }
+  .quick {
+    width: 100%;
+    height: auto;
+    min-height: 112px;
+    min-width: 0;
+    padding: 18px;
+    overflow: hidden;
+    gap: 12px;
+  }
+}
+
+@media (min-width: 1024px) {
+  /* Katta ekranda 4 ustun — kartalar yoyiq, matn 2 qatorga bemalol sig'adi */
+  .stat-grid { gap: 18px; }
+  .stat { padding: 28px 22px 22px; min-height: 148px; }
+  .stat-ico { width: 52px; height: 52px; margin: 0 auto 12px; }
+  .stat-num { font-size: 32px; }
+  .stat-label { font-size: 14px; }
+
+  .quick-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; }
+  .quick { min-height: 122px; padding: 20px; font-size: 14px; gap: 14px; }
+  .quick > span:not(.quick-ico) { line-height: 1.28; }
+}
+
+/* Sichqonchali kompyuterda :active'da karta kichrayib, bosiladigan joy
+   barmoq/sichqoncha ostidan qochmaydi — shuning uchun bitta bosish yetadi.
+   Shakl o'rniga yumshoq fon beriladi (ekran "o'ynamaydi"). */
+@media (hover: hover) and (pointer: fine) {
+  .card:active, .quick:active, .stat:active, .btn:active, .hero-card:active,
+  .chip-btn:active, .nav-item:active, .top-nav-item:active, .icon-btn:active,
+  .btn-xs:active, .link-btn:active, .role-card:active, .day-box:active {
+    transform: none;
+  }
+  .quick:active, .stat:active, .card:active { background-color: rgba(79, 70, 229, 0.05); }
+  /* Hover'da karta joyidan siljimaydi (sichqoncha quvib yurmaydi) */
+  .hero-card:hover { transform: none; }
+}
