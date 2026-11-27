@@ -3211,15 +3211,44 @@ function mockLiveStart() {
 function mockLiveStop() {
   if (mockLiveTimer) { clearInterval(mockLiveTimer); mockLiveTimer = null; }
 }
+/* O'quvchi: mock bo'limida turganda natijalar (jumladan ustoz bahosi)
+   avtomatik keladi — qayta ochish yoki kutish shart emas. */
+let studentMockTimer = null;
+let studentMockSince = 0;
+function studentMockTick() {
+  const st = linkedStudent();
+  if (!st || state.studentView !== 'mock' || !MockSync.ready()) return;
+  const now = Date.now();
+  const since = new Date((studentMockSince || now - 300000) - 60000).toISOString();
+  studentMockSince = now;
+  MockSync.pullMineRecent(st.id, since).then(function (changed) {
+    if (!changed || state.studentView !== 'mock') return;
+    const ae = document.activeElement;
+    if (ae && /^(INPUT|TEXTAREA)$/.test(ae.tagName)) return;
+    render();
+  }).catch(function () {});
+}
+function studentMockLiveStart() {
+  if (studentMockTimer) return;
+  studentMockSince = Date.now();
+  studentMockTick();
+  studentMockTimer = setInterval(studentMockTick, 2000);
+}
+function studentMockLiveStop() {
+  if (studentMockTimer) { clearInterval(studentMockTimer); studentMockTimer = null; }
+}
 /* Boshqa ilovadan qaytganda ham natijalar darhol yangilanadi. */
 document.addEventListener('visibilitychange', function () {
-  if (!document.hidden) mockLiveTick();
+  if (document.hidden) return;
+  mockLiveTick();
+  studentMockTick();
 });
 function go(screen) {
   state.screen = screen;
   state.profileSection = '';
   if (screen === 'mock') mockLiveStart();
   else { mockLiveStop(); state.mockTView = ''; state.mockResHome = false; state.mockResView = ''; }
+  if (screen !== 'home') studentMockLiveStop();
   render();
   /* Faol qurilmalar ro'yxatini yangilash (Profil ekrani) */
   if (screen === 'profile') Sessions.refresh();
@@ -10333,6 +10362,8 @@ function logout() {
   state.search = '';
   state.pending2fa = null;
   state.studentView = '';
+  studentMockLiveStop();
+  mockLiveStop();
   state.attOpen = false;
   state.supervise = false;
   state.supportViewId = '';
@@ -11418,8 +11449,8 @@ function podcastCompare(teacherText, studentText) {
 }
 /* Xato so'z ustida qizil chiziq + yonida yashil to'g'ri so'z;
    tushirib qoldirilgan so'zlar joyida qizil rangda qo'shiladi. */
-function podcastDiffHTML(teacherText, studentText) {
-  const cmp = podcastCompare(teacherText, studentText);
+function podcastDiffHTML(teacherText, studentText, cmp) {
+  cmp = cmp || podcastCompare(teacherText, studentText);
   const body = cmp.ops.map(function (op) {
     if (op.type === 'same') return `<span class="pod-word">${esc(op.word)}</span>`;
     if (op.type === 'sub') return `<span class="pod-word is-wrong">${esc(op.wrong)}</span><span class="pod-fix">${esc(op.right)}</span>`;
@@ -11495,7 +11526,7 @@ function podcastAttemptHTML(a) {
     ${a.def && a.def.mediaUrl ? `<div class="pod-replay">${podcastMediaHTML(a.def)}</div>` : ''}
     ${podcastStatsHTML(cmp)}
     <div class="pod-label">${t('Tekshirilgan matn')}</div>
-    ${podcastDiffHTML(teacherText, studentText)}
+    ${podcastDiffHTML(teacherText, studentText, cmp)}
   </div>`;
 }
 function mockWhen(iso) {
@@ -12102,6 +12133,22 @@ const MockSync = (function () {
     } catch (e) { /* lokal rejim */ }
     return changed;
   }
+  /* O'quvchi uchun: faqat o'z natijalari ichidan oxirgi o'zgarganlarini oladi. */
+  async function pullMineRecent(sid, sinceIso) {
+    if (!ready() || !sid || !sinceIso) return false;
+    let changed = false;
+    try {
+      const a = await client.from('mock_attempts').select('*').eq('sid', String(sid))
+        .gte('updated_at', sinceIso).order('updated_at', { ascending: false }).limit(300);
+      if (a.error) { if (tableMissing(a.error)) enabled = false; return changed; }
+      changed = mergeAttempts(a.data) || changed;
+      const d = await client.from('mock_tests').select('*')
+        .gte('updated_at', sinceIso).limit(300);
+      if (d.error) { if (tableMissing(d.error)) enabled = false; return changed; }
+      changed = mergeDefs(d.data) || changed;
+    } catch (e) { if (tableMissing(e)) enabled = false; }
+    return changed;
+  }
   /* Faqat oxirgi o'zgargan natija/testlarni oladi — tez avtomatik yangilanish uchun. */
   async function pullRecent(sinceIso) {
     if (!ready() || !sinceIso) return false;
@@ -12121,7 +12168,7 @@ const MockSync = (function () {
   return {
     ready: ready, pushDef: pushDef, deleteDef: deleteDef, tombstoneDef: tombstoneDef,
     deleteAttempt: deleteAttempt, push: push,
-    pullMine: pullMine, pullAll: pullAll, pullRecent: pullRecent,
+    pullMine: pullMine, pullMineRecent: pullMineRecent, pullAll: pullAll, pullRecent: pullRecent,
     subscribe: subscribe, mergeDefs: mergeDefs, mergeAttempts: mergeAttempts
   };
 })();
@@ -14877,12 +14924,16 @@ document.addEventListener('click', function (e) {
       if (state.studentView === 'mock') {
         const stu = linkedStudent();
         if (stu) MockSync.pullMine(stu.id).then(function (changed) { if (changed) render(); }).catch(function () {});
+        studentMockLiveStart();
+      } else {
+        studentMockLiveStop();
       }
     },
     'student-back': function () {
       if (state.studentView === 'mock' && state.mockRun) { mockTimerStop(); state.mockRun = null; render(); return; }
       if (state.studentView === 'mock' && state.mockResultId) { state.mockResultId = ''; render(); return; }
       if (state.studentView === 'mock' && state.mockCatView) { state.mockCatView = ''; render(); return; }
+      if (state.studentView === 'mock') studentMockLiveStop();
       state.studentView = '';
       mockTimerStop();
       state.mockRun = null;
