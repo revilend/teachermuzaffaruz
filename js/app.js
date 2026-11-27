@@ -13583,8 +13583,7 @@ function mockBuilderBodyHTML(def, c, step) {
       </div>`;
     }).join('') + `<button type="button" class="btn btn-xs ghost mock-add-task" data-act="mock-b-add-speak">${ico('plus', 13)} ${t('Savol qo‘shish')}</button>`;
   }
-  return mockThresholdsHTML(def) + mockBQuestionsBlock('questions', t('Savollar')) +
-    `<button type="button" class="btn btn-xs ghost mock-add-task" data-act="mock-b-add-q" data-path="questions">${ico('plus', 13)} ${t('Savol qo‘shish')}</button>`;
+  return mockThresholdsHTML(def) + mockBQuestionsBlock('questions', t('Savollar'));
 }
 function mockOpenBuilder(def) {
   if (!canStaff('mock')) { toast("Ruxsat yo'q", 'error'); return; }
