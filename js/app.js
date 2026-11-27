@@ -11317,16 +11317,44 @@ function podcastTokenForms(words, combo) {
   });
   return out;
 }
+/* Tokenlarni so'zlarga yoyadi. Qisqartmaning barcha variantlari bir xil
+   uzunlikda (don't = do not, he's = he is / he has), shuning uchun har bir
+   so'z o'rniga mumkin bo'lgan shakllar to'plami yoziladi. Shu bilan barcha
+   kombinatsiyalarni alohida sanab chiqish shart bo'lmaydi. */
+function podcastExpandedTokens(words) {
+  const out = [];
+  (words || []).forEach(function (w) {
+    const variants = podcastWordVariants(w);
+    if (!variants.length) return;
+    const len = variants[0].length;
+    for (let k = 0; k < len; k++) {
+      const norms = [];
+      variants.forEach(function (v) {
+        if (v[k] != null && norms.indexOf(v[k]) < 0) norms.push(v[k]);
+      });
+      if (!norms.length) continue;
+      out.push({ norms: norms, word: variants.length === 1 ? w : variants[0][k] });
+    }
+  });
+  return out;
+}
+/* Ikki so'zning kamida bitta umumiy shakli bo'lsa — mos keladi. */
+function podcastFormsMatch(a, b) {
+  for (let i = 0; i < a.length; i++) {
+    if (b.indexOf(a[i]) >= 0) return true;
+  }
+  return false;
+}
 /* LCS asosida so'zma-so'z taqqoslash: same / sub (xato) / miss (tushirilgan) / extra */
 function podcastAlign(tTok, sTok) {
-  const tn = tTok.map(function (x) { return x.norm; });
-  const sn = sTok.map(function (x) { return x.norm; });
-  const n = tn.length, m = sn.length;
-  const dp = [];
-  for (let i = 0; i <= n; i++) dp.push(new Array(m + 1).fill(0));
+  const n = tTok.length, m = sTok.length;
+  const w = m + 1;
+  const dp = new Int32Array((n + 1) * w);
   for (let i = n - 1; i >= 0; i--) {
     for (let j = m - 1; j >= 0; j--) {
-      dp[i][j] = tn[i] === sn[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+      dp[i * w + j] = podcastFormsMatch(tTok[i].norms, sTok[j].norms)
+        ? dp[(i + 1) * w + j + 1] + 1
+        : Math.max(dp[(i + 1) * w + j], dp[i * w + j + 1]);
     }
   }
   const ops = [];
@@ -11341,8 +11369,10 @@ function podcastAlign(tTok, sTok) {
     dels = []; ins = [];
   };
   while (i < n || j < m) {
-    if (i < n && j < m && tn[i] === sn[j]) { flush(); ops.push({ type: 'same', word: sTok[j].word }); i++; j++; continue; }
-    if (j < m && (i >= n || dp[i][j + 1] >= dp[i + 1][j])) { ins.push(j); j++; continue; }
+    if (i < n && j < m && podcastFormsMatch(tTok[i].norms, sTok[j].norms)) {
+      flush(); ops.push({ type: 'same', word: sTok[j].word }); i++; j++; continue;
+    }
+    if (j < m && (i >= n || dp[i * w + j + 1] >= dp[(i + 1) * w + j])) { ins.push(j); j++; continue; }
     if (i < n) { dels.push(i); i++; continue; }
     ins.push(j); j++;
   }
@@ -11360,25 +11390,13 @@ function podcastAlign(tTok, sTok) {
     total: n, percent: percent, cefr: mockCefr(percent)
   };
 }
-/* Har bir qisqartma varianti sinaladi va eng yaxshi natija tanlanadi
-   (masalan he's = he is yoki he has). */
+/* Qisqartmalarning barcha ma'nolari bir DP ichida hisobga olinadi
+   (masalan he's = he is yoki he has) — matn uzunligidan qat'i nazar tez. */
 function podcastCompare(teacherText, studentText) {
-  const tWords = podcastTokens(teacherText);
-  const sWords = podcastTokens(studentText);
-  const sStreams = podcastVariantCombos(sWords).map(function (sc) {
-    return podcastTokenForms(sWords, sc);
-  });
-  let best = null;
-  podcastVariantCombos(tWords).forEach(function (tc) {
-    const tTok = podcastTokenForms(tWords, tc);
-    sStreams.forEach(function (sTok) {
-      const res = podcastAlign(tTok, sTok);
-      const resErr = res.wrong + res.missed + res.extra;
-      const bestErr = best ? best.wrong + best.missed + best.extra : Infinity;
-      if (!best || res.same > best.same || (res.same === best.same && resErr < bestErr)) best = res;
-    });
-  });
-  return best;
+  return podcastAlign(
+    podcastExpandedTokens(podcastTokens(teacherText)),
+    podcastExpandedTokens(podcastTokens(studentText))
+  );
 }
 /* Xato so'z ustida qizil chiziq + yonida yashil to'g'ri so'z;
    tushirib qoldirilgan so'zlar joyida qizil rangda qo'shiladi. */
