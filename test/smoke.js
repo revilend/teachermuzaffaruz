@@ -1545,6 +1545,9 @@ check(text().includes('10/12') && (q('.pod-fix') || {}).textContent === 'Aziz' &
   'mock podcasts: harflar bo‘yicha aniq solishtirish va natija (10/12)');
 check(!!q('.pod-diff') && !q('.pod-student-text') && !q('.pod-original'),
   'mock podcasts: faqat tekshirilgan matn qoladi (o‘quvchi/o‘qituvchi matni alohida emas)');
+check(await untilLib(() => (cloudStub.db.telegram_outbox || []).some(r =>
+  /MOCK NATIJASI/.test(r.text || '') && String(r.chat_id) !== '0'), 2500),
+  'mock podcasts: natija o‘quvchining telegramiga ham xabarnoma bo‘lib yuborildi');
 /* EN rejim: faqat UI tarjima qilinadi, tekshirilgan matn o‘z holida qoladi */
 clickAct('toggle-lang');
 check(qa('.pod-label').map(function (el) { return el.textContent; }).join('|') === 'Checked text' &&

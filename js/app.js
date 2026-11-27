@@ -12684,6 +12684,7 @@ function mockSubmitRun() {
     render();
     toast(t('Podcast yuborildi — matn avtomatik tekshirildi'));
     mockNotifyTeacherResult(attempt, st);
+    mockNotifyStudentResult(attempt);
     return;
   }
   if (c.kind === 'write') {
@@ -12712,6 +12713,7 @@ function mockSubmitRun() {
   render();
   toast(t('Natija saqlandi'));
   mockNotifyTeacherResult(attempt, st);
+  mockNotifyStudentResult(attempt);
 }
 function mockEnsureSpeakingAttempt() {
   const run = state.mockRun;
@@ -13180,6 +13182,7 @@ function mockSaveTeacherGrade(id) {
   mockUpsert(a);
   render();
   toast(t('Saqlandi'));
+  mockNotifyStudentResult(a);
 }
 
 /* --- Saytdan Telegram xabarnomalari (telegram_outbox → bot yuboradi) --- */
@@ -13217,6 +13220,52 @@ async function mockNotifyTeacherResult(attempt, st) {
     return true;
   } catch (e) {
     console.warn('[mock] teacher notify:', (e && e.message) || e);
+    return false;
+  }
+}
+/* O'quvchining Telegramiga mock natijasi: avtomatik tekshirilgan natija
+   darhol, yozma/speaking esa ustoz baho qo'yganda yuboriladi. */
+async function mockNotifyStudentResult(attempt) {
+  if (!attempt || !CloudSync.ready()) return false;
+  const st = mockResultStudent(attempt);
+  if (!st || !st.telegramChatId) return false;
+  const c = mockCat(attempt.category);
+  const auto = c.kind === 'mcq' || c.kind === 'podcast';
+  const grade = String(attempt.teacherGrade == null ? '' : attempt.teacherGrade).trim();
+  if (!auto && !grade) return false;
+  /* Bir xil natija/izoh uchun ikkinchi marta yubormaymiz. */
+  const key = [c.key, grade, String(attempt.feedback || ''),
+    String(attempt.score == null ? '' : attempt.score),
+    String(attempt.total == null ? '' : attempt.total)].join('|');
+  if (String(attempt.studentNotifiedKey || '') === key) return false;
+  const link = mockAppLink();
+  const place = link ? `<a href="${esc(link)}">Ilovani ochish</a>` : '';
+  let result = '';
+  if (auto) {
+    result = (Number(attempt.score) || 0) + '/' + (Number(attempt.total) || 0) +
+      ' · ' + (Number(attempt.percent) || 0) + '%' +
+      (attempt.cefr ? ' · ' + esc(attempt.cefr) : '');
+  } else {
+    result = esc(grade);
+  }
+  const text = '📊 <b>MOCK NATIJASI</b>\n\n' +
+    "👤 <b>O'quvchi:</b> " + esc(st.fullName || '') + '\n' +
+    '📘 <b>Mock:</b> ' + esc(attempt.mockTitle || t(c.label)) + ' · ' + esc(t(c.label)) + '\n' +
+    '📊 <b>' + (auto ? t('Natija') : t('Baho')) + ':</b> ' + result + '\n' +
+    (attempt.feedback ? '💬 <b>' + t('Ustoz izohi') + ':</b> ' + esc(attempt.feedback) + '\n' : '') +
+    '\n' + (place || '<b>' + t('Mock testlar') + '</b>');
+  try {
+    await CloudSync.queueMessages([{
+      chat_id: String(st.telegramChatId),
+      student_id: st.dbId == null ? null : st.dbId,
+      status: 'pending',
+      text: text
+    }]);
+    attempt.studentNotifiedKey = key;
+    mockUpsert(attempt);
+    return true;
+  } catch (e) {
+    console.warn('[mock] student notify:', (e && e.message) || e);
     return false;
   }
 }
