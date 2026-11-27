@@ -214,12 +214,49 @@ export default {
             500
           );
         }
+        /* Cloudflare'ning test kalitlari (1x/2x/3x...) haqiqiy tokenni ham rad
+           etadi — saytga hech kim kira olmaydi. Aniq sozlama xatosi sifatida
+           qaytaramiz (sayt buni fail-open deb qabul qiladi). */
+        if (/^[123]x0{18,}/i.test(secret)) {
+          return jsonResp(
+            {
+              ok: false,
+              error:
+                "TURNSTILE_SECRET test kalit — Cloudflare dashboarddagi haqiqiy secret bilan almashtiring",
+              "error-codes": ["invalid-input-secret"],
+            },
+            500
+          );
+        }
+        /* Har token bir marta tekshiriladi. Tarmoq xatosi yoki takroriy so'rovda
+           Cloudflare "timeout-or-duplicate" qaytarmasligi uchun token bo'yicha
+           barqaror idempotency_key yuboriladi. */
+        const digest = await crypto.subtle.digest(
+          "SHA-256",
+          new TextEncoder().encode(token)
+        );
+        const hex = Array.from(new Uint8Array(digest))
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join("");
+        const idempotencyKey =
+          hex.slice(0, 8) + "-" + hex.slice(8, 12) + "-4" + hex.slice(13, 16) +
+          "-a" + hex.slice(17, 20) + "-" + hex.slice(20, 32);
         const form = new FormData();
         form.append("secret", secret);
         form.append("response", token);
+        form.append("idempotency_key", idempotencyKey);
+        const clientIp = request.headers.get("CF-Connecting-IP");
+        if (clientIp) form.append("remoteip", clientIp);
         const verifyRes = await fetch(
           "https://challenges.cloudflare.com/turnstile/v0/siteverify",
-          { method: "POST", body: form }
+          {
+            method: "POST",
+            body: form,
+            signal:
+              typeof AbortSignal !== "undefined" && AbortSignal.timeout
+                ? AbortSignal.timeout(8000)
+                : undefined,
+          }
         );
         const verifyData = await verifyRes.json();
         return jsonResp(

@@ -5001,7 +5001,19 @@ await (async () => {
         return Promise.resolve({
           ok: false,
           status: 403,
-          json: function () { return Promise.resolve({ ok: false, 'error-codes': ['invalid-input-response'] }); }
+          json: function () {
+            /* Haqiqiy worker javobi: kodlar data ichida (data.data['error-codes']) */
+            return Promise.resolve({ ok: false, data: { success: false, 'error-codes': ['invalid-input-response'] } });
+          }
+        });
+      }
+      if (tsVerifyMode === 'config') {
+        return Promise.resolve({
+          ok: false,
+          status: 500,
+          json: function () {
+            return Promise.resolve({ ok: false, error: 'TURNSTILE_SECRET xato', 'error-codes': ['invalid-input-secret'] });
+          }
         });
       }
       const okFlag = tsVerifyMode !== 'false';
@@ -5054,6 +5066,29 @@ await (async () => {
     'Turnstile: token POST { token } bilan verify URL’ga yuboriladi, xatoda vidjet reset qilinadi');
   check(!q('[data-act="do-login"]').disabled,
     'Turnstile: rad etilgach kirish tugmasi qayta faollashadi');
+
+  /* 1b) Noto'g'ri parol: token ishlatilgan — vidjet reset qilinadi va eski
+     token qayta yuborilmaydi (Cloudflare'da timeout-or-duplicate/403 bo'lmasin) */
+  tsVerifyMode = 'ok';
+  const resetsBeforeWrongPw = tsCalls.reset;
+  const callsBeforeWrongPw = tsVerifyCalls.length;
+  if (tsRender.opts && tsRender.opts.callback) tsRender.opts.callback('ts-token-wrongpw');
+  setVal('#login-input', 'restore1');
+  setVal('#password-input', '000000');
+  await new Promise(r => setTimeout(r, 80));
+  clickAct('do-login');
+  check(await until(() => /Login yoki parol noto'g'ri/.test((q('#login-error') || {}).textContent || ''), 4000),
+    'Turnstile: noto‘g‘ri paroldan keyin oddiy xabar chiqadi');
+  check(tsCalls.reset > resetsBeforeWrongPw,
+    'Turnstile: noto‘g‘ri paroldan keyin vidjet reset qilinadi');
+  clickAct('do-login');
+  await new Promise(r => setTimeout(r, 200));
+  setVal('#password-input', '9876');
+  clickAct('do-login');
+  await new Promise(r => setTimeout(r, 200));
+  check(/Tekshiruvni yakunlang/.test((q('#login-error') || {}).textContent || '') &&
+        tsVerifyCalls.length === callsBeforeWrongPw + 1,
+    'Turnstile: ishlatilgan token ikkinchi marta yuborilmaydi');
 
   /* 2) "ok:true" bo'lsa kirish davom etadi */
   tsVerifyMode = 'ok';
@@ -5171,6 +5206,40 @@ await (async () => {
     return !!b && b.disabled === false && !/Tekshirilmoqda/.test(b.textContent || '');
   }, 4000), 'Tiklash: so‘rov tugagach tugma qayta faollashadi va “Tekshirilmoqda...” yo‘qoladi');
 
+  /* 9) Server sozlama xatosi (noto'g'ri/eskirgan secret) — fail-open: kirish davom etadi */
+  clickAct('auth-back');
+  await new Promise(r => setTimeout(r, 150));
+  const tsRenderCfg = tsCalls.render[tsCalls.render.length - 1] || {};
+  tsVerifyMode = 'config';
+  if (tsRenderCfg.opts && tsRenderCfg.opts.callback) tsRenderCfg.opts.callback('ts-token-cfg');
+  setVal('#login-input', 'restore1');
+  setVal('#password-input', '9876');
+  await new Promise(r => setTimeout(r, 80));
+  clickAct('do-login');
+  check(await until(() => text().includes('Restored Student'), 6000),
+    'Turnstile: secret/sozlama xatosi kirishni bloklamaydi (fail-open)');
+
+  /* 10) Yangi tokenlar ketma-ket rad etilsa — sabab sozlamada, kirish bloklanmaydi */
+  logout();
+  click('[data-act="auth-login-open"]');
+  await new Promise(r => setTimeout(r, 150));
+  const tsRenderDup = tsCalls.render[tsCalls.render.length - 1] || {};
+  tsVerifyMode = '403';
+  if (tsRenderDup.opts && tsRenderDup.opts.callback) tsRenderDup.opts.callback('ts-token-dup1');
+  setVal('#login-input', 'restore1');
+  setVal('#password-input', '9876');
+  await new Promise(r => setTimeout(r, 80));
+  clickAct('do-login');
+  await new Promise(r => setTimeout(r, 300));
+  check(/Tekshiruv tasdiqlanmadi/.test((q('#login-error') || {}).textContent || ''),
+    'Turnstile: birinchi token rad etilganda hali bloklanadi');
+  if (tsRenderDup.opts && tsRenderDup.opts.callback) tsRenderDup.opts.callback('ts-token-dup2');
+  setVal('#password-input', '000000');
+  await new Promise(r => setTimeout(r, 60));
+  clickAct('do-login');
+  check(await until(() => /Login yoki parol noto'g'ri/.test((q('#login-error') || {}).textContent || ''), 4000),
+    'Turnstile: ketma-ket ikkinchi token rad etilsa sozlama muammosi deb fail-open qilinadi');
+
   win.turnstile = prevTurnstile;
   win.fetch = prevFetchTs;
 
@@ -5191,9 +5260,29 @@ await (async () => {
     check(/@media print[\s\S]{0,260}html\[data-copy-guard="student"\] body > \*/.test(guardCss),
       'himoya: chop etish orqali nusxa olish to‘sib qo‘yilgan');
     const idxSrc = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-    check(/js\/app\.js\?v=20261127_copyguard/.test(idxSrc) &&
-          /css\/styles\.css\?v=20261127_copyguard/.test(idxSrc),
+    check(/js\/app\.js\?v=\d{8}_[a-z0-9_]+/.test(idxSrc) &&
+          /css\/styles\.css\?v=\d{8}_[a-z0-9_]+/.test(idxSrc),
       'himoya: kesh versiyalari yangilandi (CSS + app.js)');
+  }
+
+  /* (10) Turnstile tuzatishlari: kodlar ichkaridan o'qiladi, token bir martalik */
+  {
+    check(/function turnstileCodesOf\(data\)[\s\S]{0,400}data\.data\['error-codes'\]/.test(appJs),
+      'turnstile: worker javobidagi ichki error-codes ham o‘qiladi');
+    check(/TURNSTILE_CONFIG_ERRORS = \['invalid-input-secret'/.test(appJs) &&
+          /const rejected = tokenIssue \|\|/.test(appJs),
+      'turnstile: kalit/sozlama xatosi kirishni bloklamaydi (fail-open)');
+    check(/verifyTurnstileToken\(state\.turnstileToken\);\s*\n\s*state\.turnstileToken = '';/.test(appJs),
+      'turnstile: token yuborilgach darhol tozalanadi (qayta ishlatilmaydi)');
+    check(/const onFail = \(\) => \{[\s\S]{0,260}resetTurnstile\('login'\)/.test(appJs),
+      'turnstile: muvaffaqiyatsiz urinishdan keyin vidjet yangilanadi');
+    check(/state\.turnstileRejects >= 2/.test(appJs),
+      'turnstile: ketma-ket rad etishlar sozlama muammosi sifatida fail-open qilinadi');
+    const workerSrc = fs.readFileSync(path.join(root, 'cloudflare', 'worker.js'), 'utf8');
+    check(/idempotency_key/.test(workerSrc) && /form\.append\("remoteip"/.test(workerSrc),
+      'turnstile worker: idempotency_key va remoteip yuboriladi');
+    check(/\[123\]x0\{18,\}/.test(workerSrc),
+      'turnstile worker: test secret aniq sozlama xatosi sifatida qaytariladi');
   }
 
   console.log(failed ? '\n' + failed + ' ta test YIQILDI' : '\nBarcha testlar o\'tdi ✓');

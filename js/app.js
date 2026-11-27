@@ -4992,6 +4992,32 @@ function resetTurnstile(kind) {
     }
   } catch (e) { console.warn('[turnstile] reset:', (e && e.message) || e); }
 }
+/* Worker javobi { ok, data: { 'error-codes': [...] } } — kodlar ichkarida bo'ladi. */
+function turnstileCodesOf(data) {
+  const out = [];
+  const push = function (v) {
+    if (!v) return;
+    if (Array.isArray(v)) { v.forEach(function (c) { if (c) out.push(String(c)); }); }
+    else out.push(String(v));
+  };
+  if (!data || typeof data !== 'object') return out;
+  push(data['error-codes']);
+  if (data.data && typeof data.data === 'object') push(data.data['error-codes']);
+  return out;
+}
+/* Tokenning o'ziga tegishli xatolar — faqat shular kirishni bloklaydi. */
+const TURNSTILE_TOKEN_ERRORS = ['invalid-input-response', 'timeout-or-duplicate', 'missing-input-response'];
+/* Kalit/sozlama xatolari — foydalanuvchi aybi emas (fail-open). */
+const TURNSTILE_CONFIG_ERRORS = ['invalid-input-secret', 'missing-input-secret', 'bad-request', 'internal-error'];
+/* Rad etish sababini tushunarli matnga aylantiradi. */
+function turnstileFailMessage(ts) {
+  const code = ts && ts.code ? String(ts.code) : '';
+  const expired = code === 'timeout-or-duplicate' || code === 'invalid-input-response';
+  const base = expired
+    ? "Tekshiruv tasdiqlanmadi — tekshiruv eskirgan, qaytadan o'ting"
+    : "Tekshiruv tasdiqlanmadi — qayta urinib ko'ring";
+  return base + (code ? ' (' + code + ')' : '');
+}
 async function verifyTurnstileToken(token) {
   let timer = null;
   let ctrl = null;
@@ -5011,25 +5037,36 @@ async function verifyTurnstileToken(token) {
     });
     let data = null;
     try { data = await res.json(); } catch (e) { data = null; }
-    if (data && data.ok === true) return { ok: true, data };
-    /* Faqat serverning aniq rad javobi bloklaydi: 403 yoki ok: false.
-       Boshqa javob (masalan 5xx yoki JSON yo'q) — foydalanuvchini bloklamaymiz. */
-    const rejected = (data && data.ok === false) || (res && res.status === 403);
+    if (data && data.ok === true) { state.turnstileRejects = 0; return { ok: true, data }; }
+    const codes = turnstileCodesOf(data);
+    const tokenIssue = codes.some(function (c) { return TURNSTILE_TOKEN_ERRORS.indexOf(c) >= 0; });
+    const configIssue = codes.some(function (c) { return TURNSTILE_CONFIG_ERRORS.indexOf(c) >= 0; });
+    /* Faqat tokenning o'zi rad etilsa kirish bloklanadi. Maxfiy kalit/sozlama
+       xatosi, WAF/403 HTML yoki tushunarsiz javob — fail-open: parol xeshi,
+       5 urinish qulfi va ustoz 2FA himoyasi baribir ishlaydi, lekin buzuq
+       sozlama sabab hech kim kira olmay qolmaydi. */
+    const rejected = tokenIssue || (!configIssue && !codes.length && data && data.ok === false);
+    /* Vidjet yangi token bergan bo'lsa ham token ikki marta ketma-ket rad etilsa,
+       sabab foydalanuvchida emas — widget/kalit sozlamasi (domen, sitekey-secret
+       juftligi) buzilgan bo'lishi mumkin. Bunday holatda kirishni butunlay
+       yopib qo'ymaymiz: parol xeshi, 5 urinish qulfi va 2FA himoyasi qoladi. */
+    if (tokenIssue) {
+      state.turnstileRejects = (Number(state.turnstileRejects) || 0) + 1;
+      if (state.turnstileRejects >= 2) {
+        console.warn('[turnstile] token ketma-ket rad etildi — sozlama buzilgan bo\'lishi mumkin, kirish bloklanmaydi',
+          codes.join(', '));
+        return { ok: true, data, detail: '' };
+      }
+    } else {
+      state.turnstileRejects = 0;
+    }
     if (!rejected) {
-      console.warn('[turnstile] verify: noaniq server javobi — kirish bloklanmaydi',
-        res && res.status);
+      console.warn('[turnstile] verify: token emas, server/sozlama muammosi — kirish bloklanmaydi',
+        codes.length ? codes.join(', ') : ('HTTP ' + (res && res.status)));
       return { ok: true, data, detail: '' };
     }
-    let detail = '';
-    if (data) {
-      const codes = data['error-codes'];
-      if (Array.isArray(codes) && codes.length) detail = codes.join(', ');
-      else if (codes) detail = String(codes);
-      else if (data.error) detail = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
-      else if (data.message) detail = String(data.message);
-    }
-    if (!detail && res && !res.ok) detail = 'HTTP ' + res.status;
-    return { ok: false, data, detail: String(detail || '').trim() };
+    const detail = codes.join(', ') || ('HTTP ' + (res && res.status));
+    return { ok: false, data, detail, code: codes[0] || '' };
   } catch (e) {
     /* Turnstile vidjeti token bergan bo'lsa, tarmoq/ISP xatosi (Failed to fetch)
        yoki 5 s timeout (AbortError) kirishni bloklamaydi — login parol xeshi,
@@ -10217,6 +10254,7 @@ async function doLogin() {
   if (turnstileInUse('login')) {
     if (!state.turnstileToken) { fail('Tekshiruvni yakunlang'); return; }
     tsPromise = verifyTurnstileToken(state.turnstileToken);
+    state.turnstileToken = '';   /* token bir martalik — qayta yuborilmaydi */
   } else {
     const capEl = $('#login-captcha');
     const capExpected = String((state.captcha && state.captcha.answer) || '');
@@ -10239,6 +10277,9 @@ async function doLogin() {
   const restoreBtn = () => { if (loginBtn) { loginBtn.disabled = false; loginBtn.textContent = btnText; } };
 
   const onFail = () => {
+    /* Har muvaffaqiyatsiz urinishdan keyin yangi token olinadi: ishlatilgan
+       tokenni qayta yuborish Cloudflare'da timeout-or-duplicate (403) beradi. */
+    try { resetTurnstile('login'); } catch (e) {}
     const r = registerLoginFail();
     if (r && r.until) {
       fail(loginLockText(r));
@@ -10280,9 +10321,8 @@ async function doLogin() {
       ]);
       if (tsPromise && (!tsVerify || !tsVerify.ok)) {
         resetTurnstile('login');
-        const detail = tsVerify && tsVerify.detail ? ' (' + tsVerify.detail + ')' : '';
         restoreBtn();
-        fail("Tekshiruv tasdiqlanmadi — qayta urinib ko'ring" + detail);
+        fail(turnstileFailMessage(tsVerify));
         return;
       }
       if (!passwordMatches(pass, (prep && prep.teachPw) || TEACHER_PASSWORD)) { restoreBtn(); onFail(); return; }
@@ -10309,9 +10349,8 @@ async function doLogin() {
       const tsVerify = tsPromise ? await tsPromise : { ok: true, skip: true };
       if (tsPromise && (!tsVerify || !tsVerify.ok)) {
         resetTurnstile('login');
-        const detail = tsVerify && tsVerify.detail ? ' (' + tsVerify.detail + ')' : '';
         restoreBtn();
-        fail("Tekshiruv tasdiqlanmadi — qayta urinib ko'ring" + detail);
+        fail(turnstileFailMessage(tsVerify));
         return;
       }
       const stored = supRec.passwordHash || supRec.password || '';
@@ -10355,9 +10394,8 @@ async function doLogin() {
       ]);
       if (tsPromise && (!tsVerify || !tsVerify.ok)) {
         resetTurnstile('login');
-        const detail = tsVerify && tsVerify.detail ? ' (' + tsVerify.detail + ')' : '';
         restoreBtn();
-        fail("Tekshiruv tasdiqlanmadi — qayta urinib ko'ring" + detail);
+        fail(turnstileFailMessage(tsVerify));
         return;
       }
       const client = prep && prep.client;
@@ -10397,9 +10435,8 @@ async function doLogin() {
         const tsVerify = await tsPromise;
         if (!tsVerify || !tsVerify.ok) {
           resetTurnstile('login');
-          const detail = tsVerify && tsVerify.detail ? ' (' + tsVerify.detail + ')' : '';
           restoreBtn();
-          fail("Tekshiruv tasdiqlanmadi — qayta urinib ko'ring" + detail);
+          fail(turnstileFailMessage(tsVerify));
           return;
         }
       } catch (e) { restoreBtn(); fail("Tekshiruv tasdiqlanmadi — qayta urinib ko'ring"); return; }
@@ -10807,6 +10844,7 @@ async function sendResetCodeWork(raw) {
   if (turnstileInUse('recover')) {
     if (!state.turnstileToken) { resetError('Tekshiruvni yakunlang'); return; }
     tsPromise = verifyTurnstileToken(state.turnstileToken);
+    state.turnstileToken = '';   /* token bir martalik — qayta yuborilmaydi */
   } else {
     const capExpected = String((state.recoverCaptcha && state.recoverCaptcha.answer) || '');
     const capGiven = String((($('#fr-captcha-input') || {}).value || '')).trim();
@@ -10843,8 +10881,7 @@ async function sendResetCodeWork(raw) {
 
   if (tsPromise && (!tsVerify || !tsVerify.ok)) {
     resetTurnstile('recover');
-    const detail = tsVerify && tsVerify.detail ? ' (' + tsVerify.detail + ')' : '';
-    resetError("Tekshiruv tasdiqlanmadi — qayta urinib ko'ring" + detail);
+    resetError(turnstileFailMessage(tsVerify));
     return;
   }
 
