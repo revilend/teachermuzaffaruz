@@ -776,8 +776,9 @@ async def main():
                                   "telegram_chat_id": 4444})
     FAKE_ROWS["grades"].append({"id": 40, "student_id": 4, "date": "2026-10-03", "grade": 9,
                                 "category": "Darsdagi javob", "note": ""})
-    check(B._is_school_group(2) is True, "guruh turi: group_type='school' aniqlandi")
-    check(B._is_school_group(1) is False, "guruh turi: eski guruh (ustunsiz) = tutoring")
+    check(B._is_tutoring_group({"id": 2, "group_type": "school"}) is False,
+          "guruh turi: group_type='school' aniqlandi")
+    check(B._is_tutoring_group({"id": 1}) is True, "guruh turi: eski guruh (ustunsiz) = tutoring")
 
     labels_school = [b.text for row in get_main_keyboard(True).keyboard for b in row]
     check("📊 Baholarim" in labels_school and "📊 Baholarim va Qarzim" not in labels_school,
@@ -1113,6 +1114,12 @@ async def main():
           "hw eslatma: mavzu xabarda ko'rsatilgan")
     check(any("01.12.2026" in (s.get("text") or "") or "2026-12-01" in (s.get("text") or "")
               for s in hw_rem), "hw eslatma: muddat xabarda")
+    check(all("Uyga vazifani vaqtida topshirishni unutmang!" in (s.get("text") or "")
+              for s in hw_rem),
+          "hw eslatma: 'vaqtida topshirishni unutmang' yozuvi bor")
+    check(not any("ilovada topshirish" in (s.get("text") or "")
+                  or "saytda topshirish" in (s.get("text") or "") for s in hw_rem),
+          "hw eslatma: saytda/ilovada topshirish yozuvi yo'q")
     n_again = await B.hw_reminder_tick(datetime(2026, 11, 30, 19, 5, tzinfo=TZ))
     check(n_again == 0, "hw eslatma: takror yuborilmaydi")
 

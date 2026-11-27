@@ -1210,7 +1210,7 @@ HW_REMINDER_TEXT = (
     "Mavzu: {title}\n"
     "Vazifa: {description}\n"
     "Muddat: {due_date} (ertaga)\n"
-    "Vazifani ilovada topshirishni unutmang!"
+    "Uyga vazifani vaqtida topshirishni unutmang!"
 )
 
 PAY_REMINDER_TEXT = (
