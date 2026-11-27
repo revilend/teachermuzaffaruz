@@ -640,6 +640,9 @@ check(quickOrder.indexOf('resources') >= 0 && quickOrder.indexOf('movies') >= 0,
     'library (zaxira): o‘chirishda film, cue va ko‘rish kalitlari ham tozalandi');
 
   win.fetch = prevLibFetch;
+  /* KV sinovidan keyin asosiy jadval rejimiga qaytamiz — keyingi
+     o‘quvchi tekshiruvlari ustoz jadvalga yuklagan manba/filmni ko‘rishi kerak */
+  win.LibraryApp._useStore('tables');
   forceNav('home');
 }
 
@@ -684,8 +687,8 @@ check(!q('[data-act="remind-debtors"]'),
   "qarz: tahrirlash bo'limida ommaviy qarzdor eslatma tugmasi YO'Q");
 click('[data-act="nav"][data-screen="home"]');
 clickAct('stat-classes');
-check(studentCards() === 0 && qa('.chips.is-hl').length === 1 && qa('[data-act="filter-class"]').length >= 4,
-  "stat: 'Sinflar' kartasi → tahrirlash bo'limi + sinf filtri ajratib ko'rsatildi");
+check(studentCards() === 0 && groupCards() === 2 && !q('[data-act="filter-class"]') && !q('#s-search'),
+  "stat: 'Sinflar' kartasi → guruhlar ro'yxati (sinf chiplari va qidiruvsiz)");
 click('[data-act="nav"][data-screen="home"]');
 
 /* --- Bosh sahifa: "So'nggi o'quvchilar" yo'q, tez amallarda yangi bo'limlar --- */
@@ -938,18 +941,24 @@ click('[data-act="filter-class"][data-class="Barchasi"]');
 check(studentCards() === 2, 'filtr: Barchasi = guruhning 2 ta o\'quvchisi');
 clickAct('filter-group-all');
 
-/* --- Jonli qidiruv (harf yozilishi bilan, Enter'siz) --- */  /* Redizayn: qidiruv ikonkasi placeholder'dan olib, CSS orqali input ichiga ko'chirildi */
-  check(q('#s-search').placeholder === "O'quvchi ismini kiriting..." &&
-    q('#s-search').placeholder.indexOf('🔍') < 0,
-    "qidiruv: placeholder toza (ikonka endi emoji emas)");
-  check(!!q('.search-wrap #s-search') && !!q('.chips .chip-btn'),
-    "qidiruv: pill shakl + ichilgan qidiruv ikonkasi (.search-wrap) + chip'lar");
+/* --- Qidiruv faqat guruh ichida: guruhlar ro'yxatida input va sinf chiplari yo'q --- */
+check(!q('#s-search') && !q('.chips'),
+  "qidiruv: guruhlar ro'yxatida qidiruv maydoni va sinf chiplari ko'rinmaydi");
+click(qa('.group-card').filter(c => c.textContent.includes('General English'))[0]);
+check(q('#s-search').placeholder === "O'quvchi ismini kiriting..." &&
+  q('#s-search').placeholder.indexOf('🔍') < 0,
+  'qidiruv: guruh ichida placeholder toza (ikonka endi emoji emas)');
+check(!!q('.search-wrap #s-search') && !!q('.chips .chip-btn'),
+  "qidiruv: guruh ichida pill qidiruv + chip'lar");
 setVal('#s-search', 'Jas');
 check(studentCards() === 1 && text().includes('Jasur Karimov'), "qidiruv: 1 ta harf yozildi → darhol filtr (Enter'siz)");
-setVal('#s-search', 'ma');
-check(text().includes('Malika Yusupova') && studentCards() >= 1, "qidiruv: davomiy qidiruv ishlaydi");
+setVal('#s-search', 'Nil');
+check(text().includes('Nilufar Ergasheva') && studentCards() >= 1, "qidiruv: davomiy qidiruv ishlaydi");
 setVal('#s-search', '');
-check(studentCards() === 0 && groupCards() === 2, "qidiruv: tozalandi → guruhlar ro'yxati qaytdi");
+check(studentCards() === 4, "qidiruv: tozalandi → guruh o'quvchilari qaytdi");
+clickAct('filter-group-all');
+check(studentCards() === 0 && groupCards() === 2 && !q('#s-search'),
+  "qidiruv: guruhdan chiqilganda qidiruv maydoni yo'q");
 
 /* ================= 4a. QARZ QO'SHISH (JIMJIT) + ESLATMA ================= */
 let debtQueueCalls = 0;
@@ -1605,6 +1614,21 @@ check(podC.same === podC.total && podC.wrong === 0 && podC.missed === 0,
 podC = podCmp("He's got a car.", 'She is got a car.');
 check(podC.wrong + podC.missed > 0,
   'mock podcasts: he’s varianti boshqa olmoshga moslashmaydi');
+podC = podCmp('Mr. Smith is our teacher.', 'Mister Smith is our teacher.');
+check(podC.same === podC.total && podC.wrong === 0 && podC.missed === 0 && podC.extra === 0,
+  'mock podcasts: ustoz “Mr.” yozsa, “Mister” ham to‘g‘ri sanaladi');
+podC = podCmp('Mister Smith is our teacher.', 'Mr. Smith is our teacher.');
+check(podC.same === podC.total && podC.wrong === 0 && podC.missed === 0 && podC.extra === 0,
+  'mock podcasts: ustoz “Mister” yozsa, “Mr.” ham to‘g‘ri sanaladi');
+podC = podCmp('Dr. Karimov works here.', 'Doctor Karimov works here.');
+check(podC.same === podC.total && podC.wrong === 0 && podC.missed === 0 && podC.extra === 0,
+  'mock podcasts: Dr. = Doctor varianti qabul qilinadi');
+podC = podCmp('Dc. Karimov works here.', 'Doctor Karimov works here.');
+check(podC.same === podC.total && podC.wrong === 0 && podC.missed === 0 && podC.extra === 0,
+  'mock podcasts: Dc. = Doctor varianti qabul qilinadi');
+podC = podCmp('Mr. Smith is here.', 'Mrs. Smith is here.');
+check(podC.wrong + podC.missed > 0,
+  'mock podcasts: Mr. va Mrs. bir-biriga almashtirilmaydi');
 
 click('[data-act="nav"][data-screen="profile"]');
 check(text().includes('Parolni o\'zgartirish'), 'student: profilda parol o\'zgartirish tugmasi');
@@ -1963,12 +1987,11 @@ check(JSON.stringify(clsOpts) === JSON.stringify(['5-sinf','6-sinf','7-sinf','8-
   'sinf: forma variantlari faqat 5–11-sinf');
 check(!clsOpts.includes('IELTS'), "sinf: IELTS varianti yo'q");
 click('[data-act="close-modal"]');
-const filterChips = qa('[data-act="filter-class"]').map(b => b.getAttribute('data-class'));
-check(filterChips.includes('5-sinf') && filterChips.includes('11-sinf'), 'sinf: filtr chiplari 5–11 bor');
-check(!filterChips.includes('IELTS') && !filterChips.includes('4-sinf'), "sinf: filtrda IELTS/4-sinf yo'q");
-
 /* --- 3. Speaking qarzi (ustoz +/-) --- */
 click(qa('.group-card').filter(c => c.textContent.includes('General English'))[0]);
+const filterChips = qa('[data-act="filter-class"]').map(b => b.getAttribute('data-class'));
+check(filterChips.includes('5-sinf') && filterChips.includes('11-sinf'), 'sinf: filtr chiplari guruh ichida 5–11 bor');
+check(!filterChips.includes('IELTS') && !filterChips.includes('4-sinf'), "sinf: filtrda IELTS/4-sinf yo'q");
 const nStud = JSON.parse(win.localStorage.getItem('et_students')).filter(s => s.groupId === 'g2').length;
 check(qa('[data-act="debt-plus"]').length === nStud, 'qarz: ' + nStud + ' ta [+] tugma');
 check(qa('[data-act="debt-minus"]').length === nStud, 'qarz: ' + nStud + ' ta [-] tugma');
@@ -2443,8 +2466,8 @@ await (async () => {
   forceNav('groups');
   check(text().includes('RESTORED GROUP'), 'zaxira: guruhlar ekrani yangilandi');
   forceNav('students');
-  if (!q('.student-card') && qa('.group-card')[0]) click(qa('.group-card')[0]);
-  if (!q('.student-card') && q('#s-search')) setVal('#s-search', 'Restored');
+  if (q('[data-act="filter-group-all"]')) clickAct('filter-group-all');
+  if (qa('.group-card')[0]) click(qa('.group-card')[0]);
   check(text().includes('Restored Student'), "zaxira: o'quvchilar ekrani yangilandi");
 
   /* Tiklangan hisob bilan kirish */
@@ -3134,6 +3157,17 @@ await (async () => {
   check(!!r1AfterEdit && Number(r1AfterEdit.id) === 77 &&
     String(r1AfterEdit.school_class || '') === '10-sinf' && r1AfterEdit.group_id == null,
     "tahrirlash: login hisobi o'quvchiga bog'langan holatda qoldi (bulutda)");
+  /* Qidiruv endi faqat guruh ichida: keyingi tekshiruvlar uchun o'quvchini guruhga qaytaramiz */
+  const sBack = JSON.parse(win.localStorage.getItem('et_students') || '[]');
+  sBack.forEach(x => { if (x.id === 's77') x.groupId = 'g55'; });
+  win.localStorage.setItem('et_students', JSON.stringify(sBack));
+  (cloudStub.db.students || []).forEach(r => { if (Number(r.id) === 77) r.group_id = 55; });
+  const openRestoredGroup = () => {
+    forceNav('students');
+    if (q('[data-act="filter-group-all"]')) clickAct('filter-group-all');
+    const gc = qa('.group-card').filter(c => c.getAttribute('data-gid') === 'g55')[0];
+    if (gc) click(gc);
+  };
 
   /* ================= 30. SPEAKING: BIR XIL SANA — KO'P SESSIYA + QARZ ================= */
   forceNav('speaking');
@@ -3219,12 +3253,13 @@ await (async () => {
 
   /* ================= 31. XAVFSIZLIK: XSS / HONEYPOT / initData / BRUTE-FORCE ================= */
   /* XSS: foydalanuvchi kirgan HTML DOM ga xavfsiz matn sifatida chiqadi */
-  forceNav('students');
-  if (q('[data-act="filter-group-all"]')) clickAct('filter-group-all');
-  if (q('[data-act="filter-group-all"]')) clickAct('filter-group-all');
-  /* Guruhsiz o'quvchi faqat qidiruv orqali ko'rinadi */
-  setVal('#s-search', 'Restored');
-  click(q('[data-act="edit-student"]'));
+  /* Qidiruv faqat guruh ichida — guruhga kirib o'quvchi ismini tekshiramiz */
+  openRestoredGroup();
+  const xssBtn = q('[data-act="edit-student"]');
+  const xssSid = xssBtn.getAttribute('data-sid');
+  const xssName = (JSON.parse(win.localStorage.getItem('et_students') || '[]')
+    .filter(x => x.id === xssSid)[0] || {}).fullName;
+  click(xssBtn);
   setVal('#es-name', '<img src=x onerror="alert(1)">');
   clickAct('save-edit-student');
   setVal('#s-search', '<img');
@@ -3232,7 +3267,7 @@ await (async () => {
     'xss: ismdagi HTML render qilinmaydi — xavfsiz matn sifatida ko\'rinadi');
   check(!doc.querySelector('#screen [onerror]'), 'xss: onerror atributi DOM ga kirmadi');
   click(q('[data-act="edit-student"]'));
-  setVal('#es-name', 'Restored Student');
+  setVal('#es-name', xssName);
   clickAct('save-edit-student');
   setVal('#s-search', '');
 
@@ -3359,8 +3394,7 @@ await (async () => {
   /* Ustoz kartasida onlayn/qurilma ko'rinishi */
   logout();
   await loginAs('m_amirov', '123');
-  forceNav('students');
-  if (!q('.student-card') && q('#s-search')) setVal('#s-search', 'Restored');
+  openRestoredGroup();
   const cardOn = qa('.student-card').filter(c => c.textContent.indexOf('Restored Student') >= 0)[0];
   check(!!cardOn && cardOn.textContent.indexOf('Onlayn: Android • Chrome') >= 0 &&
         !!cardOn.querySelector('.s-presence.is-on svg'),
@@ -3370,8 +3404,7 @@ await (async () => {
   const jOld = rowsOld.filter(x => x.id === 's77')[0];
   jOld.lastSeen = new Date(Date.now() - 20 * 60000).toISOString();
   win.localStorage.setItem('et_students', JSON.stringify(rowsOld));
-  forceNav('students');
-  if (!q('.student-card') && q('#s-search')) setVal('#s-search', 'Restored');
+  openRestoredGroup();
   const cardOld = qa('.student-card').filter(c => c.textContent.indexOf('Restored Student') >= 0)[0];
   check(!!cardOld && cardOld.textContent.replace(/\s+/g, ' ').indexOf('20 daqiqa oldin • Android') >= 0 &&
         !!cardOld.querySelector('.s-presence svg'),
@@ -3380,8 +3413,7 @@ await (async () => {
   const rowsNone = JSON.parse(win.localStorage.getItem('et_students') || '[]');
   rowsNone.filter(x => x.id === 's77')[0].lastSeen = null;
   win.localStorage.setItem('et_students', JSON.stringify(rowsNone));
-  forceNav('students');
-  if (!q('.student-card') && q('#s-search')) setVal('#s-search', 'Restored');
+  openRestoredGroup();
   const cardNone = qa('.student-card').filter(c => c.textContent.indexOf('Restored Student') >= 0)[0];
   check(!!cardNone && cardNone.textContent.indexOf('Onlayn') < 0 && cardNone.textContent.indexOf('daqiqa oldin') < 0,
     "karta: last_seen bo'sh → qurilma satri chiqmaydi");
@@ -4066,14 +4098,8 @@ await (async () => {
   /* (a) ustoz ruxsati: tahrirlash modalida toggle */
   forceNav('students');
   /* filtr/qidiruvni tozalash (oldingi testlardan qolgan bo'lishi mumkin) */
-  const grpAll = q('[data-act="filter-group-all"]');
-  if (grpAll) click(grpAll);
-  const allChip = q('[data-act="filter-class"][data-class="Barchasi"]');
-  if (allChip && !allChip.classList.contains('active')) click(allChip);
-  if (q('#s-search') && q('#s-search').value) setVal('#s-search', '');
-  if (await until(() => !!q('[data-act="edit-student"]'), 500)) { /* kartalar async chiziladi */ }
-  /* Guruhsiz o'quvchi faqat qidiruv orqali ko'rinadi */
-  if (!q('[data-act="edit-student"]') && q('#s-search')) setVal('#s-search', 'restore');
+  /* Qidiruv faqat guruh ichida — o'quvchi guruhini ochamiz */
+  openRestoredGroup();
   if (await until(() => !!q('[data-act="edit-student"]'), 2000)) { /* kartalar async chiziladi */ }
   const anyEditBtn = q('[data-act="edit-student"]');
   check(!!anyEditBtn, 'topshiriq: o‘quvchi kartalarida “Tahrirlash” tugmasi bor');
@@ -4428,8 +4454,7 @@ await (async () => {
   logout();
   await loginAs('m_amirov', teacherPass32);
   /* Ruxsatni o'chirish: ustoz toggle'i bir marta o'chiriladi (baza + lokal) */
-  forceNav('students');
-  if (!q('[data-act="edit-student"]') && q('#s-search')) setVal('#s-search', 'restore');
+  openRestoredGroup();
   const anyEditBtn2 = q('[data-act="edit-student"]');
   click(anyEditBtn2);
   check(q('[data-act="hw-upload-toggle"]').getAttribute('aria-checked') === 'true' ||
@@ -4552,6 +4577,8 @@ await (async () => {
   check(/Home/.test(enNav) && /Students/.test(enNav) && /Submissions/.test(enNav) && /Payments/.test(enNav),
     'i18n: navigatsiya yorliqlari inglizchada');
   forceNav('students');
+  if (q('[data-act="filter-group-all"]')) clickAct('filter-group-all');
+  if (qa('.group-card')[0]) click(qa('.group-card')[0]);
   check(q('#s-search').placeholder === 'Enter student name...' &&
     !/ismini|kiriting/i.test(q('#s-search').placeholder),
     'i18n EN: Students qidiruv placeholderi to‘liq inglizchada');

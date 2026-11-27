@@ -7114,7 +7114,7 @@ function studentsScreen() {
   <div class="students-groups-list">${allGroups.map(g => groupCard(g, allStudents, { act: 'filter-group', hint: t("Bosib, o'quvchilarni boshqarish") })).join('')}</div>
 ` : ''}
 
-  <div class="search-wrap">
+  ${gf ? `<div class="search-wrap">
     <input class="input" id="s-search" type="search" placeholder="${t("O'quvchi ismini kiriting...")}" value="${esc(state.search)}" />
   </div>
 
@@ -7122,7 +7122,7 @@ function studentsScreen() {
     ${chips.map(c => `<button type="button" class="chip-btn ${state.filterClass === c ? 'active' : ''}" data-act="filter-class" data-class="${esc(c)}">${esc(tClass(c))}</button>`).join('')}
     <button type="button" class="chip-btn hw-allow-chip${state.filterHwAllow ? ' active' : ''}" data-act="filter-hw-allow"
             aria-pressed="${state.filterHwAllow ? 'true' : 'false'}">${ico('upload', 13)} ${t('Yuklash ruxsati')}</button>
-  </div>
+  </div>` : ''}
 
   ${showList ? `<div id="students-list">${studentListHTML()}</div>` : ''}
   `;
@@ -11265,11 +11265,26 @@ Object.keys(PODCAST_CONTRACTIONS).forEach(function (k) {
     if (!PODCAST_CONTRACTIONS[bare]) PODCAST_CONTRACTIONS[bare] = PODCAST_CONTRACTIONS[k];
   }
 });
+/* Unvon qisqartmasi va uning to'liq shakli bir xil javob sanaladi:
+   Mr. = Mister, Dr./Dc. = Doctor. Ustoz qaysi shaklda yozganidan qat'i
+   nazar, o'quvchining ikkala shakli ham qabul qilinadi. */
+const PODCAST_ABBREVIATIONS = {
+  mr: 'mister', mister: 'mister',
+  mrs: 'missus', missus: 'missus',
+  dr: 'doctor', dc: 'doctor', doctor: 'doctor',
+  prof: 'professor', professor: 'professor',
+  jr: 'junior', junior: 'junior',
+  sr: 'senior', senior: 'senior',
+  rev: 'reverend', reverend: 'reverend',
+  hon: 'honorable', honorable: 'honorable', honourable: 'honorable'
+};
 /* So'zning barcha mumkin bo'lgan to'liq shakllari (variantlari). */
 function podcastWordVariants(w) {
   const norm = podcastNormWord(w);
   if (!norm) return [];
-  return PODCAST_CONTRACTIONS[norm] || [[norm]];
+  if (PODCAST_CONTRACTIONS[norm]) return PODCAST_CONTRACTIONS[norm];
+  if (PODCAST_ABBREVIATIONS[norm]) return [[PODCAST_ABBREVIATIONS[norm]]];
+  return [[norm]];
 }
 const PODCAST_VARIANT_CAP = 64;
 /* Har bir qisqartma uchun qaysi ma'no tanlanganini bildiruvchi kombinatsiyalar.
@@ -14365,13 +14380,8 @@ document.addEventListener('click', function (e) {
       state.filterGroup = null;
       state.filterClass = 'Barchasi';
       state.search = '';
-      state.classHint = true;
+      state.classHint = false;
       go('students');
-      clearTimeout(state.classHintTimer);
-      state.classHintTimer = setTimeout(function () {
-        state.classHint = false;
-        render();
-      }, 1800);
     },
     'filter-class': function () {
       state.filterClass = btn.getAttribute('data-class');
