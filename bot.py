@@ -1590,6 +1590,7 @@ MOCK_CATEGORY_LABELS = {
     "speaking": "Speaking",
     "grammar": "Grammar",
     "vocabulary": "Vocabulary",
+    "podcasts": "Podcasts",
 }
 MOCK_NEW_TEXT = (
     "📝 <b>YANGI MOCK TEST!</b>\n\n"
@@ -1678,7 +1679,7 @@ def _outbox_has(chat_id, needles, max_age_seconds=OUTBOX_DEDUPE_SECONDS) -> bool
     # telegram_outbox.chat_id bigint: ustoz uchun "0" sentineli ishlatiladi
     chat_key = 0 if str(chat_id).strip().upper() in ("ADMIN", "0") else str(chat_id)
     try:
-        rows = (supabase.table("telegram_outbox").select("text, created_at")
+        rows = (supabase.table("telegram_outbox").select("text, created_at, status")
                 .eq("chat_id", chat_key).order("id", desc=True).limit(30).execute().data or [])
     except Exception as e:
         logging.warning(f"outbox dedupe {chat_id}: {e}")
@@ -1688,6 +1689,9 @@ def _outbox_has(chat_id, needles, max_age_seconds=OUTBOX_DEDUPE_SECONDS) -> bool
         if age is not None and age > max_age_seconds:
             continue
         text = str(r.get("text") or "")
+        # Navbatdan yuborilmagan (failed) xabar bildirishnomani to'smasin.
+        if str(r.get("status") or "").lower() == "failed":
+            continue
         if all(k in text for k in keys):
             return True
     return False
@@ -1827,7 +1831,10 @@ def _mock_attempt_notice(row: dict) -> tuple:
     score = payload.get("score")
     total = payload.get("total")
     percent = payload.get("percent")
-    if score is None or str(payload.get("status") or "") in ("pending", ""):
+    status = str(payload.get("status") or "")
+    # Podcast/reading kabi avtomatik tekshiriladiganlarda ball bo'lsa,
+    # "pending" holati natijani yashirmasin (u faqat yozma/speaking uchun).
+    if score is None or (cat_key in ("writing", "speaking") and status in ("pending", "")):
         result = "Baholanmoqda"
     else:
         result = f"{int(score)}/{int(total or 0)} · {int(percent or 0)}%"
@@ -2944,7 +2951,8 @@ async def outbox_tick() -> int:
         row_id = r["id"]
         chat_id = r.get("chat_id")
         text = r.get("text") or ""
-        if not chat_id:
+        # chat_id=0 — ustozga ketadigan xabar sentineli; uni bo'sh deb hisoblamaymiz.
+        if chat_id is None or str(chat_id).strip() == "":
             try:
                 supabase.table("telegram_outbox").update({"status": "failed"}).eq("id", row_id).execute()
             except Exception:
