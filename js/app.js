@@ -3184,19 +3184,37 @@ function startSession(userObj) {
   });
 }
 let mockLiveTimer = null;
+let mockLiveSince = 0;
+/* Natijalar ekranda turganda yangi natija darhol (2 soniyagacha) ko'rinadi;
+   har safar faqat oxirgi o'zgargan yozuvlar so'raladi, butun jadval emas. */
+function mockLiveTick() {
+  if (!currentUser() || !MockSync.ready() || state.screen !== 'mock') return;
+  const now = Date.now();
+  /* 60 soniya zaxira: server va qurilma soati biroz farq qilsa ham o'tkazib yubormaymiz */
+  const since = new Date((mockLiveSince || now - 300000) - 60000).toISOString();
+  mockLiveSince = now;
+  MockSync.pullRecent(since).then(function (changed) {
+    if (!changed || !currentUser() || state.screen !== 'mock') return;
+    /* Ustoz izoh/ball yozayotganda yoki test tahrirlayotganda ekranni
+       almashtirmaymiz — kiritilgan matn yo'qolmasin. */
+    const ae = document.activeElement;
+    if (state.mockBuilder || (state.mockTView && ae && /^(INPUT|TEXTAREA)$/.test(ae.tagName))) return;
+    render();
+  }).catch(function () {});
+}
 function mockLiveStart() {
   if (mockLiveTimer) return;
-  mockLiveTimer = setInterval(function () {
-    if (!currentUser() || !MockSync.ready()) return;
-    const before = JSON.stringify(mockResults());
-    MockSync.pullAll().then(function () {
-      if (JSON.stringify(mockResults()) !== before && currentUser() && state.screen === 'mock') render();
-    }).catch(function () {});
-  }, 15000);
+  mockLiveSince = Date.now();
+  mockLiveTick();
+  mockLiveTimer = setInterval(mockLiveTick, 2000);
 }
 function mockLiveStop() {
   if (mockLiveTimer) { clearInterval(mockLiveTimer); mockLiveTimer = null; }
 }
+/* Boshqa ilovadan qaytganda ham natijalar darhol yangilanadi. */
+document.addEventListener('visibilitychange', function () {
+  if (!document.hidden) mockLiveTick();
+});
 function go(screen) {
   state.screen = screen;
   state.profileSection = '';
@@ -12084,10 +12102,27 @@ const MockSync = (function () {
     } catch (e) { /* lokal rejim */ }
     return changed;
   }
+  /* Faqat oxirgi o'zgargan natija/testlarni oladi — tez avtomatik yangilanish uchun. */
+  async function pullRecent(sinceIso) {
+    if (!ready() || !sinceIso) return false;
+    let changed = false;
+    try {
+      const a = await client.from('mock_attempts').select('*')
+        .gte('updated_at', sinceIso).order('updated_at', { ascending: false }).limit(300);
+      if (a.error) { if (tableMissing(a.error)) enabled = false; return changed; }
+      changed = mergeAttempts(a.data) || changed;
+      const d = await client.from('mock_tests').select('*')
+        .gte('updated_at', sinceIso).limit(300);
+      if (d.error) { if (tableMissing(d.error)) enabled = false; return changed; }
+      changed = mergeDefs(d.data) || changed;
+    } catch (e) { if (tableMissing(e)) enabled = false; }
+    return changed;
+  }
   return {
     ready: ready, pushDef: pushDef, deleteDef: deleteDef, tombstoneDef: tombstoneDef,
     deleteAttempt: deleteAttempt, push: push,
-    pullMine: pullMine, pullAll: pullAll, subscribe: subscribe, mergeDefs: mergeDefs, mergeAttempts: mergeAttempts
+    pullMine: pullMine, pullAll: pullAll, pullRecent: pullRecent,
+    subscribe: subscribe, mergeDefs: mergeDefs, mergeAttempts: mergeAttempts
   };
 })();
 
@@ -14865,8 +14900,13 @@ document.addEventListener('click', function (e) {
       state.mockResHome = true;
       state.mockResView = '';
       render();
+      mockLiveTick();
     },
-    'mock-res-open': function () { state.mockResView = btn.getAttribute('data-cat') || ''; render(); },
+    'mock-res-open': function () {
+      state.mockResView = btn.getAttribute('data-cat') || '';
+      render();
+      mockLiveTick();
+    },
     'mock-res-back': function () {
       if (state.mockResView) state.mockResView = '';
       else state.mockResHome = false;
