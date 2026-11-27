@@ -3584,3 +3584,20 @@ html { scrollbar-gutter: stable; }
   /* Hover'da karta joyidan siljimaydi (sichqoncha quvib yurmaydi) */
   .hero-card:hover { transform: none; }
 }
+
+/* ==================== FILM MODALI: FAYL / SUBTITR TANLASH ====================
+   Native file input yashirin (.hw-file-input), o'rniga oddiy tugma ko'rinadi;
+   tanlangan fayl nomi tugma ostida chiqadi — maydon "oddiy xabar"ga o'xshamaydi. */
+.lib-pick { display: flex; flex-direction: column; gap: 6px; margin-bottom: 2px; }
+.lib-pick-btn {
+  display: flex; align-items: center; gap: 9px;
+  padding: 12px 14px; border: 1.5px dashed var(--accent, #4f46e5); border-radius: 14px;
+  background: rgba(79, 70, 229, .06); color: var(--accent, #4f46e5);
+  font-size: 14px; font-weight: 800; cursor: pointer; user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background .16s var(--ease), box-shadow .16s var(--ease);
+}
+.lib-pick-btn:hover { background: rgba(79, 70, 229, .11); }
+.lib-pick:focus-within .lib-pick-btn { box-shadow: 0 0 0 4px rgba(79, 70, 229, .12); }
+.lib-pick-name { font-size: 12px; color: var(--muted, #64748b); overflow-wrap: anywhere; }
+.lib-pick-name.has-file { color: var(--accent, #4f46e5); font-weight: 700; }

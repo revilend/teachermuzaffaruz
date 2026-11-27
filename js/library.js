@@ -21,7 +21,7 @@
   };
   var WATCH_NOTIFY_EVERY_SEC = 300;      /* har 5 daqiqa uzluksiz ko'rish */
   var SUBS_POLL_MS = 4000;
-  var SUBS_POLL_TRIES = 75;              /* ~5 daqiqa */
+  var SUBS_POLL_TRIES = 450;             /* ~30 daqiqa: film transkripsiyasi uzoq davom etadi */
   var PULL_TTL_MS = 15000;
 
   var libClientCache = null;
@@ -639,6 +639,15 @@
   }
 
   /* ---------------- ustoz: film qo'shish ---------------- */
+  /* Fayl tanlash: yashirin input + ko'rinadigan tugma (native input "oddiy matn"
+     bo'lib ko'rinmasin, fayl nomi esa tanlanganda ko'rsatiladi) */
+  function libPickHTML(id, btnText, accept, emptyText) {
+    return '<div class="lib-pick">\n' +
+      '<input class="hw-file-input" id="' + id + '" type="file"' + (accept ? ' accept="' + esc(accept) + '"' : '') + ' />\n' +
+      '<label class="lib-pick-btn" for="' + id + '">' + libIco('upload', 15) + ' <span>' + esc(btnText) + '</span></label>\n' +
+      '<div class="lib-pick-name" id="' + id + '-name">' + esc(emptyText) + '</div>\n' +
+      '</div>';
+  }
   function openMovieModal() {
     if (!isTeacher()) { toast("Ruxsat yo'q", 'error'); return; }
     var groups = tutoringGroups();
@@ -654,10 +663,10 @@
       }).join('') + '</select>\n' +
       '<label class="field-label" for="lib-movie-title" style="margin-top:8px">' + t('Film nomi') + '</label>\n' +
       '<input class="input" id="lib-movie-title" type="text" placeholder="' + esc(t('Masalan: The Pursuit of Happyness')) + '" />\n' +
-      '<label class="field-label" for="lib-movie-file" style="margin-top:8px">' + t('Video fayl') + '</label>\n' +
-      '<input class="input hw-file-input" id="lib-movie-file" type="file" accept="video/*,.mp4,.mkv,.mov,.avi,.webm,.m4v,.3gp,.wmv" />\n' +
-      '<label class="field-label" for="lib-movie-subs" style="margin-top:8px">' + t('Subtitr fayli (ixtiyoriy)') + '</label>\n' +
-      '<input class="input hw-file-input" id="lib-movie-subs" type="file" accept=".vtt,.srt,text/vtt,text/plain" />\n' +
+      '<label class="field-label" style="margin-top:8px">' + t('Video fayl') + '</label>\n' +
+      libPickHTML('lib-movie-file', t('Video faylni tanlash'), 'video/*,.mp4,.mkv,.mov,.avi,.webm,.m4v,.3gp,.wmv', t('Fayl tanlanmagan')) +
+      '<label class="field-label" style="margin-top:8px">' + t('Subtitr fayli (ixtiyoriy)') + '</label>\n' +
+      libPickHTML('lib-movie-subs', t('Subtitr faylini tanlash (.vtt / .srt)'), '.vtt,.srt,text/vtt,text/plain', t('Fayl tanlanmagan')) +
       '<p class="muted small" id="lib-movie-hint">' + t('Subtitr yuklanmasa, o\'quvchi yoqqanda avtomatik tayyorlanadi') + '</p>\n' +
       '<div class="field-error" id="lib-movie-error"></div>\n' +
       '<div class="modal-actions">\n' +
@@ -757,6 +766,9 @@
           }).select();
           if (!cRes.error) {
             writeList(KEYS.cues, cuesMetaAll().concat([mapCueMeta(cRes.data[0])]));
+          } else {
+            /* Subtitr saqlanmasa "subtitle tugmasi bosilganda hech narsa chiqmaydi" bo'lib qolmasin */
+            toast(t('Film yuklandi, lekin subtitr saqlanmadi: ') + libErrText(cRes.error), 'error');
           }
         }
       }
@@ -1461,6 +1473,19 @@
       if (state.libMovieId) initPlayer();
     }
   }
+
+  /* Tanlangan fayl nomi tanlash tugmasi ostida ko'rinadi */
+  document.addEventListener('change', function (e) {
+    var inp = e.target;
+    if (!inp || !inp.id || ['lib-movie-file', 'lib-movie-subs'].indexOf(inp.id) < 0) return;
+    var nameEl = document.getElementById(inp.id + '-name');
+    if (!nameEl) return;
+    var files = inp.files ? Array.prototype.slice.call(inp.files) : [];
+    nameEl.textContent = files.length
+      ? files.map(function (f) { return f.name; }).join(', ')
+      : t('Fayl tanlanmagan');
+    nameEl.classList.toggle('has-file', !!files.length);
+  });
 
   /* ---------------- click handling ---------------- */
   document.addEventListener('click', function (e) {
