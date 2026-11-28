@@ -1130,9 +1130,6 @@ async def broadcast_homework(row: dict) -> int:
         logging.warning(f"homework lookup {hw_id}: {e}")
         return 0
 
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📱 Ilovani ochish", web_app=WebAppInfo(url=config.WEBAPP_URL))]
-    ])
     due = row.get("due_date") or "—"
     text = HW_TEXT.format(
         group_name=html.escape(str(group_name)),
@@ -1146,7 +1143,7 @@ async def broadcast_homework(row: dict) -> int:
         if not chat_id:
             continue
         try:
-            await bot.send_message(chat_id=int(chat_id), text=text, reply_markup=kb, parse_mode="HTML",
+            await bot.send_message(chat_id=int(chat_id), text=text, parse_mode="HTML",
                                disable_notification=False)  # ovozli (sound)
             sent += 1
         except Exception as e:
@@ -1206,19 +1203,19 @@ _reminder_sent: set = set()
 
 HW_REMINDER_TEXT = (
     "⏰ <b>Uyga vazifa eslatmasi</b>\n"
-    "Guruh: {group_name}\n"
-    "Mavzu: {title}\n"
-    "Vazifa: {description}\n"
-    "Muddat: {due_date} (ertaga)\n"
-    "Uyga vazifani vaqtida topshirishni unutmang!"
+    "<b>Guruh:</b> {group_name}\n"
+    "<b>Mavzu:</b> {title}\n"
+    "<b>Vazifa:</b> {description}\n"
+    "<b>Muddat:</b> {due_date} (ertaga)\n"
+    "<b>Uyga vazifani o'z vaqtida topshirishni unutmang!</b>"
 )
 
 PAY_REMINDER_TEXT = (
     "💳 <b>To'lov eslatmasi</b>\n"
-    "Guruh: {group_name}\n"
-    "Oylik to'lov: {fee} so'm\n"
-    "Qarzingiz: {debt} so'm\n"
-    "Iltimos, to'lovni amalga oshiring. Rahmat!"
+    "<b>Guruh:</b> {group_name}\n"
+    "<b>Oylik to'lov:</b> {fee} so'm\n"
+    "<b>Qarzingiz:</b> {debt} so'm\n"
+    "<b>Iltimos, to'lovni amalga oshiring. Rahmat!</b>"
 )
 
 
@@ -1279,9 +1276,6 @@ async def broadcast_homework_reminder(row: dict) -> int:
         logging.warning(f"homework reminder lookup {hw_id}: {e}")
         return 0
 
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📱 Ilovani ochish", web_app=WebAppInfo(url=config.WEBAPP_URL))]
-    ])
     due = _fmt_date(row.get("due_date"))
     text = HW_REMINDER_TEXT.format(
         group_name=html.escape(str(group_name)),
@@ -1295,7 +1289,7 @@ async def broadcast_homework_reminder(row: dict) -> int:
         if not chat_id:
             continue
         try:
-            await bot.send_message(int(chat_id), text=text, reply_markup=kb, parse_mode="HTML",
+            await bot.send_message(int(chat_id), text=text, parse_mode="HTML",
                                    disable_notification=False)
             sent += 1
         except Exception as e:
@@ -1345,9 +1339,6 @@ async def payment_reminder_tick(now: datetime = None) -> int:
         return 0
 
     tutoring = {g.get("id"): g for g in groups if _is_tutoring_group(g)}
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📱 Ilovani ochish", web_app=WebAppInfo(url=config.WEBAPP_URL))]
-    ])
     sent = 0
     for st in students:
         group = tutoring.get(st.get("group_id"))
@@ -1371,7 +1362,7 @@ async def payment_reminder_tick(now: datetime = None) -> int:
             debt=_money(debt),
         )
         try:
-            await bot.send_message(int(chat_id), text=text, reply_markup=kb, parse_mode="HTML",
+            await bot.send_message(int(chat_id), text=text, parse_mode="HTML",
                                    disable_notification=False)
             sent += 1
             _reminder_mark(key)
@@ -1720,9 +1711,6 @@ async def mock_students_broadcast(row: dict, group_ids) -> int:
         category=html.escape(category),
         group=html.escape(group_name),
     )
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📱 Ilovani ochish", web_app=WebAppInfo(url=config.WEBAPP_URL))]
-    ])
     sent = 0
     for st in studs:
         chat_id = st.get("telegram_chat_id")
@@ -1731,7 +1719,7 @@ async def mock_students_broadcast(row: dict, group_ids) -> int:
         if _outbox_has(chat_id, ["YANGI MOCK TEST", title]):
             continue  # sayt allaqachon yuborgan
         try:
-            await bot.send_message(chat_id=int(chat_id), text=text, reply_markup=kb,
+            await bot.send_message(chat_id=int(chat_id), text=text,
                                    parse_mode="HTML", disable_notification=False)
             sent += 1
         except Exception as e:

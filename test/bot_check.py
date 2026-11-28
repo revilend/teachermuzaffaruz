@@ -1072,6 +1072,8 @@ async def main():
     hw_msgs = [s for s in fb.sent if s["kind"] == "message"]
     check(hw_msgs and hw_msgs[0].get("disable_notification") is False,
           "homework: ovozli (sound) yetkazish — disable_notification=False")
+    check(all(s.get("reply_markup") is None for s in hw_msgs),
+          "homework xabar: 'Ilovani ochish' tugmasi olib tashlangan")
 
     # =========================================================
     # 11b) Avtomatik eslatmalar: uyga vazifa (19:00) va to'lov (Juma 00:00)
@@ -1114,12 +1116,23 @@ async def main():
           "hw eslatma: mavzu xabarda ko'rsatilgan")
     check(any("01.12.2026" in (s.get("text") or "") or "2026-12-01" in (s.get("text") or "")
               for s in hw_rem), "hw eslatma: muddat xabarda")
-    check(all("Uyga vazifani vaqtida topshirishni unutmang!" in (s.get("text") or "")
+    check(all("<b>Uyga vazifani o'z vaqtida topshirishni unutmang!</b>" in (s.get("text") or "")
               for s in hw_rem),
-          "hw eslatma: 'vaqtida topshirishni unutmang' yozuvi bor")
+          "hw eslatma: 'o'z vaqtida topshirishni unutmang' yozuvi QALIN qora yozuvda")
+    hw_txt = hw_rem[0].get("text") if hw_rem else ""
+    check("<b>Guruh:</b> IELTS Band 7.0" in hw_txt,
+          "hw eslatma: 'Guruh:' qalin, guruh nomi oddiy yozuvda")
+    check("<b>Mavzu:</b> Present Perfect" in hw_txt,
+          "hw eslatma: 'Mavzu:' qalin, mavzu matni oddiy yozuvda")
+    check("<b>Vazifa:</b> 1-20 gacha" in hw_txt,
+          "hw eslatma: 'Vazifa:' qalin, vazifa matni oddiy yozuvda")
+    check("<b>Muddat:</b> 01.12.2026 (ertaga)" in hw_txt,
+          "hw eslatma: 'Muddat:' qalin, muddat oddiy yozuvda")
     check(not any("ilovada topshirish" in (s.get("text") or "")
                   or "saytda topshirish" in (s.get("text") or "") for s in hw_rem),
           "hw eslatma: saytda/ilovada topshirish yozuvi yo'q")
+    check(all(s.get("reply_markup") is None for s in hw_rem),
+          "hw eslatma: 'Ilovani ochish' tugmasi yo'q (reply_markup bo'sh)")
     n_again = await B.hw_reminder_tick(datetime(2026, 11, 30, 19, 5, tzinfo=TZ))
     check(n_again == 0, "hw eslatma: takror yuborilmaydi")
 
@@ -1136,6 +1149,17 @@ async def main():
           "to'lov eslatma: qarzdor o'quvchining chatiga yuborildi (maktab guruhi emas)")
     check(any("300 000" in (s.get("text") or "") for s in pay_msgs),
           "to'lov eslatma: summalar o'qishli formatda (300 000)")
+    pay_txt = pay_msgs[0].get("text") if pay_msgs else ""
+    check("<b>Guruh:</b> IELTS Band 7.0" in pay_txt,
+          "to'lov eslatma: 'Guruh:' qalin, guruh nomi oddiy yozuvda")
+    check("<b>Oylik to'lov:</b> 300 000 so'm" in pay_txt,
+          "to'lov eslatma: 'Oylik to'lov:' qalin, summa oddiy yozuvda")
+    check("<b>Qarzingiz:</b> 300 000 so'm" in pay_txt,
+          "to'lov eslatma: 'Qarzingiz:' qalin, summa oddiy yozuvda")
+    check("<b>Iltimos, to'lovni amalga oshiring. Rahmat!</b>" in pay_txt,
+          "to'lov eslatma: pastdagi murojaat QALIN qora yozuvda")
+    check(all(s.get("reply_markup") is None for s in pay_msgs),
+          "to'lov eslatma: 'Ilovani ochish' tugmasi yo'q (reply_markup bo'sh)")
     fri_again = await B.payment_reminder_tick(datetime(2026, 12, 4, 0, 30, tzinfo=TZ))
     check(fri_again == 0, "to'lov eslatma: bir haftada takror yuborilmaydi")
 
