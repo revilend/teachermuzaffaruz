@@ -3007,7 +3007,6 @@ function copyGuardSync() {
   const u = currentUser();
   copyGuardOn = !!u && u.role === 'student';
   document.documentElement.setAttribute('data-copy-guard', copyGuardOn ? 'student' : 'off');
-  if (!copyGuardOn) copyGuardShow();
 }
 /* Javob yozish maydonlarida o'z matnini tahrirlash erkin qoladi */
 function copyGuardEditable(el) {
@@ -3025,32 +3024,6 @@ function copyGuardClearClipboard() {
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText('');
   } catch (e) { /* ruxsat yo'q — jim o'tiladi */ }
 }
-/* Skrinshotni brauzerdan butunlay to'sib bo'lmaydi (OS darajasidagi amal).
-   Shu bois: (1) PrintScreen bosilgan zahoti sahifa xiralashtiriladi — Windows'da
-   ko'p hollarda kadr tayyor bo'lguncha ulguradi; (2) oyna fokusi yo'qolganda
-   (ekran yozish/nusxa olish vositalari, boshqa oynaga o'tish) mazmun yashiriladi;
-   (3) fokus qaytishi bilan tiklanadi. Ustoz panelida bu umuman ishlamaydi. */
-let copyGuardHideTimer = 0;
-function copyGuardHide(ms) {
-  if (!copyGuardOn) return;
-  document.documentElement.setAttribute('data-copy-guard-hide', '1');
-  clearTimeout(copyGuardHideTimer);
-  if (ms > 0) copyGuardHideTimer = setTimeout(copyGuardShow, ms);
-}
-function copyGuardShow() {
-  clearTimeout(copyGuardHideTimer);
-  document.documentElement.removeAttribute('data-copy-guard-hide');
-}
-window.addEventListener('blur', function () {
-  if (!copyGuardOn) return;
-  copyGuardHide(0);  /* fokus qaytguncha yopiq turadi */
-});
-window.addEventListener('focus', copyGuardShow);
-document.addEventListener('visibilitychange', function () {
-  if (!copyGuardOn) return;
-  if (document.hidden) copyGuardHide(0);
-  else copyGuardShow();
-});
 document.addEventListener('copy', copyGuardBlock, true);
 document.addEventListener('cut', copyGuardBlock, true);
 document.addEventListener('dragstart', copyGuardBlock, true);
@@ -3067,7 +3040,6 @@ document.addEventListener('keydown', function (e) {
      tozalanadi va foydalanuvchi ogohlantiriladi. */
   if (key === 'PrintScreen' || key === 'Snapshot') {
     e.preventDefault();
-    copyGuardHide(1600);
     copyGuardClearClipboard();
     setTimeout(copyGuardClearClipboard, 80);
     copyGuardToast();

@@ -3626,25 +3626,6 @@ html[data-copy-guard="student"] video {
   -webkit-user-drag: none;
   user-drag: none;
 }
-/* Skrinshot/ekran yozish paytida mazmunni yashirish: PrintScreen bosilganda yoki
-   oyna fokusi yo'qolganda html[data-copy-guard-hide="1"] o'rnatiladi (js/app.js). */
-html[data-copy-guard="student"][data-copy-guard-hide="1"] body > * {
-  visibility: hidden !important;
-}
-html[data-copy-guard="student"][data-copy-guard-hide="1"] body::after {
-  content: "Ekran surati olish cheklangan";
-  position: fixed;
-  inset: 0;
-  z-index: 2147483647;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: #0f172a;
-  color: #e2e8f0;
-  text-align: center;
-  font: 700 16px/1.5 'Plus Jakarta Sans', sans-serif;
-  visibility: visible !important;
-}
 /* Chop etish / "PDF sifatida saqlash" orqali nusxa olishni to'sadi */
 @media print {
   html[data-copy-guard="student"] body > * { display: none !important; }
