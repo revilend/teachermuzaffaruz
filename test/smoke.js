@@ -5259,6 +5259,15 @@ await (async () => {
       'himoya: o‘quvchi panelida matn tanlash yopiq, kiritish maydonlarida ochiq');
     check(/@media print[\s\S]{0,260}html\[data-copy-guard="student"\] body > \*/.test(guardCss),
       'himoya: chop etish orqali nusxa olish to‘sib qo‘yilgan');
+    check(/function copyGuardHide\(ms\)[\s\S]{0,320}data-copy-guard-hide/.test(appJs) &&
+          /addEventListener\('blur'[\s\S]{0,120}copyGuardHide\(0\)/.test(appJs) &&
+          /addEventListener\('focus', copyGuardShow\)/.test(appJs),
+      'himoya: fokus yo‘qolganda (ekran yozish/nusxa olish) mazmun yashiriladi va fokusda tiklanadi');
+    check(/key === 'PrintScreen'[\s\S]{0,120}copyGuardHide\(1600\)/.test(appJs),
+      'himoya: PrintScreen bosilganda sahifa darhol yashiriladi (kadr tushishiga ulgurish)');
+    check(/html\[data-copy-guard="student"\]\[data-copy-guard-hide="1"\] body > \*[\s\S]{0,80}visibility:\s*hidden/.test(guardCss) &&
+          /data-copy-guard-hide="1"\] body::after[\s\S]{0,400}visibility:\s*visible/.test(guardCss),
+      'himoya: yashirish rejimida o‘quvchi ekranda faqat ogohlantirishni ko‘radi');
     const idxSrc = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
     check(/js\/app\.js\?v=\d{8}_[a-z0-9_]+/.test(idxSrc) &&
           /css\/styles\.css\?v=\d{8}_[a-z0-9_]+/.test(idxSrc),
